@@ -1,0 +1,134 @@
+.profile-requests-page {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.profile-requests-header {
+  margin-bottom: 2rem;
+}
+
+.profile-requests-header h1 {
+  font-size: 2rem;
+  color: var(--text-main);
+  margin-bottom: 0.5rem;
+}
+
+.profile-requests-header p {
+  color: var(--text-muted);
+  font-size: 1rem;
+}
+
+.requests-table-container {
+  background-color: var(--bg-card);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.requests-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.requests-table th,
+.requests-table td {
+  padding: 1.25rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.requests-table th {
+  background-color: var(--bg-card-hover);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.requests-table td {
+  color: var(--text-main);
+  font-size: 0.95rem;
+}
+
+.requests-table tbody tr:hover {
+  background-color: var(--bg-card-hover);
+}
+
+.changes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.changes-list li {
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.change-field {
+  font-weight: 600;
+  color: var(--ynov-teal);
+  text-transform: capitalize;
+}
+
+.actions-cell {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.btn-approve,
+.btn-reject {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--ynov-white);
+}
+
+.btn-approve {
+  background-color: #2e7d32; /* Green */
+}
+
+.btn-approve:hover {
+  background-color: #1b5e20;
+}
+
+.btn-reject {
+  background-color: var(--ynov-orange);
+}
+
+.btn-reject:hover {
+  background-color: #c63b25;
+}
+
+.no-requests {
+  padding: 3rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* Utils */
+.loading-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  color: var(--ynov-teal);
+  font-size: 1.2rem;
+}
+
+.error-state {
+  background-color: #ffebee;
+  color: #c62828;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
