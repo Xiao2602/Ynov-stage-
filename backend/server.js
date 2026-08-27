@@ -9,12 +9,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Import Auth & User Controllers
-import { handleLogin, handleResetPassword, handleLogout } from "./Auth/Authentication/authController.js";
+import { handleLogin, handleResetPassword, handleLogout, handleChangePassword } from "./Auth/Authentication/authController.js";
 import { 
   handleCreateUser, 
   handleGetAllUsers, 
   handleLinkParentStudent, 
-  handleGetLinkedChildren 
+  handleGetLinkedChildren,
+  handleGetMyProfile,
+  handleUpdateMyProfile,
+  handleUploadAvatar
 } from "./Auth/Users/userController.js";
 import { handleAssignRole } from "./Auth/Roles & Permissions/roleController.js";
 
@@ -30,7 +33,7 @@ import {
 } from "./Absence/Controllers/absenceController.js";
 
 // Import Document Upload Controllers
-import { handleUploadDocument } from "./Documents/Controllers/documentController.js";
+import { handleUploadDocument, handleGetMyDocuments, handleGetAllDocuments } from "./Documents/Controllers/documentController.js";
 
 // Import Notification Controllers
 import { 
@@ -58,6 +61,12 @@ app.post("/api/auth/login", handleLogin);
 app.post("/api/auth/reset-password", handleResetPassword);
 app.post("/api/auth/logout", handleLogout);
 
+// Routes sécurisées Profil & Sécurité Utilisateur
+app.get("/api/users/me", authenticateToken, handleGetMyProfile);
+app.patch("/api/users/me", authenticateToken, handleUpdateMyProfile);
+app.post("/api/users/me/avatar", authenticateToken, upload.single("file"), handleUploadAvatar);
+app.patch("/api/auth/change-password", authenticateToken, handleChangePassword);
+
 // Routes sécurisées Utilisateurs & Parents
 app.get("/api/users", authenticateToken, handleGetAllUsers);
 app.post("/api/users/create", authenticateToken, authorizeRoles(ROLES.ADMIN, ROLES.RH), handleCreateUser);
@@ -74,8 +83,10 @@ app.get("/api/absences", authenticateToken, authorizeRoles(ROLES.ADMIN, ROLES.RH
 app.patch("/api/absences/:id/review", authenticateToken, authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER), handleReviewAbsence);
 app.delete("/api/absences/:id", authenticateToken, handleDeleteAbsence);
 
-// Module Documents - Téléversement de justificatifs
+// Module Documents - Téléversement & Consultation des justificatifs
 app.post("/api/documents/upload", authenticateToken, upload.single("file"), handleUploadDocument);
+app.get("/api/documents/my", authenticateToken, handleGetMyDocuments);
+app.get("/api/documents", authenticateToken, authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER), handleGetAllDocuments);
 
 // Module Notifications In-App - Routes sécurisées
 app.get("/api/notifications/my", authenticateToken, handleGetMyNotifications);
