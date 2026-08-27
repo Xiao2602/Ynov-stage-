@@ -281,3 +281,48 @@ body {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ============================================
+   TAILLES DES ICÔNES
+   ============================================ */
+
+.icon-sm {
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0;
+}
+
+.icon-md {
+  width: 20px !important;
+  height: 20px !important;
+  flex-shrink: 0;
+}
+
+.icon-lg {
+  width: 24px !important;
+  height: 24px !important;
+  flex-shrink: 0;
+}
+
+/* Pour les icônes dans les boutons d'action */
+.action-icon {
+  width: 18px !important;
+  height: 18px !important;
+  flex-shrink: 0;
+}
+
+/* Pour les badges de statut */
+.status-icon {
+  width: 14px !important;
+  height: 14px !important;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Pour les icônes de recherche */
+.search-icon {
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0;
+  color: #94a3b8;
+}

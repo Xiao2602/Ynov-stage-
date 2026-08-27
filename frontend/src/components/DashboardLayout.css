@@ -569,6 +569,20 @@ body {
   font-weight: 700;
 }
 
+.field-error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.field-help {
+  margin: 0;
+  color: var(--ynov-text-muted);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
 .field-input {
   width: 100%;
   min-height: 44px;
@@ -632,6 +646,13 @@ body {
   background: #f8fafc;
   border: 1px solid var(--ynov-border);
   border-radius: 16px;
+}
+
+.dynamic-help {
+  margin-top: 5px;
+  color: var(--ynov-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
 }
 
 .pill-grid {
@@ -1087,3 +1108,55 @@ body {
   height: 16px;
   stroke: currentColor;
 }
+
+/* ============================================
+   TAILLES DES ICÔNES
+   ============================================ */
+
+.icon-sm {
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0;
+}
+
+.icon-md {
+  width: 20px !important;
+  height: 20px !important;
+  flex-shrink: 0;
+}
+
+.icon-lg {
+  width: 24px !important;
+  height: 24px !important;
+  flex-shrink: 0;
+}
+
+/* Pour les icônes dans les boutons d'action */
+.action-icon {
+  width: 18px !important;
+  height: 18px !important;
+  flex-shrink: 0;
+}
+
+/* Pour les badges de statut */
+.status-icon {
+  width: 14px !important;
+  height: 14px !important;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Pour les icônes de recherche */
+.search-icon {
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0;
+  color: #94a3b8;
+}
+
+.icon-sm { width: 16px !important; height: 16px !important; flex-shrink: 0; }
+.icon-md { width: 20px !important; height: 20px !important; flex-shrink: 0; }
+.icon-lg { width: 24px !important; height: 24px !important; flex-shrink: 0; }
+.action-icon { width: 18px !important; height: 18px !important; flex-shrink: 0; }
+.status-icon { width: 14px !important; height: 14px !important; flex-shrink: 0; vertical-align: middle; }
+.search-icon { width: 16px !important; height: 16px !important; flex-shrink: 0; color: #94a3b8; }
