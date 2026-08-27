@@ -1,145 +1,50 @@
+import admin from "firebase-admin";
 import { adminAuth, adminDb } from "../../Shared/Firebase config/firebase.js";
 
-const ALLOWED_ROLES = [
-  "admin",
-  "rh",
-  "manager",
-  "employee",
-  "student",
-  "teacher"
-];
-
 /**
- * Création d'un utilisateur par Admin / RH.
- *
- * Le mot de passe initial est enregistré uniquement
- * dans Firebase Authentication.
- *
- * Firestore conserve le profil utilisateur et indique
- * que l'utilisateur doit changer son mot de passe.
+ * Service pour la création d'utilisateurs par Admin / RH (avec support du rôle Parent et liaison Étudiant)
  */
-export async function createUserService({
-  email,
-  password,
-  displayName,
-  role = "employee",
-  department = ""
-}) {
+export async function createUserService({ email, password, displayName, role = "employee", department = "", childrenUids = [] }) {
   try {
-    // --------------------------------------------------
-    // 1. Nettoyage des données
-    // --------------------------------------------------
-
-    const cleanEmail = email?.trim().toLowerCase();
-    const cleanDisplayName = displayName?.trim();
-
-    // --------------------------------------------------
-    // 2. Vérification de l'email
-    // --------------------------------------------------
-
-    if (!cleanEmail) {
-      return {
-        success: false,
-        error: "L'adresse email est obligatoire."
-      };
-    }
-
-    if (!cleanEmail.endsWith("@ynov.com")) {
-      return {
-        success: false,
-        error: "L'adresse email doit appartenir au domaine @ynov.com."
-      };
-    }
-
-    // --------------------------------------------------
-    // 3. Vérification du nom
-    // --------------------------------------------------
-
-    if (!cleanDisplayName) {
-      return {
-        success: false,
-        error: "Le nom complet est obligatoire."
-      };
-    }
-
-    // --------------------------------------------------
-    // 4. Vérification du mot de passe initial
-    // --------------------------------------------------
-
-    if (!password) {
-      return {
-        success: false,
-        error: "Le mot de passe initial est obligatoire."
-      };
-    }
-
-    if (password.length < 8) {
-      return {
-        success: false,
-        error: "Le mot de passe initial doit contenir au moins 8 caractères."
-      };
-    }
-
-    // --------------------------------------------------
-    // 5. Vérification du rôle
-    // --------------------------------------------------
-
-    if (!ALLOWED_ROLES.includes(role)) {
-      return {
-        success: false,
-        error: `Rôle invalide : ${role}.`
-      };
-    }
-
-    // --------------------------------------------------
-    // 6. Création Firebase Authentication
-    // --------------------------------------------------
-
+    // 1. Créer le compte Firebase Authentication
     const userRecord = await adminAuth.createUser({
-      email: cleanEmail,
+      email,
       password,
-      displayName: cleanDisplayName,
+      displayName,
       disabled: false
     });
 
-    // --------------------------------------------------
-    // 7. Attribution du rôle Firebase
-    // --------------------------------------------------
+    // 2. Assigner le rôle (Custom User Claims)
+    await adminAuth.setCustomUserClaims(userRecord.uid, { role });
 
-    await adminAuth.setCustomUserClaims(
-      userRecord.uid,
-      {
-        role
-      }
-    );
-
-    // --------------------------------------------------
-    // 8. Création du profil Firestore
-    // --------------------------------------------------
-
+    // 3. Enregistrer dans la collection Firestore `users`
     const userData = {
       uid: userRecord.uid,
-      email: cleanEmail,
-      displayName: cleanDisplayName,
+      email,
+      displayName,
       role,
-      department: department || "",
-
-      // L'utilisateur utilise encore le mot de passe
-      // initial créé par l'administrateur.
-      mustChangePassword: true,
-
+      department,
+      childrenUids: Array.isArray(childrenUids) ? childrenUids : [],
+      parentUids: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
-    await adminDb
-      .collection("users")
-      .doc(userRecord.uid)
-      .set(userData);
+    await adminDb.collection("users").doc(userRecord.uid).set(userData);
 
-    // --------------------------------------------------
-    // 9. Réponse
-    // --------------------------------------------------
+    // 4. Si des étudiants sont liés lors de la création du parent, mettre à jour le document des étudiants
+    if (role === "parent" && Array.isArray(childrenUids) && childrenUids.length > 0) {
+      for (const studentUid of childrenUids) {
+        const studentRef = adminDb.collection("users").doc(studentUid);
+        const studentDoc = await studentRef.get();
+        if (studentDoc.exists) {
+          await studentRef.update({
+            parentUids: admin.firestore.FieldValue.arrayUnion(userRecord.uid),
+            updatedAt: new Date().toISOString()
+          });
+        }
+      }
+    }
 
     return {
       success: true,
@@ -148,54 +53,101 @@ export async function createUserService({
         email: userRecord.email,
         displayName: userRecord.displayName,
         role,
-        department: department || "",
-        mustChangePassword: true
+        department,
+        childrenUids: userData.childrenUids
       }
     };
-
   } catch (error) {
-    console.error(
-      "Erreur création utilisateur :",
-      error
-    );
-
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 }
 
-
 /**
- * Récupérer tous les utilisateurs depuis Firestore.
+ * Lier un compte Parent à un compte Étudiant dans Firestore
+ * 
+ * @param {string} parentUid 
+ * @param {string} studentUid 
  */
-export async function getAllUsersService() {
+export async function linkParentToStudentService(parentUid, studentUid) {
   try {
-    const snapshot = await adminDb
-      .collection("users")
-      .get();
+    const parentRef = adminDb.collection("users").doc(parentUid);
+    const studentRef = adminDb.collection("users").doc(studentUid);
 
-    const users = [];
+    const [parentDoc, studentDoc] = await Promise.all([parentRef.get(), studentRef.get()]);
 
-    snapshot.forEach((doc) => {
-      users.push(doc.data());
+    if (!parentDoc.exists) {
+      return { success: false, error: "Compte Parent introuvable." };
+    }
+    if (!studentDoc.exists) {
+      return { success: false, error: "Compte Étudiant introuvable." };
+    }
+
+    // Mise à jour du Parent (ajout de l'UID étudiant)
+    await parentRef.update({
+      childrenUids: admin.firestore.FieldValue.arrayUnion(studentUid),
+      updatedAt: new Date().toISOString()
+    });
+
+    // Mise à jour de l'Étudiant (ajout de l'UID parent)
+    await studentRef.update({
+      parentUids: admin.firestore.FieldValue.arrayUnion(parentUid),
+      updatedAt: new Date().toISOString()
     });
 
     return {
       success: true,
-      data: users
+      message: "Parent et Étudiant liés avec succès.",
+      parentUid,
+      studentUid
     };
-
   } catch (error) {
-    console.error(
-      "Erreur récupération utilisateurs :",
-      error
+    return { success: false, error: "Erreur lors de la liaison Parent-Étudiant : " + error.message };
+  }
+}
+
+/**
+ * Récupérer la liste des enfants (étudiants) liés à un parent
+ * 
+ * @param {string} parentUid 
+ */
+export async function getLinkedChildrenService(parentUid) {
+  try {
+    const parentDoc = await adminDb.collection("users").doc(parentUid).get();
+    if (!parentDoc.exists) {
+      return { success: false, error: "Compte Parent introuvable." };
+    }
+
+    const parentData = parentDoc.data();
+    const childrenUids = parentData.childrenUids || [];
+
+    if (childrenUids.length === 0) {
+      return { success: true, count: 0, children: [] };
+    }
+
+    const childrenSnapshots = await Promise.all(
+      childrenUids.map(uid => adminDb.collection("users").doc(uid).get())
     );
 
-    return {
-      success: false,
-      error: error.message
-    };
+    const children = childrenSnapshots
+      .filter(snap => snap.exists)
+      .map(snap => snap.data());
+
+    return { success: true, count: children.length, children };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la récupération des enfants liés : " + error.message };
+  }
+}
+
+/**
+ * Obtenir la liste de tous les utilisateurs (pour l'admin / RH)
+ */
+export async function getAllUsersService() {
+  try {
+    const snapshot = await adminDb.collection("users").get();
+    const users = [];
+    snapshot.forEach(doc => users.push(doc.data()));
+    return { success: true, data: users };
+  } catch (error) {
+    return { success: false, error: error.message };
   }
 }

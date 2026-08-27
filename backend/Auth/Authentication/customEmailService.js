@@ -1,10 +1,27 @@
 import { adminAuth } from "../../Shared/Firebase config/firebase.js";
-import { sendPasswordResetEmail } from "firebase/auth";
-import { auth } from "../../Shared/Firebase config/firebase.js";
 import nodemailer from "nodemailer";
 
 /**
- * Génère le template HTML personnalisé pour l'email de réinitialisation
+ * Créer un transporteur Nodemailer configuré à partir des variables d'environnement
+ */
+function createTransporter() {
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if (!user || !pass) {
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: parseInt(process.env.SMTP_PORT || "587"),
+    secure: false,
+    auth: { user, pass }
+  });
+}
+
+/**
+ * Template HTML pour Réinitialisation du Mot de Passe
  */
 function getResetPasswordEmailTemplate(email, link) {
   return `
@@ -12,137 +29,230 @@ function getResetPasswordEmailTemplate(email, link) {
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Réinitialisation de votre mot de passe</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333333;">
-  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+  <table border="0" cellpadding="0" cellspacing="0" width="100%">
     <tr>
       <td align="center" style="padding: 40px 0;">
         <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.08);">
-          
-          <!-- Header -->
           <tr>
             <td align="center" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 35px 20px; border-bottom: 4px solid #06b6d4;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: 0.5px;">
-                MAROC YNOV CAMPUS
-              </h1>
-              <p style="color: #94a3b8; margin: 6px 0 0 0; font-size: 14px; font-weight: 400;">
-                Plateforme de Gestion des Absences
-              </p>
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px;">MAROC YNOV CAMPUS</h1>
+              <p style="color: #94a3b8; margin: 6px 0 0 0; font-size: 14px;">Plateforme de Gestion des Absences</p>
             </td>
           </tr>
-
-          <!-- Content -->
           <tr>
-            <td style="padding: 40px 40px 30px 40px;">
-              <h2 style="color: #0f172a; font-size: 20px; margin-top: 0; font-weight: 600;">
-                Bonjour,
-              </h2>
-              <p style="font-size: 15px; line-height: 1.6; color: #475569; margin-bottom: 25px;">
-                Nous avons reçu une demande de réinitialisation du mot de passe associé à votre compte <strong style="color: #0f172a;">${email}</strong>.
+            <td style="padding: 40px;">
+              <h2 style="color: #0f172a; font-size: 18px;">Bonjour,</h2>
+              <p style="font-size: 15px; color: #475569; line-height: 1.6;">
+                Une demande de réinitialisation de mot de passe a été soumise pour le compte <strong>${email}</strong>.
               </p>
-              <p style="font-size: 15px; line-height: 1.6; color: #475569; margin-bottom: 30px;">
-                Pour choisir un nouveau mot de passe et sécuriser votre accès, veuillez cliquer sur le bouton ci-dessous :
-              </p>
-
-              <!-- CTA Button -->
               <table border="0" cellpadding="0" cellspacing="0" width="100%">
                 <tr>
-                  <td align="center" style="padding: 10px 0 35px 0;">
-                    <a href="${link}" target="_blank" style="background: linear-gradient(135deg, #0284c7 0%, #06b6d4 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; display: inline-block; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);">
+                  <td align="center" style="padding: 20px 0;">
+                    <a href="${link}" target="_blank" style="background: linear-gradient(135deg, #0284c7 0%, #06b6d4 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; display: inline-block;">
                       Réinitialiser mon mot de passe
                     </a>
                   </td>
                 </tr>
               </table>
-
-              <p style="font-size: 13px; line-height: 1.5; color: #64748b; background-color: #f8fafc; padding: 15px; border-left: 4px solid #cbd5e1; border-radius: 4px; margin-bottom: 25px;">
-                <strong>Note de sécurité :</strong> Si vous n'avez pas demandé cette réinitialisation, vous pouvez ignorer cet e-mail en toute sécurité. Votre mot de passe actuel restera inchangé.
-              </p>
-
-              <p style="font-size: 13px; color: #94a3b8; line-height: 1.4; word-break: break-all;">
-                Si le bouton ne fonctionne pas, copiez-collez le lien suivant dans votre navigateur :<br>
-                <a href="${link}" style="color: #0284c7; text-decoration: underline;">${link}</a>
-              </p>
             </td>
           </tr>
-
-          <!-- Footer -->
           <tr>
-            <td align="center" style="background-color: #f8fafc; padding: 20px 40px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #94a3b8;">
-              <p style="margin: 0 0 4px 0;">© 2026 Maroc YNOV Campus. Tous droits réservés.</p>
-              <p style="margin: 0;">Ceci est un message automatique, merci de ne pas y répondre directement.</p>
+            <td align="center" style="background-color: #f8fafc; padding: 20px; font-size: 12px; color: #94a3b8;">
+              © 2026 Maroc YNOV Campus. Tous droits réservés.
             </td>
           </tr>
-
         </table>
       </td>
     </tr>
   </table>
 </body>
-</html>
-  `;
+</html>`;
 }
 
 /**
- * Envoie un email personnalisé de réinitialisation via Nodemailer ou génère le lien sécurisé
+ * Template HTML pour Alerte Nouvelle Absence (Envoyé au RH / Manager)
+ */
+function getNewAbsenceHREmailTemplate(absence) {
+  return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Nouvelle Demande d'Absence</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333333;">
+  <table border="0" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td align="center" style="padding: 40px 0;">
+        <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.08);">
+          <tr>
+            <td align="center" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 30px; border-bottom: 4px solid #f59e0b;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 22px;">MAROC YNOV CAMPUS - ALERTE RH</h1>
+              <p style="color: #cbd5e1; margin: 4px 0 0 0; font-size: 14px;">Nouvelle demande d'absence à réviser</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 30px 40px;">
+              <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Une nouvelle demande a été soumise :</h2>
+              <table border="0" cellpadding="8" cellspacing="0" width="100%" style="background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
+                <tr><td><strong>Demandeur :</strong></td><td>${absence.displayName} (${absence.userEmail})</td></tr>
+                <tr><td><strong>Département :</strong></td><td>${absence.department || "Non spécifié"}</td></tr>
+                <tr><td><strong>Type d'absence :</strong></td><td><span style="text-transform: uppercase; font-weight: bold; color: #0284c7;">${absence.type}</span></td></tr>
+                <tr><td><strong>Période :</strong></td><td>Du ${absence.startDate} au ${absence.endDate}</td></tr>
+                <tr><td><strong>Motif :</strong></td><td>${absence.reason}</td></tr>
+                ${absence.justificationUrl ? `<tr><td><strong>Justificatif :</strong></td><td><a href="${absence.justificationUrl}" style="color: #0284c7; text-decoration: underline;">Consulter le document</a></td></tr>` : ""}
+              </table>
+              <p style="font-size: 14px; color: #64748b;">
+                Connectez-vous au portail d'administration pour approuver ou rejeter cette demande.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="background-color: #f8fafc; padding: 15px; font-size: 12px; color: #94a3b8;">
+              © 2026 Maroc YNOV Campus - Service des Ressources Humaines
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+/**
+ * Template HTML pour Décision sur la Demande d'Absence (Envoyé à l'Étudiant / Employé)
+ */
+function getAbsenceDecisionEmailTemplate(displayName, status, reviewNotes) {
+  const isApproved = status === "approved";
+  const statusColor = isApproved ? "#10b981" : "#ef4444";
+  const statusText = isApproved ? "APPROUVÉE" : "REFUSÉE";
+
+  return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Décision sur votre demande d'absence</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333333;">
+  <table border="0" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td align="center" style="padding: 40px 0;">
+        <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.08);">
+          <tr>
+            <td align="center" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 30px; border-bottom: 4px solid ${statusColor};">
+              <h1 style="color: #ffffff; margin: 0; font-size: 22px;">MAROC YNOV CAMPUS</h1>
+              <p style="color: #94a3b8; margin: 4px 0 0 0; font-size: 14px;">Mise à jour du statut d'absence</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Bonjour ${displayName},</h2>
+              <p style="font-size: 15px; color: #475569; line-height: 1.6;">
+                Votre demande d'absence a été examinée par le service d'administration / RH.
+              </p>
+              <div style="background-color: #f8fafc; border-left: 4px solid ${statusColor}; padding: 20px; border-radius: 6px; margin: 20px 0;">
+                <p style="margin: 0 0 8px 0; font-size: 14px; color: #64748b;">Statut de la demande :</p>
+                <p style="margin: 0; font-size: 20px; font-weight: bold; color: ${statusColor};">${statusText}</p>
+                ${reviewNotes ? `<p style="margin: 12px 0 0 0; font-size: 14px; color: #334155;"><strong>Remarques du modérateur :</strong> ${reviewNotes}</p>` : ""}
+              </div>
+              <p style="font-size: 14px; color: #64748b; margin-bottom: 0;">
+                Pour toute question relative à cette décision, veuillez contacter l'administration de l'établissement.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="background-color: #f8fafc; padding: 15px; font-size: 12px; color: #94a3b8;">
+              © 2026 Maroc YNOV Campus. Tous droits réservés.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+/**
+ * Service 1 : Envoi de l'email de réinitialisation du mot de passe
  */
 export async function sendCustomPasswordResetEmail(email, smtpConfig = null) {
   try {
-    // 1. Check if user exists in Firebase Admin Authentication
     const userRecord = await adminAuth.getUserByEmail(email);
-
-    // 2. Generate reset link safely (handling temporary Firebase rate limit)
     let link = "";
     try {
       link = await adminAuth.generatePasswordResetLink(email);
     } catch (firebaseErr) {
-      // Fallback: Generate a custom secure token link if Firebase rate limit is triggered
       const customToken = await adminAuth.createCustomToken(userRecord.uid);
       link = `https://backend-91067.firebaseapp.com/__/auth/action?mode=resetPassword&email=${encodeURIComponent(email)}&token=${customToken}`;
     }
 
-    // 3. SMTP configuration check
-    const smtp = smtpConfig || {
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT || 587,
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    };
-
-    if (smtp && smtp.user && smtp.pass) {
-      const transporter = nodemailer.createTransport({
-        host: smtp.host || "smtp.gmail.com",
-        port: smtp.port || 587,
-        secure: false,
-        auth: {
-          user: smtp.user,
-          pass: smtp.pass
-        }
-      });
-
+    const transporter = createTransporter();
+    if (transporter) {
       await transporter.sendMail({
-        from: `"Maroc YNOV Campus" <${smtp.user}>`,
+        from: `"Maroc YNOV Campus" <${process.env.SMTP_USER}>`,
         to: email,
         subject: "[Maroc YNOV Campus] Réinitialisation de votre mot de passe",
         html: getResetPasswordEmailTemplate(email, link)
       });
-
-      return {
-        success: true,
-        message: "Un email HTML professionnel personnalisé Maroc YNOV a été envoyé avec succès à votre adresse email !",
-        resetLink: link
-      };
+      return { success: true, message: "Email de réinitialisation envoyé avec succès.", resetLink: link };
     }
 
-    return {
-      success: true,
-      message: "Lien de réinitialisation généré avec succès.",
-      resetLink: link,
-      htmlTemplate: getResetPasswordEmailTemplate(email, link)
-    };
+    return { success: true, message: "Lien de réinitialisation généré avec succès.", resetLink: link };
   } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Service 2 : Envoi d'une alerte email au RH / Manager lors d'une nouvelle demande d'absence
+ */
+export async function sendNewAbsenceAlertToHR(absenceData) {
+  try {
+    const transporter = createTransporter();
+    if (!transporter) return { success: false, error: "SMTP non configuré dans .env" };
+
+    const hrEmail = process.env.HR_EMAIL || process.env.SMTP_USER;
+
+    await transporter.sendMail({
+      from: `"Maroc YNOV Campus Alertes" <${process.env.SMTP_USER}>`,
+      to: hrEmail,
+      subject: `[Alerte RH] Nouvelle demande d'absence - ${absenceData.displayName}`,
+      html: getNewAbsenceHREmailTemplate(absenceData)
+    });
+
+    return { success: true, message: "Alerte RH envoyée par email." };
+  } catch (error) {
+    console.error("Erreur d'envoi email alerte RH :", error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Service 3 : Envoi de la notification de décision par email au demandeur d'absence
+ */
+export async function sendAbsenceStatusEmail(userEmail, displayName, status, reviewNotes = "") {
+  try {
+    const transporter = createTransporter();
+    if (!transporter) return { success: false, error: "SMTP non configuré dans .env" };
+
+    const statusText = status === "approved" ? "Approuvée" : "Refusée";
+
+    await transporter.sendMail({
+      from: `"Maroc YNOV Campus" <${process.env.SMTP_USER}>`,
+      to: userEmail,
+      subject: `[Maroc YNOV Campus] Votre demande d'absence a été ${statusText}`,
+      html: getAbsenceDecisionEmailTemplate(displayName, status, reviewNotes)
+    });
+
+    return { success: true, message: "Notification de décision envoyée par email au demandeur." };
+  } catch (error) {
+    console.error("Erreur d'envoi email décision :", error.message);
     return { success: false, error: error.message };
   }
 }

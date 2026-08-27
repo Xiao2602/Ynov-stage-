@@ -4,5 +4,6 @@ export const ROLES = {
   MANAGER: "manager",
   EMPLOYEE: "employee",
   STUDENT: "student",
-  TEACHER: "teacher"
+  TEACHER: "teacher",
+  PARENT: "parent"
 };
