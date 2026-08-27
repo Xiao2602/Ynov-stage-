@@ -39,19 +39,25 @@ Follow this 4-step architectural pattern to add any new API endpoint to the code
 
 ## Complete API Reference
 
-### 1. Authentication (`/api/auth`)
+### 1. Authentication & Security (`/api/auth`)
 - `POST /api/auth/login` (Public): Authenticate user with email and password. Returns Firebase ID Token and user claims.
 - `POST /api/auth/reset-password` (Public): Generates a secure password reset link and sends customized HTML email via Nodemailer.
+- `PATCH /api/auth/change-password` (Authenticated): Update logged-in user password after validating current password.
 - `POST /api/auth/logout` (Public): Invalidates user session.
 
-### 2. User & Parent Management (`/api/users`)
+### 2. Profile & Avatar Management (`/api/users/me`)
+- `GET /api/users/me` (Authenticated): Fetch logged-in user profile from Firestore.
+- `PATCH /api/users/me` (Authenticated): Update editable profile fields (`displayName`, `department`, `phone`, `photoURL`).
+- `POST /api/users/me/avatar` (Authenticated): Upload profile picture image, store locally in `backend/uploads/avatars/`, and update `photoURL` in Firestore and Firebase Auth.
+
+### 3. User & Parent Management (`/api/users`)
 - `GET /api/users` (Authenticated): Fetch list of all user profiles from Firestore.
 - `POST /api/users/create` (Admin / RH): Create user account in Firebase Auth with Custom User Claims and store profile in Firestore.
 - `POST /api/roles/assign` (Admin): Assign or update custom claim role for a user.
 - `POST /api/users/link-parent-student` (Admin / RH): Link a Parent UID to a Student UID in Firestore (`childrenUids` and `parentUids`).
 - `GET /api/users/my-children` (Parent / Admin / RH): Retrieve student profile(s) linked to the logged-in Parent account.
 
-### 3. Absence Core Module (`/api/absences`)
+### 4. Absence Core Module (`/api/absences`)
 - `POST /api/absences` (Authenticated): Submit a new absence request. Auto-triggers HR email alert and In-App notification.
 - `GET /api/absences/my` (Authenticated): Retrieve absence history for the logged-in user.
 - `GET /api/absences/children` (Parent / Admin / RH): Retrieve absence records for all students linked to the logged-in Parent.
@@ -60,13 +66,15 @@ Follow this 4-step architectural pattern to add any new API endpoint to the code
 - `PATCH /api/absences/:id/review` (Admin / RH / Manager): Approve or reject an absence request. Triggers email decision alert and In-App notification to student.
 - `DELETE /api/absences/:id` (Owner Only): Cancel and delete a pending absence request.
 
-### 4. In-App Notifications Module (`/api/notifications`)
+### 5. In-App Notifications Module (`/api/notifications`)
 - `GET /api/notifications/my` (Authenticated): Fetch unread and read notifications for current user with unread counter.
 - `PATCH /api/notifications/:id/read` (Authenticated): Mark a single notification as read (`read: true`).
 - `POST /api/notifications/read-all` (Authenticated): Batch mark all notifications for current user as read.
 
-### 5. Document Uploads (`/api/documents/upload`)
+### 6. Document Management (`/api/documents`)
 - `POST /api/documents/upload` (Authenticated): Upload medical proof PDF/image file via Multer, save file locally in `backend/uploads/justifications/`, and record metadata in Firestore `documents` collection.
+- `GET /api/documents/my` (Authenticated): Fetch all justification documents uploaded by logged-in user.
+- `GET /api/documents` (Admin / RH / Manager): Fetch all justification documents across the system with optional status or category filters.
 
 ---
 

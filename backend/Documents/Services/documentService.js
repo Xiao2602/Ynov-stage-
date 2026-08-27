@@ -78,3 +78,49 @@ export async function uploadDocumentService(file, userId, category = "justificat
     return { success: false, error: "Erreur lors de l'enregistrement local du fichier : " + error.message };
   }
 }
+
+/**
+ * Service pour récupérer la liste des documents d'un utilisateur spécifique
+ * 
+ * @param {string} userId - UID de l'utilisateur
+ */
+export async function getMyDocumentsService(userId) {
+  try {
+    const snapshot = await adminDb.collection("documents")
+      .where("uid", "==", userId)
+      .get();
+
+    const documents = [];
+    snapshot.forEach(doc => documents.push(doc.data()));
+
+    return { success: true, count: documents.length, documents };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la récupération de vos documents : " + error.message };
+  }
+}
+
+/**
+ * Service pour récupérer tous les documents téléversés (pour Admin / RH / Manager)
+ * Possibilité de filtrer par catégorie ou statut
+ */
+export async function getAllDocumentsService(filters = {}) {
+  try {
+    let query = adminDb.collection("documents");
+
+    if (filters.category) {
+      query = query.where("category", "==", filters.category);
+    }
+    if (filters.status) {
+      query = query.where("status", "==", filters.status);
+    }
+
+    const snapshot = await query.get();
+    const documents = [];
+    snapshot.forEach(doc => documents.push(doc.data()));
+
+    return { success: true, count: documents.length, documents };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la récupération de tous les documents : " + error.message };
+  }
+}
+
