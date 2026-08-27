@@ -1,9 +1,82 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../auth/AuthContext';
+import { apiFetch } from '../api/api';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title } from 'chart.js';
+import { Pie, Bar } from 'react-chartjs-2';
 import '../components/DashboardLayout.css';
 
-export default function DashboardPage({ userRole }) {
+// Enregistrer les composants Chart.js
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
+
+export default function DashboardPage() {
+  const { role } = useAuth();
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      const allowedRoles = ['admin', 'rh', 'administrateur', 'personnel'];
+      if (!allowedRoles.includes(role)) {
+        return;
+      }
+      setLoading(true);
+      try {
+        const data = await apiFetch('/absences/statistics');
+        if (data.success) {
+          setStats(data.stats);
+        } else {
+          setError('Impossible de charger les statistiques.');
+        }
+      } catch (err) {
+        console.error('Erreur stats:', err);
+        setError('Erreur de connexion au serveur.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, [role]);
+
+  // Préparer les données pour les graphiques
+  const getTypeChartData = () => {
+    if (!stats || !stats.byType) return null;
+    const labels = Object.keys(stats.byType);
+    const values = Object.values(stats.byType);
+    return {
+      labels,
+      datasets: [
+        {
+          data: values,
+          backgroundColor: [
+            '#23b2a4', '#f59e0b', '#10b981', '#ef4444', '#6366f1', '#f97316'
+          ],
+          borderWidth: 1,
+        },
+      ],
+    };
+  };
+
+  const getDepartmentChartData = () => {
+    if (!stats || !stats.byDepartment) return null;
+    const labels = Object.keys(stats.byDepartment);
+    const values = Object.values(stats.byDepartment);
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Nombre d\'absences',
+          data: values,
+          backgroundColor: '#23b2a4',
+          borderRadius: 4,
+        },
+      ],
+    };
+  };
+
   const renderDashboardContent = () => {
-    switch (userRole) {
+    switch (role) {
       case 'etudiant':
         return (
           <>
@@ -24,7 +97,6 @@ export default function DashboardPage({ userRole }) {
                 <span className="stat-badge info">Semestre 2</span>
               </div>
             </div>
-
             <div className="dashboard-section">
               <div className="section-header">
                 <h3>Suivi des demandes administratives</h3>
@@ -73,7 +145,6 @@ export default function DashboardPage({ userRole }) {
                 <span className="stat-badge info">Justifiées : 6h / Non justifiées : 2h</span>
               </div>
             </div>
-
             <div className="dashboard-section">
               <h3>Bulletins et relevés académiques</h3>
               <p>Accès aux bilans périodiques d'évaluation et aux comptes rendus de progression.</p>
@@ -89,58 +160,111 @@ export default function DashboardPage({ userRole }) {
         );
 
       case 'personnel':
+      case 'rh':
+      case 'administrateur':
+      case 'admin':
+        if (loading) {
+          return <div style={{ padding: '2rem', textAlign: 'center' }}>Chargement des statistiques...</div>;
+        }
+        if (error) {
+          return <div style={{ padding: '2rem', color: '#ef4444' }}>{error}</div>;
+        }
+        if (!stats) {
+          return <div style={{ padding: '2rem', color: 'var(--ynov-text-muted)' }}>Aucune donnée disponible.</div>;
+        }
+
+        const typeChartData = getTypeChartData();
+        const departmentChartData = getDepartmentChartData();
+
         return (
           <>
+            {/* Cartes statistiques existantes */}
             <div className="stats-grid">
               <div className="stat-card">
-                <h4>Requêtes en attente</h4>
-                <div className="stat-value">14</div>
-                <span className="stat-badge warning">Traitement requis</span>
+                <h4>Total demandes</h4>
+                <div className="stat-value">{stats.total}</div>
+                <span className="stat-badge info">Global</span>
+              </div>
+              <div className="stat-card highlight">
+                <h4>En attente</h4>
+                <div className="stat-value">{stats.pending}</div>
+                <span className="stat-badge warning">À traiter</span>
               </div>
               <div className="stat-card">
-                <h4>Conventions de stage</h4>
-                <div className="stat-value">6</div>
-                <span className="stat-badge info">À viser cette semaine</span>
+                <h4>Approuvées</h4>
+                <div className="stat-value">{stats.approved}</div>
+                <span className="stat-badge success">Validées</span>
               </div>
               <div className="stat-card">
-                <h4>Inscriptions Totales</h4>
-                <div className="stat-value">452</div>
-                <span className="stat-badge success">Rentrée 2026</span>
+                <h4>Refusées</h4>
+                <div className="stat-value">{stats.rejected}</div>
+                <span className="stat-badge danger">Rejetées</span>
               </div>
             </div>
 
-            <div className="dashboard-section">
-              <h3>File d'attente des validations administratives</h3>
-              <table className="ynov-table">
-                <thead>
-                  <tr>
-                    <th>Étudiant</th>
-                    <th>Filière</th>
-                    <th>Objet</th>
-                    <th>Décision</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>Alexandre Martin</td>
-                    <td>Bachelor 2 - Informatique</td>
-                    <td>Convention de stage</td>
-                    <td>
-                      <button className="ynov-btn-small success">Valider</button>
-                      <button className="ynov-btn-small danger">Rejeter</button>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>Sarah Leroy</td>
-                    <td>Bachelor 2 - Informatique</td>
-                    <td>Attestation de présence</td>
-                    <td>
-                      <button className="ynov-btn-small success">Valider</button>
-                      <button className="ynov-btn-small danger">Rejeter</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            {/* Graphiques */}
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+              gap: '24px',
+              marginTop: '24px'
+            }}>
+              {typeChartData && (
+                <div style={{
+                  background: 'var(--ynov-card)',
+                  border: '1px solid var(--ynov-border)',
+                  borderRadius: '1rem',
+                  padding: '1.5rem'
+                }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem', color: 'var(--ynov-text-light)' }}>
+                    Répartition par type
+                  </h3>
+                  <div style={{ maxWidth: '300px', margin: '0 auto' }}>
+                    <Pie data={typeChartData} options={{ plugins: { legend: { position: 'bottom' } } }} />
+                  </div>
+                </div>
+              )}
+
+              {departmentChartData && (
+                <div style={{
+                  background: 'var(--ynov-card)',
+                  border: '1px solid var(--ynov-border)',
+                  borderRadius: '1rem',
+                  padding: '1.5rem'
+                }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem', color: 'var(--ynov-text-light)' }}>
+                    Répartition par département
+                  </h3>
+                  <div>
+                    <Bar 
+                      data={departmentChartData} 
+                      options={{
+                        plugins: { legend: { display: false } },
+                        scales: {
+                          y: { beginAtZero: true, ticks: { color: '#94a3b8' } },
+                          x: { ticks: { color: '#94a3b8', maxRotation: 30 } }
+                        }
+                      }} 
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Section actions rapides */}
+            <div className="dashboard-section" style={{ marginTop: '24px' }}>
+              <h3>Actions rapides</h3>
+              <div className="actions-group">
+                <button className="ynov-btn-outline" onClick={() => window.location.href = '/absences/demandes'}>
+                  Gérer les demandes
+                </button>
+                <button className="ynov-btn-outline" onClick={() => window.location.href = '/users'}>
+                  Utilisateurs
+                </button>
+                <button className="ynov-btn-outline" onClick={() => window.location.href = '/absences/export/excel'}>
+                  Exporter les données
+                </button>
+              </div>
             </div>
           </>
         );
@@ -160,7 +284,6 @@ export default function DashboardPage({ userRole }) {
                 <span className="stat-badge warning">Séance active</span>
               </div>
             </div>
-
             <div className="dashboard-section">
               <h3>Planning des cours et feuilles d'émargement</h3>
               <p>Gestion des présences obligatoires et suivi des jalons de projet.</p>
@@ -175,41 +298,8 @@ export default function DashboardPage({ userRole }) {
           </>
         );
 
-      case 'administrateur':
-        return (
-          <>
-            <div className="stats-grid">
-              <div className="stat-card">
-                <h4>Utilisateurs Actifs</h4>
-                <div className="stat-value">488</div>
-                <span className="stat-badge success">Activité normale</span>
-              </div>
-              <div className="stat-card">
-                <h4>Intégrité Système</h4>
-                <div className="stat-value">0 Erreur</div>
-                <span className="stat-badge success">Opérationnel</span>
-              </div>
-              <div className="stat-card">
-                <h4>Habilitations</h4>
-                <div className="stat-value">5 Profils</div>
-                <span className="stat-badge info">Sécurité active</span>
-              </div>
-            </div>
-
-            <div className="dashboard-section">
-              <h3>Administration générale de la plateforme</h3>
-              <p>Paramétrage des habilitations, supervision des flux de données et gestion des comptes.</p>
-              <div className="actions-group">
-                <button className="ynov-btn-outline">Gestion des utilisateurs</button>
-                <button className="ynov-btn-outline">Journaux d'audit</button>
-                <button className="ynov-btn-outline">Paramètres généraux</button>
-              </div>
-            </div>
-          </>
-        );
-
       default:
-        return null;
+        return <div>Rôle non reconnu</div>;
     }
   };
 

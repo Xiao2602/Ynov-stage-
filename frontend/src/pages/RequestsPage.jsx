@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   IconInbox, 
   IconSearch, 
@@ -6,206 +6,349 @@ import {
   IconCheckCircle, 
   IconHourglass, 
   IconAlertTriangle, 
-  IconDocument, 
   IconEye, 
-  IconX,
-  IconClock
+  IconX
 } from '../components/Icons';
+import { apiFetch, apiFetchBlob } from '../api/api';
+import { useAuth } from '../auth/AuthContext';
+
+// Fonction pour convertir un timestamp Firestore en date lisible
+const formatDate = (timestamp) => {
+  if (!timestamp) return 'Date inconnue';
+  try {
+    if (typeof timestamp.toDate === 'function') {
+      return timestamp.toDate().toLocaleDateString('fr-FR');
+    }
+    if (timestamp._seconds !== undefined) {
+      return new Date(timestamp._seconds * 1000).toLocaleDateString('fr-FR');
+    }
+    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+      return new Date(timestamp).toLocaleDateString('fr-FR');
+    }
+    return 'Date inconnue';
+  } catch {
+    return 'Date inconnue';
+  }
+};
 
 export default function RequestsPage() {
+  const { role } = useAuth();
+
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [startDateFilter, setStartDateFilter] = useState('');
+  const [endDateFilter, setEndDateFilter] = useState('');
+  const [classFilter, setClassFilter] = useState('');
+  const [classOptions, setClassOptions] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [detailModalRequest, setDetailModalRequest] = useState(null);
+  const [error, setError] = useState(null);
 
-  // Formulaire nouvelle demande
-  const [newType, setNewType] = useState('Justification Absence');
+  const [newType, setNewType] = useState('medical');
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
+  const [newFile, setNewFile] = useState(null);
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  const [requests, setRequests] = useState([
-    { id: 'REQ-2026-089', title: 'Justification absence du 12/10 (Architecture Web)', type: 'Justification Absence', date: '13 Oct 2026', status: 'En cours', adminNote: 'En cours de vérification médicale par le secrétariat' },
-    { id: 'REQ-2026-081', title: 'Demande de Convention de Stage PFE', type: 'Document Administratif', date: '05 Oct 2026', status: 'Validé', adminNote: 'Convention signée et disponible au téléchargement' },
-    { id: 'REQ-2026-074', title: 'Attestation d\'inscription 2026-2027', type: 'Document Administratif', date: '28 Sept 2026', status: 'Validé', adminNote: 'Document généré automatiquement' },
-    { id: 'REQ-2026-062', title: 'Correction présence cours Scrum (25/09)', type: 'Recours Présence', date: '26 Sept 2026', status: 'Validé', adminNote: 'Erreur d\'émargement confirmée par l\'enseignant' },
-    { id: 'REQ-2026-045', title: 'Aménagement emploi du temps (Alternance)', type: 'Aménagement', date: '15 Sept 2026', status: 'Rejeté', adminNote: 'Planning non compatible avec le volume horaire obligatoire' },
-  ]);
+  const isAdmin = ['admin', 'rh', 'administrateur', 'personnel'].includes(role);
 
-  const handleCreateRequest = (e) => {
-    e.preventDefault();
-    const newReq = {
-      id: `REQ-2026-${Math.floor(100 + Math.random() * 900)}`,
-      title: newTitle || `${newType} - ${new Date().toLocaleDateString('fr-FR')}`,
-      type: newType,
-      date: new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }),
-      status: 'En cours',
-      adminNote: 'Demande reçue, affectée au pôle pédagogique'
-    };
+  const fetchRequests = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const endpoint = isAdmin ? '/absences' : '/absences/my';
+      const data = await apiFetch(endpoint);
+      if (data && data.success) {
+        const absences = data.absences || [];
+        const formatted = absences.map(a => ({
+          id: a.id || a._id,
+          title: a.reason || a.type || 'Sans titre',
+          type: a.type || 'Autre',
+          date: formatDate(a.createdAt),
+          startDate: a.startDate,
+          endDate: a.endDate,
+          description: a.reason || 'Aucune description',
+          status: a.status === 'pending' ? 'En cours' :
+                  a.status === 'approved' ? 'Validé' : 'Rejeté',
+          adminNote: a.reviewNotes || 'Aucune remarque',
+          isPending: a.status === 'pending',
+          justificationUrl: a.justificationUrl || null,
+          reviewerName: a.reviewerName || null,
+          displayName: a.displayName || a.userEmail || '',
+          className: a.className || a.department || ''
+        }));
+        setRequests(formatted);
 
-    setRequests([newReq, ...requests]);
-    setIsSubmitted(true);
-    setTimeout(() => {
-      setIsModalOpen(false);
-      setIsSubmitted(false);
-      setNewTitle('');
-      setNewDescription('');
-    }, 1200);
+        // Extraire les classes disponibles pour le filtre
+        if (isAdmin) {
+          const classes = [...new Set(formatted.map(r => r.className).filter(Boolean))];
+          setClassOptions(classes);
+        }
+      } else {
+        setError('Impossible de charger les demandes');
+      }
+    } catch (err) {
+      console.error('Erreur fetchRequests:', err);
+      setError('Erreur de chargement: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  useEffect(() => {
+    fetchRequests();
+  }, [role]);
+
+  const handleReview = async (id, status, reviewNotes = '') => {
+    try {
+      const data = await apiFetch(`/absences/${id}/review`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, reviewNotes })
+      });
+      if (data.success) {
+        alert(`Demande ${status === 'approved' ? 'approuvée' : 'refusée'} avec succès.`);
+        setDetailModalRequest(null);
+        fetchRequests();
+      } else {
+        alert('Erreur : ' + data.error);
+      }
+    } catch (error) {
+      alert('Erreur : ' + error.message);
+    }
+  };
+
+  const handleExport = async (format) => {
+    if (!isAdmin) {
+      alert('Seuls les administrateurs et RH peuvent exporter.');
+      return;
+    }
+    try {
+      const blob = await apiFetchBlob(`/absences/export/${format}`);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `absences.${format === 'excel' ? 'xlsx' : 'pdf'}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Erreur lors de l\'export. Vérifiez vos permissions.');
+    }
+  };
+
+  const handleCreateRequest = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      let justificationUrl = '';
+
+      if (newFile) {
+        const formData = new FormData();
+        formData.append('file', newFile);
+        formData.append('category', 'justificatif_absence');
+
+        const uploadResult = await apiFetch('/documents/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!uploadResult.success) {
+          setError(uploadResult.error || 'Erreur lors de l\'upload du fichier');
+          setIsSubmitting(false);
+          return;
+        }
+
+        justificationUrl = uploadResult.url || uploadResult.fileUrl || '';
+      }
+
+      const absenceBody = {
+        type: newType,
+        startDate: startDate,
+        endDate: endDate,
+        reason: newTitle || 'Demande sans titre',
+        justificationUrl: justificationUrl
+      };
+
+      const absenceResult = await apiFetch('/absences', {
+        method: 'POST',
+        body: JSON.stringify(absenceBody)
+      });
+
+      if (absenceResult && absenceResult.success) {
+        setIsSubmitted(true);
+        setTimeout(() => {
+          setIsModalOpen(false);
+          setIsSubmitted(false);
+          setNewTitle('');
+          setNewDescription('');
+          setNewFile(null);
+          setStartDate(new Date().toISOString().split('T')[0]);
+          setEndDate(new Date().toISOString().split('T')[0]);
+          fetchRequests();
+        }, 1200);
+      } else {
+        setError(absenceResult?.error || 'Erreur lors de la création de la demande');
+      }
+    } catch (error) {
+      console.error('❌ Erreur:', error);
+      setError(error.message || 'Erreur inconnue');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 🔥 Filtrage avec recherche multicritères (nom, classe, période, motif)
   const filteredRequests = requests.filter(r => {
     const matchStatus = statusFilter === 'all' || r.status.toLowerCase() === statusFilter.toLowerCase();
-    const matchType = typeFilter === 'all' || r.type.toLowerCase() === typeFilter.toLowerCase();
+    const matchType = typeFilter === 'all' || r.type.toLowerCase().includes(typeFilter.toLowerCase());
     const matchSearch = r.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                        r.id.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchStatus && matchType && matchSearch;
+                        r.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        (r.displayName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        (r.description || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const matchClass = !classFilter || (r.className || '').toLowerCase().includes(classFilter.toLowerCase());
+    
+    // Filtrage par période
+    let matchStartDate = true;
+    let matchEndDate = true;
+    if (startDateFilter) {
+      const start = new Date(startDateFilter);
+      const rStart = new Date(r.startDate);
+      matchStartDate = rStart >= start;
+    }
+    if (endDateFilter) {
+      const end = new Date(endDateFilter);
+      const rEnd = new Date(r.endDate);
+      matchEndDate = rEnd <= end;
+    }
+
+    return matchStatus && matchType && matchSearch && matchClass && matchStartDate && matchEndDate;
   });
 
   return (
     <div className="dashboard-scroll-area" style={{ height: '100%', overflowY: 'auto' }}>
-      {/* EN-TÊTE DE LA PAGE */}
+      {/* EN-TÊTE */}
       <div className="overview-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <h2 className="overview-title">
-            Mes Demandes
-          </h2>
-          <p className="overview-subtitle">
-            Suivez le statut de vos demandes de justificatifs, documents administratifs et recours.
-          </p>
+          <h2 className="overview-title">Mes Demandes</h2>
+          <p className="overview-subtitle">Suivez le statut de vos demandes</p>
         </div>
-
         <div className="overview-actions" style={{ display: 'flex', gap: '12px' }}>
-          <button 
-            className="btn-primary" 
-            onClick={() => { setIsModalOpen(true); }}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
+          <button className="btn-primary" onClick={() => setIsModalOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: '16px', height: '16px' }}><IconPlus /></div>
             Nouvelle Demande
           </button>
+          {isAdmin && (
+            <>
+              <button className="ynov-btn-outline" onClick={() => handleExport('excel')}>📊 Excel</button>
+              <button className="ynov-btn-outline" onClick={() => handleExport('pdf')}>📄 PDF</button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* STATISTIQUES DEMANDES */}
+      {error && (
+        <div style={{ padding: '0.75rem 1rem', background: '#fecaca', color: '#991b1b', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #f87171' }}>
+          ⚠️ {error}
+        </div>
+      )}
+
+      {/* STATISTIQUES */}
       <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         <div className="stat-card">
           <div className="stat-header">
-            <span className="stat-title">Total Demandes</span>
+            <span className="stat-title">Total</span>
             <div className="stat-icon-wrapper" style={{ width: '32px', height: '32px', color: 'var(--ynov-dark)' }}>
               <IconInbox />
             </div>
           </div>
           <div className="stat-value-container">
             <span className="stat-value">{requests.length}</span>
-            <span className="stat-trend" style={{ background: '#f1f5f9', color: '#475569' }}>Actives</span>
-          </div>
-          <div className="stat-subtitle" style={{ color: 'var(--ynov-text-muted)', fontWeight: '400' }}>
-            Toutes catégories
           </div>
         </div>
-
         <div className="stat-card highlight">
           <div className="stat-header">
-            <span className="stat-title">En cours de traitement</span>
-            <div className="stat-icon-wrapper" style={{ width: '32px', height: '32px', color: 'var(--status-pending)' }}>
+            <span className="stat-title">En cours</span>
+            <div className="stat-icon-wrapper" style={{ width: '32px', height: '32px', color: '#f59e0b' }}>
               <IconHourglass />
             </div>
           </div>
           <div className="stat-value-container">
             <span className="stat-value">{requests.filter(r => r.status === 'En cours').length}</span>
           </div>
-          <div className="stat-subtitle">
-            Délai moyen : 24-48h ouvrées
-          </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-header">
-            <span className="stat-title">Demandes Validées</span>
-            <div className="stat-icon-wrapper" style={{ width: '32px', height: '32px', color: 'var(--status-approved)' }}>
+            <span className="stat-title">Validées</span>
+            <div className="stat-icon-wrapper" style={{ width: '32px', height: '32px', color: '#10b981' }}>
               <IconCheckCircle />
             </div>
           </div>
           <div className="stat-value-container">
             <span className="stat-value">{requests.filter(r => r.status === 'Validé').length}</span>
-            <span className="stat-trend up">Succès</span>
-          </div>
-          <div className="stat-subtitle" style={{ color: 'var(--status-approved)', fontWeight: '400' }}>
-            Traitées et approuvées
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-header">
-            <span className="stat-title">Demandes Rejetées</span>
-            <div className="stat-icon-wrapper" style={{ width: '32px', height: '32px', color: 'var(--status-urgent)' }}>
+            <span className="stat-title">Rejetées</span>
+            <div className="stat-icon-wrapper" style={{ width: '32px', height: '32px', color: '#ef4444' }}>
               <IconAlertTriangle />
             </div>
           </div>
           <div className="stat-value-container">
             <span className="stat-value">{requests.filter(r => r.status === 'Rejeté').length}</span>
           </div>
-          <div className="stat-subtitle" style={{ color: 'var(--status-urgent)', fontWeight: '400' }}>
-            Motifs précisés dans le suivi
-          </div>
         </div>
       </div>
 
-      {/* PANNEAU LISTE DES DEMANDES */}
+      {/* TABLEAU AVEC FILTRES MULTICRITÈRES */}
       <div className="panel" style={{ marginTop: '24px' }}>
         <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <h3 className="panel-title">Toutes les Demandes</h3>
-          
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <div className="search-bar" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-              <div style={{ width: '16px', height: '16px' }}><IconSearch /></div>
-              <input 
-                type="text" 
-                placeholder="Numéro de dossier, objet..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            
-            <select 
-              value={typeFilter} 
-              onChange={(e) => setTypeFilter(e.target.value)}
-              style={{ 
-                padding: '8px 12px', 
-                borderRadius: '8px', 
-                border: '1px solid #e2e8f0', 
-                background: '#fff', 
-                color: '#334155', 
-                fontSize: '0.85rem', 
-                fontWeight: '500', 
-                outline: 'none', 
-                cursor: 'pointer' 
-              }}
-            >
-              <option value="all">Tous les types</option>
-              <option value="Justification Absence">Justifications</option>
-              <option value="Document Administratif">Documents</option>
-              <option value="Recours Présence">Recours</option>
-              <option value="Aménagement">Aménagements</option>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              placeholder="Rechercher par nom, motif..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', width: '200px' }}
+            />
+            <input
+              type="date"
+              value={startDateFilter}
+              onChange={(e) => setStartDateFilter(e.target.value)}
+              style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+            />
+            <input
+              type="date"
+              value={endDateFilter}
+              onChange={(e) => setEndDateFilter(e.target.value)}
+              style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+            />
+            {isAdmin && (
+              <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <option value="">Toutes les classes</option>
+                {classOptions.map(cls => <option key={cls} value={cls}>{cls}</option>)}
+              </select>
+            )}
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff' }}>
+              <option value="all">Tous</option>
+              <option value="medical">Médical</option>
+              <option value="personal">Personnel</option>
+              <option value="authorized_leave">Congé</option>
+              <option value="unjustified">Non justifié</option>
             </select>
-
-            <select 
-              value={statusFilter} 
-              onChange={(e) => setStatusFilter(e.target.value)}
-              style={{ 
-                padding: '8px 12px', 
-                borderRadius: '8px', 
-                border: '1px solid #e2e8f0', 
-                background: '#fff', 
-                color: '#334155', 
-                fontSize: '0.85rem', 
-                fontWeight: '500', 
-                outline: 'none', 
-                cursor: 'pointer' 
-              }}
-            >
-              <option value="all">Tous les statuts</option>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff' }}>
+              <option value="all">Tous</option>
               <option value="en cours">En cours</option>
               <option value="validé">Validé</option>
               <option value="rejeté">Rejeté</option>
@@ -213,264 +356,368 @@ export default function RequestsPage() {
           </div>
         </div>
 
-        <table className="data-table" style={{ marginTop: '16px' }}>
-          <thead>
-            <tr>
-              <th>Référence</th>
-              <th>Objet de la demande</th>
-              <th>Catégorie</th>
-              <th>Date de soumission</th>
-              <th>Statut</th>
-              <th>Remarque Pédagogique / RH</th>
-              <th style={{ textAlign: 'center' }}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRequests.length === 0 ? (
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '32px' }}>Chargement...</div>
+        ) : requests.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--ynov-text-muted)' }}>
+            <p>Aucune demande trouvée.</p>
+            <p style={{ fontSize: '0.85rem' }}>Cliquez sur "Nouvelle Demande" pour en créer une.</p>
+          </div>
+        ) : filteredRequests.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--ynov-text-muted)' }}>
+            <p>Aucune demande ne correspond aux critères de recherche.</p>
+          </div>
+        ) : (
+          <table className="data-table" style={{ marginTop: '16px', width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '32px', color: 'var(--ynov-text-muted)' }}>
-                  Aucune demande trouvée avec les filtres actuels.
-                </td>
+                <th>Référence</th>
+                <th>Étudiant</th>
+                <th>Objet</th>
+                <th>Catégorie</th>
+                <th>Date</th>
+                <th>Statut</th>
+                <th>Remarque</th>
+                <th style={{ textAlign: 'center' }}>Action</th>
               </tr>
-            ) : (
-              filteredRequests.map((item) => (
-                <tr key={item.id}>
+            </thead>
+            <tbody>
+              {filteredRequests.map((item) => (
+                <tr key={item.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <td><span style={{ fontWeight: '600', color: 'var(--ynov-teal)' }}>{item.id}</span></td>
+                  <td>{item.displayName || '—'}</td>
+                  <td>{item.title}</td>
+                  <td><span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '0.76rem', background: '#f1f5f9' }}>{item.type}</span></td>
+                  <td>{item.date}</td>
                   <td>
-                    <span style={{ fontWeight: '600', color: 'var(--ynov-teal)', fontSize: '0.82rem' }}>
-                      {item.id}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ fontWeight: '500', color: 'var(--ynov-dark)' }}>{item.title}</div>
-                  </td>
-                  <td>
-                    <span style={{ 
-                      padding: '3px 8px', 
-                      borderRadius: '4px', 
-                      fontSize: '0.76rem', 
-                      fontWeight: '500',
-                      background: '#f1f5f9',
-                      color: '#475569'
-                    }}>
-                      {item.type}
-                    </span>
-                  </td>
-                  <td style={{ color: 'var(--ynov-text-muted)' }}>{item.date}</td>
-                  <td>
-                    <span className={`status-badge ${
-                      item.status === 'Validé' ? 'approved' :
-                      item.status === 'En cours' ? 'pending' : 'urgent'
-                    }`}>
+                    <span className={`status-badge ${item.status === 'Validé' ? 'approved' : item.status === 'En cours' ? 'pending' : 'urgent'}`}>
                       {item.status}
                     </span>
                   </td>
-                  <td style={{ fontSize: '0.80rem', color: '#475569', maxWidth: '280px' }}>
-                    {item.adminNote}
-                  </td>
+                  <td style={{ fontSize: '0.80rem', maxWidth: '280px' }}>{item.adminNote}</td>
                   <td style={{ textAlign: 'center' }}>
-                    <button 
-                      className="table-action-btn" 
-                      title="Consulter le dossier"
-                      onClick={() => setDetailModalRequest(item)}
-                      aria-label="Consulter"
-                    >
+                    <button className="table-action-btn" onClick={() => setDetailModalRequest(item)}>
                       <IconEye />
                     </button>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
-      {/* MODAL DÉTAILS DE LA DEMANDE */}
+      {/* MODAL DÉTAIL */}
       {detailModalRequest && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(15, 23, 42, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          backdropFilter: 'blur(3px)'
-        }}>
-          <div style={{
-            background: 'var(--ynov-white)',
-            borderRadius: '12px',
-            width: '100%',
-            maxWidth: '520px',
-            padding: '24px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)',
-            border: '1px solid var(--ynov-border)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(3px)' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '560px', padding: '28px 24px', maxHeight: '90vh', overflowY: 'auto', position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <div>
-                <span style={{ fontSize: '0.78rem', fontWeight: '600', color: 'var(--ynov-teal)', textTransform: 'uppercase' }}>
-                  Dossier {detailModalRequest.id}
-                </span>
-                <h3 style={{ fontSize: '1.15rem', fontWeight: '600', color: 'var(--ynov-dark)', marginTop: '2px' }}>
-                  Suivi de la demande
-                </h3>
+                <span style={{ fontSize: '0.78rem', fontWeight: '600', color: 'var(--ynov-teal)', textTransform: 'uppercase' }}>Dossier {detailModalRequest.id}</span>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: '600', margin: '2px 0 0 0' }}>Suivi</h3>
               </div>
               <button 
-                onClick={() => setDetailModalRequest(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ynov-text-muted)' }}
+                onClick={() => setDetailModalRequest(null)} 
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  cursor: 'pointer', 
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  transition: 'background 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
-                <div style={{ width: '20px', height: '20px' }}><IconX /></div>
+                <div style={{ width: '20px', height: '20px', color: '#64748b' }}><IconX /></div>
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.85rem' }}>
-              <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontWeight: '600', color: 'var(--ynov-dark)', marginBottom: '4px' }}>
-                  {detailModalRequest.title}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div><strong>Étudiant :</strong> {detailModalRequest.displayName || '—'}</div>
+              <div><strong>Objet :</strong> {detailModalRequest.title}</div>
+              <div><strong>Type :</strong> {detailModalRequest.type}</div>
+              <div><strong>Période :</strong> {detailModalRequest.startDate} → {detailModalRequest.endDate}</div>
+              <div><strong>Description :</strong> {detailModalRequest.description}</div>
+              <div><strong>Date de soumission :</strong> {detailModalRequest.date}</div>
+              <div><strong>Statut :</strong> <span className={`status-badge ${detailModalRequest.status === 'Validé' ? 'approved' : detailModalRequest.status === 'En cours' ? 'pending' : 'urgent'}`}>{detailModalRequest.status}</span></div>
+              {detailModalRequest.reviewerName && (
+                <div><strong>Validé/Refusé par :</strong> {detailModalRequest.reviewerName}</div>
+              )}
+              {detailModalRequest.justificationUrl && (
+                <div>
+                  <strong>Justificatif :</strong>{' '}
+                  <a href={detailModalRequest.justificationUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ynov-cyan)', textDecoration: 'underline' }}>
+                    📄 Voir le document
+                  </a>
                 </div>
-                <div style={{ color: 'var(--ynov-text-muted)', fontSize: '0.78rem' }}>
-                  Catégorie : <strong>{detailModalRequest.type}</strong> • Déposée le {detailModalRequest.date}
-                </div>
-              </div>
+              )}
+              <div><strong>Remarque :</strong> {detailModalRequest.adminNote}</div>
 
-              <div>
-                <div style={{ fontWeight: '500', color: '#334155', marginBottom: '4px' }}>État du dossier :</div>
-                <span className={`status-badge ${
-                  detailModalRequest.status === 'Validé' ? 'approved' :
-                  detailModalRequest.status === 'En cours' ? 'pending' : 'urgent'
-                }`}>
-                  {detailModalRequest.status}
-                </span>
-              </div>
-
-              <div>
-                <div style={{ fontWeight: '500', color: '#334155', marginBottom: '4px' }}>Remarque du service Pédagogique / RH :</div>
-                <div style={{ padding: '10px', background: '#f1f5f9', borderRadius: '6px', color: '#334155', lineHeight: '1.4' }}>
-                  {detailModalRequest.adminNote}
+              {isAdmin && detailModalRequest.status === 'En cours' && (
+                <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                  <button className="btn-primary" onClick={() => handleReview(detailModalRequest.id, 'approved', 'Validé par RH')} style={{ flex: 1 }}>✅ Approuver</button>
+                  <button className="ynov-btn-outline" onClick={() => handleReview(detailModalRequest.id, 'rejected', 'Refusé par RH')} style={{ flex: 1, borderColor: '#ef4444', color: '#ef4444' }}>❌ Refuser</button>
                 </div>
-              </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
-              <button 
-                className="btn-primary" 
-                onClick={() => setDetailModalRequest(null)}
-              >
-                Fermer
-              </button>
+              <button className="btn-primary" onClick={() => setDetailModalRequest(null)}>Fermer</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL CRÉATION DE DEMANDE */}
+      {/* MODAL CRÉATION – inchangée */}
       {isModalOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(15, 23, 42, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          backdropFilter: 'blur(3px)'
-        }}>
-          <div style={{
-            background: 'var(--ynov-white)',
-            borderRadius: '12px',
-            width: '100%',
-            maxWidth: '520px',
-            padding: '24px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)',
-            border: '1px solid var(--ynov-border)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: '600', color: 'var(--ynov-dark)' }}>
-                Formuler une nouvelle demande
-              </h3>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(3px)' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '520px', padding: '28px 24px', maxHeight: '90vh', overflowY: 'auto', position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: '600', margin: 0 }}>Nouvelle demande</h3>
               <button 
-                onClick={() => setIsModalOpen(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ynov-text-muted)' }}
+                onClick={() => { setIsModalOpen(false); setNewFile(null); setError(null); }} 
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  cursor: 'pointer', 
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  transition: 'background 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
-                <div style={{ width: '20px', height: '20px' }}><IconX /></div>
+                <div style={{ width: '20px', height: '20px', color: '#64748b' }}><IconX /></div>
               </button>
             </div>
 
             {isSubmitted ? (
-              <div style={{ padding: '20px', textAlign: 'center', color: 'var(--status-approved)' }}>
-                <div style={{ width: '40px', height: '40px', margin: '0 auto 10px auto' }}><IconCheckCircle /></div>
-                <div style={{ fontWeight: '600', fontSize: '1rem' }}>Demande enregistrée avec succès !</div>
-                <p style={{ fontSize: '0.82rem', color: 'var(--ynov-text-muted)', marginTop: '4px' }}>
-                  Un numéro de dossier a été généré et transmis au secrétariat.
-                </p>
+              <div style={{ textAlign: 'center', color: '#10b981', padding: '30px 0' }}>
+                <div style={{ fontSize: '3rem' }}>✅</div>
+                <p style={{ fontSize: '1.1rem', fontWeight: '500', marginTop: '10px' }}>Demande envoyée avec succès !</p>
               </div>
             ) : (
-              <form onSubmit={handleCreateRequest} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label style={{ fontSize: '0.82rem', fontWeight: '500', color: '#334155', marginBottom: '4px' }}>
-                    Type de requête *
-                  </label>
+              <form onSubmit={handleCreateRequest}>
+                {/* Type */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px', color: '#1e293b' }}>Type *</label>
                   <select 
-                    value={newType}
-                    onChange={(e) => setNewType(e.target.value)}
-                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none' }}
+                    value={newType} 
+                    onChange={(e) => setNewType(e.target.value)} 
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px 12px', 
+                      borderRadius: '8px', 
+                      border: '1.5px solid #e2e8f0', 
+                      fontSize: '0.95rem',
+                      background: '#fff',
+                      outline: 'none',
+                      transition: 'border-color 0.2s',
+                      color: '#1e293b'
+                    }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#23b2a4'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
                   >
-                    <option value="Justification Absence">Justification d'absence</option>
-                    <option value="Document Administratif">Demande de document (Attestation, Certificat)</option>
-                    <option value="Recours Présence">Recours / Correction d'émargement</option>
-                    <option value="Aménagement">Aménagement d'horaires / Stage</option>
+                    <option value="medical">Médical</option>
+                    <option value="personal">Personnel</option>
+                    <option value="authorized_leave">Congé autorisé</option>
+                    <option value="unjustified">Non justifié</option>
+                    <option value="other">Autre</option>
                   </select>
                 </div>
 
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label style={{ fontSize: '0.82rem', fontWeight: '500', color: '#334155', marginBottom: '4px' }}>
-                    Objet résumé *
-                  </label>
+                {/* Objet */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px', color: '#1e293b' }}>Objet *</label>
                   <input 
                     type="text" 
-                    placeholder="Ex: Demande de convention de stage 2026..."
-                    value={newTitle}
-                    onChange={(e) => setNewTitle(e.target.value)}
-                    required
-                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none' }}
+                    value={newTitle} 
+                    onChange={(e) => setNewTitle(e.target.value)} 
+                    required 
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px 12px', 
+                      borderRadius: '8px', 
+                      border: '1.5px solid #e2e8f0', 
+                      fontSize: '0.95rem',
+                      outline: 'none',
+                      transition: 'border-color 0.2s',
+                      color: '#1e293b'
+                    }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#23b2a4'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
+                    placeholder="Ex: Demande de congé..."
                   />
                 </div>
 
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label style={{ fontSize: '0.82rem', fontWeight: '500', color: '#334155', marginBottom: '4px' }}>
-                    Explications & Détails
-                  </label>
+                {/* Description */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px', color: '#1e293b' }}>Description</label>
                   <textarea 
-                    rows={3}
-                    placeholder="Précisez votre demande, dates concernées ou motif particulier..."
-                    value={newDescription}
-                    onChange={(e) => setNewDescription(e.target.value)}
-                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
+                    rows={3} 
+                    value={newDescription} 
+                    onChange={(e) => setNewDescription(e.target.value)} 
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px 12px', 
+                      borderRadius: '8px', 
+                      border: '1.5px solid #e2e8f0', 
+                      fontSize: '0.95rem',
+                      resize: 'vertical',
+                      outline: 'none',
+                      transition: 'border-color 0.2s',
+                      fontFamily: 'inherit',
+                      color: '#1e293b'
+                    }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#23b2a4'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
+                    placeholder="Précisez votre demande..."
                   />
                 </div>
 
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label style={{ fontSize: '0.82rem', fontWeight: '500', color: '#334155', marginBottom: '4px' }}>
-                    Document annexe (optionnel)
-                  </label>
-                  <input 
-                    type="file" 
-                    style={{ padding: '6px', border: '1.5px dashed #cbd5e1', borderRadius: '6px', fontSize: '0.80rem', width: '100%' }}
-                  />
+                {/* Champs de date */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px', color: '#1e293b' }}>Date de début *</label>
+                    <input 
+                      type="date" 
+                      value={startDate} 
+                      onChange={(e) => setStartDate(e.target.value)} 
+                      required 
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px 12px', 
+                        borderRadius: '8px', 
+                        border: '1.5px solid #e2e8f0', 
+                        fontSize: '0.95rem',
+                        outline: 'none',
+                        transition: 'border-color 0.2s',
+                        color: '#1e293b',
+                        fontFamily: 'inherit'
+                      }}
+                      onFocus={(e) => e.currentTarget.style.borderColor = '#23b2a4'}
+                      onBlur={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px', color: '#1e293b' }}>Date de fin *</label>
+                    <input 
+                      type="date" 
+                      value={endDate} 
+                      onChange={(e) => setEndDate(e.target.value)} 
+                      required 
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px 12px', 
+                        borderRadius: '8px', 
+                        border: '1.5px solid #e2e8f0', 
+                        fontSize: '0.95rem',
+                        outline: 'none',
+                        transition: 'border-color 0.2s',
+                        color: '#1e293b',
+                        fontFamily: 'inherit'
+                      }}
+                      onFocus={(e) => e.currentTarget.style.borderColor = '#23b2a4'}
+                      onBlur={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
+                    />
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                {/* Fichier */}
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px', color: '#1e293b' }}>Document (optionnel)</label>
+                  <div style={{ 
+                    border: '2px dashed #cbd5e1', 
+                    borderRadius: '8px', 
+                    padding: '12px',
+                    transition: 'border-color 0.2s',
+                    background: '#f8fafc'
+                  }}>
+                    <input 
+                      type="file" 
+                      onChange={(e) => setNewFile(e.target.files[0])} 
+                      style={{ 
+                        width: '100%', 
+                        fontSize: '0.85rem',
+                        cursor: 'pointer'
+                      }} 
+                    />
+                    {newFile && (
+                      <p style={{ 
+                        fontSize: '0.8rem', 
+                        color: '#23b2a4', 
+                        marginTop: '6px',
+                        fontWeight: '500'
+                      }}>
+                        📎 {newFile.name} ({(newFile.size / 1024).toFixed(0)} Ko)
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {error && (
+                  <div style={{ 
+                    color: '#dc2626', 
+                    fontSize: '0.85rem', 
+                    marginBottom: '14px',
+                    padding: '8px 12px',
+                    background: '#fef2f2',
+                    borderRadius: '6px',
+                    border: '1px solid #fca5a5'
+                  }}>
+                    ⚠️ {error}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '4px' }}>
                   <button 
                     type="button" 
-                    className="btn-outline" 
-                    onClick={() => setIsModalOpen(false)}
+                    onClick={() => { setIsModalOpen(false); setNewFile(null); setError(null); }} 
+                    style={{ 
+                      padding: '10px 24px', 
+                      border: '1.5px solid #cbd5e1', 
+                      borderRadius: '8px', 
+                      background: 'transparent', 
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      fontWeight: '500',
+                      color: '#64748b',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
                   >
                     Annuler
                   </button>
                   <button 
                     type="submit" 
-                    className="btn-primary"
+                    disabled={isSubmitting} 
+                    style={{ 
+                      padding: '10px 28px', 
+                      background: isSubmitting ? '#94a3b8' : '#23b2a4', 
+                      color: '#fff', 
+                      border: 'none', 
+                      borderRadius: '8px', 
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                      fontWeight: '600',
+                      fontSize: '0.9rem',
+                      transition: 'background 0.2s'
+                    }}
+                    onMouseEnter={(e) => { if (!isSubmitting) e.currentTarget.style.background = '#1e9b8f'; }}
+                    onMouseLeave={(e) => { if (!isSubmitting) e.currentTarget.style.background = '#23b2a4'; }}
                   >
-                    Envoyer la demande
+                    {isSubmitting ? 'Envoi...' : 'Envoyer'}
                   </button>
                 </div>
               </form>

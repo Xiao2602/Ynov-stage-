@@ -1,318 +1,424 @@
 import "dotenv/config";
-
 import express from "express";
 import cors from "cors";
+import multer from "multer";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
-/*
-|--------------------------------------------------------------------------
-| AUTH
-|--------------------------------------------------------------------------
-*/
+import { adminDb } from "./firebaseAdmin.js";
+import { getActivityLogs } from "./Services/activityLogService.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// ============================================================
+// IMPORTS AUTHENTIFICATION
+// ============================================================
 
 import {
   handleLogin,
   handleResetPassword,
-  handleLogout
+  handleLogout,
+  handleGetMe,
+  handleVerify2FA
 } from "./Auth/Authentication/authController.js";
 
-/*
-|--------------------------------------------------------------------------
-| USERS
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// IMPORTS 2FA
+// ============================================================
+
+import {
+  handleTwoFactorSetup,
+  handleTwoFactorEnable,
+  handleTwoFactorDisable,
+  handleTwoFactorVerifyLogin
+} from "./Auth/Authentication/twoFactorController.js";
+
+// ============================================================
+// IMPORTS UTILISATEURS
+// ============================================================
 
 import {
   handleCreateUser,
-  handleGetAllUsers
+  handleGetAllUsers,
+  handleLinkParentStudent,
+  handleGetLinkedChildren,
+  handleGetMyStudents,
+  handleGetMyCourses,
+  handleAssignTeacherClass,
+  handleSuspendUser,
+  handleDeleteUser,
+  handleUpdateUser,
+  handleGetUser
 } from "./Auth/Users/userController.js";
 
-/*
-|--------------------------------------------------------------------------
-| ROLES
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// IMPORTS ROLES
+// ============================================================
 
 import {
   handleAssignRole
 } from "./Auth/Roles & Permissions/roleController.js";
 
-/*
-|--------------------------------------------------------------------------
-| AUTH MIDDLEWARE
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// IMPORTS ABSENCES
+// ============================================================
+
+import {
+  handleSubmitAbsence,
+  handleGetMyAbsences,
+  handleGetChildrenAbsences,
+  handleGetPendingAbsences,
+  handleGetAllAbsences,
+  handleReviewAbsence,
+  handleDeleteAbsence,
+  handleGetStatistics,
+  handleExportExcel,
+  handleExportPdf,
+  handleTeacherDeclareAbsence,
+  handleJustifyAbsence,
+  handleGetAbsencesByCourse,
+  handleArchiveAbsences,
+  handleGetArchivedAbsences
+} from "./Absence/Controllers/absenceController.js";
+
+// ============================================================
+// IMPORT DOCUMENTS
+// ============================================================
+
+import {
+  handleUploadDocument
+} from "./Documents/Controllers/documentController.js";
+
+// ============================================================
+// IMPORT NOTIFICATIONS
+// ============================================================
+
+import {
+  handleGetMyNotifications,
+  handleMarkNotificationAsRead,
+  handleMarkAllAsRead,
+  handleDeleteNotification,
+  handleDeleteReadNotifications
+} from "./Notifications/Controllers/notificationController.js";
+
+// ============================================================
+// IMPORT MIDDLEWARE
+// ============================================================
 
 import {
   authenticateToken,
   authorizeRoles
 } from "./Shared/Authentication middleware/authMiddleware.js";
 
-import {
-  ROLES
-} from "./Shared/Roles/roles.js";
+import { ROLES } from "./Shared/Roles/roles.js";
 
-/*
-|--------------------------------------------------------------------------
-| DOCUMENTS
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// CONFIGURATION MULTER
+// ============================================================
 
-import documentRoutes
-  from "./Documents/documentRoutes.js";
+const upload = multer({
+  storage: multer.memoryStorage()
+});
 
-/*
-|--------------------------------------------------------------------------
-| APPLICATION
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// APPLICATION EXPRESS
+// ============================================================
 
-const app =
-  express();
+const app = express();
 
-/*
-|--------------------------------------------------------------------------
-| GLOBAL MIDDLEWARE
-|--------------------------------------------------------------------------
-*/
+// CORS
+app.use(cors({
+  origin: 'http://localhost:5173',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true,
+  optionsSuccessStatus: 200
+}));
+app.options('*', cors());
 
-app.use(
-  cors()
-);
+app.use(express.json());
+app.use("/uploads", express.static(join(__dirname, "uploads")));
 
-app.use(
-  express.json()
-);
+// ============================================================
+// AUTHENTIFICATION
+// ============================================================
 
-/*
-|--------------------------------------------------------------------------
-| AUTH PUBLIC
-|--------------------------------------------------------------------------
-*/
+app.post("/api/auth/login", handleLogin);
+app.post("/api/auth/reset-password", handleResetPassword);
+app.post("/api/auth/logout", handleLogout);
+app.get("/api/auth/me", authenticateToken, handleGetMe);
 
-app.post(
-  "/api/auth/login",
-  handleLogin
-);
+// 🔥 2FA Routes
+app.get("/api/auth/2fa/setup", authenticateToken, handleTwoFactorSetup);
+app.post("/api/auth/2fa/enable", authenticateToken, handleTwoFactorEnable);
+app.post("/api/auth/2fa/disable", authenticateToken, handleTwoFactorDisable);
+app.post("/api/auth/verify-2fa", handleVerify2FA);
+app.post("/api/auth/2fa/verify-login", handleTwoFactorVerifyLogin);
 
-app.post(
-  "/api/auth/reset-password",
-  handleResetPassword
-);
+// ============================================================
+// UTILISATEURS
+// ============================================================
 
-app.post(
-  "/api/auth/logout",
-  handleLogout
-);
-
-/*
-|--------------------------------------------------------------------------
-| AUTH CURRENT USER
-|--------------------------------------------------------------------------
-*/
-
-app.get(
-  "/api/auth/me",
-
-  authenticateToken,
-
-  (req, res) => {
-
-    res.status(200).json({
-      success: true,
-
-      user: {
-        uid:
-          req.user.uid,
-
-        email:
-          req.user.email ||
-          null,
-
-        emailVerified:
-          req.user.email_verified ||
-          false,
-
-        role:
-          req.user.role ||
-          null
-      }
-    });
-  }
-);
-
-/*
-|--------------------------------------------------------------------------
-| USERS
-|--------------------------------------------------------------------------
-*/
-
-app.get(
-  "/api/users",
-
-  authenticateToken,
-
-  handleGetAllUsers
-);
+app.get("/api/users", authenticateToken, handleGetAllUsers);
 
 app.post(
   "/api/users/create",
-
   authenticateToken,
-
-  authorizeRoles(
-    ROLES.ADMIN,
-    ROLES.RH
-  ),
-
+  authorizeRoles(ROLES.ADMIN, ROLES.RH),
   handleCreateUser
 );
 
-/*
-|--------------------------------------------------------------------------
-| ROLES
-|--------------------------------------------------------------------------
-*/
+app.post(
+  "/api/users/link-parent-student",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  handleLinkParentStudent
+);
+
+app.get(
+  "/api/users/my-children",
+  authenticateToken,
+  authorizeRoles(ROLES.PARENT, ROLES.ADMIN, ROLES.RH),
+  handleGetLinkedChildren
+);
+
+// --- Routes professeur ---
+app.get(
+  "/api/users/my-students",
+  authenticateToken,
+  authorizeRoles(ROLES.TEACHER),
+  handleGetMyStudents
+);
+
+app.get(
+  "/api/users/my-courses",
+  authenticateToken,
+  authorizeRoles(ROLES.TEACHER),
+  handleGetMyCourses
+);
+
+// --- Routes admin pour gestion complète des utilisateurs ---
+app.get(
+  "/api/users/:uid",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  handleGetUser
+);
+
+app.patch(
+  "/api/users/:uid",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  handleUpdateUser
+);
+
+app.patch(
+  "/api/users/:uid/suspend",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  handleSuspendUser
+);
+
+app.delete(
+  "/api/users/:uid",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN),
+  handleDeleteUser
+);
+
+// --- Assignation de classes à un professeur (admin) ---
+app.post(
+  "/api/users/assign-teacher",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  handleAssignTeacherClass
+);
+
+// ============================================================
+// ROLES
+// ============================================================
 
 app.post(
   "/api/roles/assign",
-
   authenticateToken,
-
-  authorizeRoles(
-    ROLES.ADMIN
-  ),
-
+  authorizeRoles(ROLES.ADMIN),
   handleAssignRole
 );
 
-/*
-|--------------------------------------------------------------------------
-| DOCUMENTS
-|--------------------------------------------------------------------------
-|
-| Toutes les routes :
-|
-| /api/documents/upload
-| /api/documents/my
-| /api/documents/:id
-|
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// ABSENCES
+// ============================================================
 
-app.use(
-  "/api/documents",
-  documentRoutes
+app.post("/api/absences", authenticateToken, handleSubmitAbsence);
+app.get("/api/absences/my", authenticateToken, handleGetMyAbsences);
+app.get(
+  "/api/absences/children",
+  authenticateToken,
+  authorizeRoles(ROLES.PARENT, ROLES.ADMIN, ROLES.RH),
+  handleGetChildrenAbsences
+);
+app.get(
+  "/api/absences/pending",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  handleGetPendingAbsences
+);
+app.get(
+  "/api/absences",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER, ROLES.TEACHER),
+  handleGetAllAbsences
+);
+app.patch(
+  "/api/absences/:id/review",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  handleReviewAbsence
+);
+app.delete("/api/absences/:id", authenticateToken, handleDeleteAbsence);
+
+// --- Professeur déclare une absence pour un étudiant ---
+app.post(
+  "/api/absences/teacher/declare",
+  authenticateToken,
+  authorizeRoles(ROLES.TEACHER),
+  handleTeacherDeclareAbsence
 );
 
-/*
-|--------------------------------------------------------------------------
-| HEALTH
-|--------------------------------------------------------------------------
-*/
+// --- Professeur consulte les absences par classe/cours ---
+app.get(
+  "/api/absences/by-course",
+  authenticateToken,
+  authorizeRoles(ROLES.TEACHER),
+  handleGetAbsencesByCourse
+);
+
+// --- Étudiant justifie une absence ---
+app.post(
+  "/api/absences/:id/justify",
+  authenticateToken,
+  handleJustifyAbsence
+);
+
+// --- Archivage (admin) ---
+app.post(
+  "/api/absences/archive",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN),
+  handleArchiveAbsences
+);
 
 app.get(
-  "/api/health",
-
-  (req, res) => {
-
-    res.status(200).json({
-      success: true,
-
-      message:
-        "API Backend Gestion des Absences opérationnelle."
-    });
-  }
+  "/api/absences/archived",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  handleGetArchivedAbsences
 );
 
-/*
-|--------------------------------------------------------------------------
-| 404
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// STATISTIQUES
+// ============================================================
 
-app.use(
-  (req, res) => {
-
-    res.status(404).json({
-      success: false,
-
-      error:
-        `Route ${req.method} ${req.originalUrl} introuvable.`
-    });
-  }
+app.get(
+  "/api/absences/statistics",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  handleGetStatistics
 );
 
-/*
-|--------------------------------------------------------------------------
-| ERROR HANDLER
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// EXPORTS
+// ============================================================
 
-app.use(
-  (error, req, res, next) => {
+app.get(
+  "/api/absences/export/excel",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  handleExportExcel
+);
 
-    console.error(
-      "Erreur Express :",
-      error
-    );
+app.get(
+  "/api/absences/export/pdf",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  handleExportPdf
+);
 
-    if (
-      error.code ===
-      "LIMIT_FILE_SIZE"
-    ) {
+// ============================================================
+// DOCUMENTS
+// ============================================================
 
-      return res.status(400).json({
-        success: false,
-        error:
-          "Fichier trop volumineux. Taille maximale : 5 Mo."
-      });
+app.post(
+  "/api/documents/upload",
+  authenticateToken,
+  upload.single("file"),
+  handleUploadDocument
+);
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+app.get("/api/notifications/my", authenticateToken, handleGetMyNotifications);
+app.patch("/api/notifications/:id/read", authenticateToken, handleMarkNotificationAsRead);
+app.post("/api/notifications/read-all", authenticateToken, handleMarkAllAsRead);
+app.delete("/api/notifications/:id", authenticateToken, handleDeleteNotification);
+app.delete("/api/notifications/read", authenticateToken, handleDeleteReadNotifications);
+
+// ============================================================
+// ACTIVITY LOGS (admin seulement)
+// ============================================================
+
+app.get(
+  "/api/activity-logs",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN),
+  async (req, res) => {
+    try {
+      const { userId, action, startDate, endDate, limit } = req.query;
+      const result = await getActivityLogs({ userId, action, startDate, endDate, limit: parseInt(limit) || 500 });
+      if (result.success) {
+        return res.status(200).json(result);
+      } else {
+        return res.status(500).json(result);
+      }
+    } catch (error) {
+      console.error("Erreur route activity-logs:", error);
+      return res.status(500).json({ success: false, error: error.message });
     }
-
-    if (
-      error instanceof
-      Error
-    ) {
-
-      return res.status(400).json({
-        success: false,
-        error:
-          error.message
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      error:
-        "Erreur interne du serveur."
-    });
   }
 );
 
-/*
-|--------------------------------------------------------------------------
-| SERVER
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// HEALTH CHECK
+// ============================================================
 
-const PORT =
-  process.env.PORT ||
-  5000;
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ success: true, message: "API opérationnelle." });
+});
 
-app.listen(
-  PORT,
+// ============================================================
+// 404 & GESTION DES ERREURS
+// ============================================================
 
-  () => {
+app.use((req, res) => {
+  res.status(404).json({ success: false, error: `Route ${req.method} ${req.originalUrl} introuvable.` });
+});
 
-    console.log(
-      `🚀 Serveur API REST démarré sur http://localhost:${PORT}`
-    );
-
-    console.log(
-      "📁 Stockage des documents : stockage local"
-    );
-
-    console.log(
-      "🔥 Firestore : Firebase réel"
-    );
+app.use((err, req, res, next) => {
+  console.error("Erreur Express :", err);
+  if (err.code === "LIMIT_FILE_SIZE") {
+    return res.status(400).json({ success: false, error: "Fichier trop volumineux (max 5 Mo)." });
   }
-);
+  return res.status(500).json({ success: false, error: err.message || "Erreur interne." });
+});
+
+// ============================================================
+// DÉMARRAGE
+// ============================================================
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`🚀 Serveur API REST démarré sur http://localhost:${PORT}`);
+});

@@ -1,200 +1,388 @@
-import React from 'react';
-import { useOutletContext } from 'react-router-dom';
-import { 
-  IconGraduationCap, 
-  IconFolder, 
-  IconHourglass, 
-  IconFileCheck, 
-  IconDots, 
-  IconCalendar, 
-  IconAlertTriangle,
-  IconEye
-} from '../components/Icons';
+import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../api/api';
+import { useAuth } from '../auth/AuthContext';
+import '../components/DashboardLayout.css';
 
 export default function DashboardOverview() {
-  const { dashboardMode } = useOutletContext();
+  const { role } = useAuth();
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  // Configuration dynamique selon le mode choisi
-  const config = {
-    documents: {
-      title: "Ynov Document Manager",
-      stats: [
-        { label: "Total Students", value: "3,492", trend: "+4%", icon: <IconGraduationCap />, isHighlight: false },
-        { label: "Total Documents", value: "12,845", trend: "+12%", icon: <IconFolder />, isHighlight: false },
-        { label: "Pending Requests", value: "142", subtitle: "Requires Action", icon: <IconHourglass />, isHighlight: true },
-        { label: "Docs Generated Today", value: "87", icon: <IconFileCheck />, isHighlight: false }
-      ],
-      chartTitle: "Document Generation Trends",
-      recentTitle: "Recent Requests",
-      tableHeaders: ["Student", "Document Type", "Date", "Status", "Action"],
-      tableData: [
-        { initials: "JD", name: "Jane Doe", type: "Enrollment Certificate", date: "Oct 24, 2023", status: "pending" },
-        { initials: "AS", name: "Alex Smith", type: "Grade Transcript", date: "Oct 24, 2023", status: "approved" },
-        { initials: "MB", name: "Marc Blanc", type: "School Certificate", date: "Oct 23, 2023", status: "approved" }
-      ]
-    },
-    absences: {
-      title: "Ynov Leave Manager",
-      stats: [
-        { label: "Active Students", value: "3,492", trend: "Stable", icon: <IconGraduationCap />, isHighlight: false },
-        { label: "Total Absences (Hrs)", value: "1,204", trend: "-5%", icon: <IconFolder />, isHighlight: false },
-        { label: "Pending Justifications", value: "38", subtitle: "Requires Review", icon: <IconHourglass />, isHighlight: true },
-        { label: "Leaves Logged Today", value: "12", icon: <IconFileCheck />, isHighlight: false }
-      ],
-      chartTitle: "Absence Frequency Trends",
-      recentTitle: "Recent Leave Logs",
-      tableHeaders: ["Student", "Course / Module", "Date", "Status", "Action"],
-      tableData: [
-        { initials: "LM", name: "Lucas Martin", type: "Architecture Web", date: "Oct 24, 2023", status: "pending" },
-        { initials: "SB", name: "Sarah Bernard", type: "C# Development", date: "Oct 23, 2023", status: "approved" },
-        { initials: "ER", name: "Emma Richard", type: "Database Security", date: "Oct 22, 2023", status: "approved" }
-      ]
+  useEffect(() => {
+    const fetchStats = async () => {
+      if (!['admin', 'rh', 'administrateur', 'personnel'].includes(role)) {
+        return;
+      }
+      setLoading(true);
+      setError('');
+      try {
+        const data = await apiFetch('/absences/statistics');
+        if (data.success) {
+          setStats(data.stats);
+        } else {
+          setError('Impossible de charger les statistiques.');
+        }
+      } catch (err) {
+        console.error('Erreur stats:', err);
+        setError('Erreur de connexion au serveur. Vérifiez que le backend est démarré.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, [role]);
+
+  // ============================================================
+  // RENDU SELON LE RÔLE
+  // ============================================================
+
+  // --- Rôle Étudiant ---
+  if (role === 'etudiant') {
+    return (
+      <div className="dashboard-page-content">
+        <div className="stats-grid">
+          <div className="stat-card">
+            <h4>Documents Validés</h4>
+            <div className="stat-value">4 / 5</div>
+            <span className="stat-badge success">Conforme</span>
+          </div>
+          <div className="stat-card">
+            <h4>Volume d'absence</h4>
+            <div className="stat-value">12h</div>
+            <span className="stat-badge warning">Seuil critique : 20h</span>
+          </div>
+          <div className="stat-card">
+            <h4>Moyenne Semestrielle</h4>
+            <div className="stat-value">14.5 / 20</div>
+            <span className="stat-badge info">Semestre 2</span>
+          </div>
+        </div>
+        <div className="dashboard-section">
+          <h3>Suivi des demandes administratives</h3>
+          <p>Consultez l'état de vos dossiers en cours.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Rôle Parent ---
+  if (role === 'parent') {
+    return (
+      <div className="dashboard-page-content">
+        <div className="stats-grid">
+          <div className="stat-card">
+            <h4>Statut du Dossier</h4>
+            <div className="stat-value">Validé</div>
+            <span className="stat-badge success">Scolarité active</span>
+          </div>
+          <div className="stat-card">
+            <h4>Absences du Trimestre</h4>
+            <div className="stat-value">8h</div>
+            <span className="stat-badge info">Justifiées : 6h / Non justifiées : 2h</span>
+          </div>
+        </div>
+        <div className="dashboard-section">
+          <h3>Bulletins et relevés académiques</h3>
+          <p>Accès aux bilans périodiques.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Rôle Professeur ---
+  if (role === 'professeur') {
+    return (
+      <div className="dashboard-page-content">
+        <div className="stats-grid">
+          <div className="stat-card">
+            <h4>Promotions assignées</h4>
+            <div className="stat-value">6</div>
+            <span className="stat-badge info">Campus Ynov</span>
+          </div>
+          <div className="stat-card">
+            <h4>Appels en cours</h4>
+            <div className="stat-value">2</div>
+            <span className="stat-badge warning">Séance active</span>
+          </div>
+        </div>
+        <div className="dashboard-section">
+          <h3>Planning des cours</h3>
+          <p>Gestion des présences obligatoires.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Rôle Admin / RH / Personnel (affichage des statistiques) ---
+  if (['admin', 'rh', 'administrateur', 'personnel'].includes(role)) {
+    if (loading) {
+      return (
+        <div className="dashboard-page-content" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+          <div className="spinner" style={{ borderColor: 'var(--ynov-cyan) #020617 transparent transparent' }}></div>
+        </div>
+      );
     }
-  };
 
-  const currentView = config[dashboardMode];
-
-  return (
-    <div className="dashboard-scroll-area" style={{ height: '100%', overflowY: 'auto' }}>
-      <div className="overview-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div>
-          <h2 className="overview-title">Vue d'ensemble</h2>
-          <p className="overview-subtitle">Bienvenue, Alexandre. Voici ce qui se passe aujourd'hui.</p>
+    if (error) {
+      return (
+        <div className="dashboard-page-content" style={{ padding: '2rem', color: '#ef4444' }}>
+          <h3>Erreur</h3>
+          <p>{error}</p>
+          <p style={{ fontSize: '0.9rem', color: 'var(--ynov-text-muted)' }}>
+            Vérifiez que le backend est démarré sur <code>http://localhost:5000</code>.
+          </p>
         </div>
+      );
+    }
 
-        <div className="overview-actions" style={{ display: 'flex', gap: '12px' }}>
-          <button className="btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '16px', height: '16px' }}><IconCalendar /></div> Cette semaine
-          </button>
-          <button className="btn-primary" style={{ width: 'auto' }}>
-            Générer un rapport
-          </button>
+    if (!stats) {
+      return (
+        <div className="dashboard-page-content" style={{ padding: '2rem', color: 'var(--ynov-text-muted)' }}>
+          <h3>Aucune donnée disponible</h3>
+          <p>Les statistiques seront visibles dès que des absences seront enregistrées.</p>
         </div>
-      </div>
+      );
+    }
 
-      {/* BLOCS DE STATISTIQUES */}
-      <div className="stats-grid">
-        {currentView.stats.map((stat, index) => (
-          <div key={index} className={`stat-card ${stat.isHighlight ? 'highlight' : ''}`}>
-            <div className="stat-header">
-              <span className="stat-title">{stat.label}</span>
-              <div className="stat-icon-wrapper" style={{ width: '32px', height: '32px', color: stat.isHighlight ? 'var(--ynov-teal)' : 'var(--ynov-gray-500)' }}>
-                {stat.icon}
-              </div>
-            </div>
-            <div>
-              <div className="stat-value-container">
-                <span className="stat-value">{stat.value}</span>
-                {stat.trend && <span className="stat-trend up">{stat.trend}</span>}
-              </div>
-              {stat.subtitle && <div className="stat-subtitle">{stat.subtitle}</div>}
-            </div>
+    return (
+      <div className="dashboard-page-content" style={{ padding: '2rem' }}>
+        {/* En-tête */}
+        <div className="overview-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+          <div>
+            <h2 className="overview-title" style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--ynov-text-light)' }}>
+              Tableau de bord
+            </h2>
+            <p className="overview-subtitle" style={{ color: 'var(--ynov-text-muted)' }}>
+              Vue d'ensemble des absences et indicateurs clés
+            </p>
           </div>
-        ))}
-      </div>
-
-      {/* GRILLES DU DASHBOARD */}
-      <div className="content-grid">
-        <div className="left-col">
-          {/* PANNEAU DE TENDANCE (GRAPHIQUE) */}
-          <div className="panel">
-            <div className="panel-header">
-              <h3 className="panel-title">{currentView.chartTitle}</h3>
-              <button className="action-dots" aria-label="Plus d'options" style={{ width: '20px', height: '20px', color: 'var(--ynov-gray-400)' }}>
-                <IconDots />
-              </button>
-            </div>
-            <div className="chart-placeholder">
-              <svg className="chart-svg" viewBox="0 0 500 150" preserveAspectRatio="none">
-                <path
-                  d="M 0,100 Q 125,20 250,70 T 500,30"
-                  fill="none"
-                  stroke="var(--ynov-teal)"
-                  strokeWidth="2.5"
-                />
-              </svg>
-            </div>
-          </div>
-
-          {/* TABLEAU DES DEMANDES RÉCENTES */}
-          <div className="panel">
-            <div className="panel-header">
-              <h3 className="panel-title">{currentView.recentTitle}</h3>
-              <button className="btn-outline" style={{ padding: '5px 12px', fontSize: '0.78rem' }}>View All</button>
-            </div>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  {currentView.tableHeaders.map((th, i) => <th key={i}>{th}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {currentView.tableData.map((row, i) => (
-                  <tr key={i}>
-                    <td>
-                      <div className="user-cell">
-                        <div className="mini-avatar">{row.initials}</div>
-                        {row.name}
-                      </div>
-                    </td>
-                    <td>{row.type}</td>
-                    <td>{row.date}</td>
-                    <td>
-                      <span className={`status-badge ${row.status}`}>
-                        {row.status}
-                      </span>
-                    </td>
-                    <td>
-                      <button className="table-action-btn" title="Consulter" style={{ width: '18px', height: '18px' }}>
-                        <IconEye />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="overview-actions" style={{ display: 'flex', gap: '12px' }}>
+            <button className="ynov-btn-outline" onClick={() => window.location.href = '/absences/demandes'}>
+              Gérer les demandes
+            </button>
           </div>
         </div>
 
-        {/* COLONNE DROITE : ALERTES & DISTRIBUTION */}
-        <div className="right-col">
-          <div className="panel urgent">
-            <div className="panel-header" style={{ marginBottom: '14px' }}>
-              <h3 className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '18px', height: '18px' }}><IconAlertTriangle /></div> Urgent Attention
-              </h3>
+        {/* Cartes statistiques */}
+        <div className="stats-grid" style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '1.5rem',
+          marginBottom: '2.5rem'
+        }}>
+          <div className="stat-card" style={{
+            background: 'var(--ynov-card)',
+            border: '1px solid var(--ynov-border)',
+            borderRadius: '1rem',
+            padding: '1.5rem',
+            transition: 'transform 0.2s, box-shadow 0.2s',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.9rem', fontWeight: 500 }}>Total demandes</h4>
+              <span style={{ color: 'var(--ynov-cyan)', fontSize: '1.5rem' }}>📋</span>
             </div>
-            <div className="alert-item">
-              <div className="alert-title">
-                {dashboardMode === 'documents' ? 'Missing Signatures (12)' : 'Unjustified Absences > 48h (8)'}
-              </div>
-              <div className="alert-desc">
-                {dashboardMode === 'documents' ? 'Required for final year transcripts.' : 'Requires immediate academic review.'}
-              </div>
+            <div className="stat-value" style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--ynov-cyan)', marginTop: '0.5rem' }}>
+              {stats.total}
             </div>
-            <div className="alert-item">
-              <div className="alert-title">
-                {dashboardMode === 'documents' ? 'Overdue Approvals (5)' : 'Pending Medical Certs (3)'}
-              </div>
-              <div className="alert-desc">Requests pending &gt; 48 hours.</div>
-            </div>
+            <span className="stat-badge info" style={{ background: 'var(--ynov-cyan)20', color: 'var(--ynov-cyan)', padding: '0.2rem 0.8rem', borderRadius: '9999px', fontSize: '0.75rem', display: 'inline-block', marginTop: '0.5rem' }}>
+              Global
+            </span>
           </div>
 
-          <div className="panel">
-            <h3 className="panel-title" style={{ marginBottom: '20px' }}>
-              {dashboardMode === 'documents' ? 'Request Status Distribution' : 'Absence Status Distribution'}
+          <div className="stat-card highlight" style={{
+            background: 'var(--ynov-card)',
+            border: '1px solid var(--ynov-border)',
+            borderRadius: '1rem',
+            padding: '1.5rem',
+            transition: 'transform 0.2s, box-shadow 0.2s',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.9rem', fontWeight: 500 }}>En attente</h4>
+              <span style={{ color: '#f59e0b', fontSize: '1.5rem' }}>⏳</span>
+            </div>
+            <div className="stat-value" style={{ fontSize: '2.5rem', fontWeight: 700, color: '#f59e0b', marginTop: '0.5rem' }}>
+              {stats.pending}
+            </div>
+            <span className="stat-badge warning" style={{ background: '#f59e0b20', color: '#f59e0b', padding: '0.2rem 0.8rem', borderRadius: '9999px', fontSize: '0.75rem', display: 'inline-block', marginTop: '0.5rem' }}>
+              À traiter
+            </span>
+          </div>
+
+          <div className="stat-card" style={{
+            background: 'var(--ynov-card)',
+            border: '1px solid var(--ynov-border)',
+            borderRadius: '1rem',
+            padding: '1.5rem',
+            transition: 'transform 0.2s, box-shadow 0.2s',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.9rem', fontWeight: 500 }}>Approuvées</h4>
+              <span style={{ color: '#10b981', fontSize: '1.5rem' }}>✅</span>
+            </div>
+            <div className="stat-value" style={{ fontSize: '2.5rem', fontWeight: 700, color: '#10b981', marginTop: '0.5rem' }}>
+              {stats.approved}
+            </div>
+            <span className="stat-badge success" style={{ background: '#10b98120', color: '#10b981', padding: '0.2rem 0.8rem', borderRadius: '9999px', fontSize: '0.75rem', display: 'inline-block', marginTop: '0.5rem' }}>
+              Validées
+            </span>
+          </div>
+
+          <div className="stat-card" style={{
+            background: 'var(--ynov-card)',
+            border: '1px solid var(--ynov-border)',
+            borderRadius: '1rem',
+            padding: '1.5rem',
+            transition: 'transform 0.2s, box-shadow 0.2s',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.9rem', fontWeight: 500 }}>Refusées</h4>
+              <span style={{ color: '#ef4444', fontSize: '1.5rem' }}>❌</span>
+            </div>
+            <div className="stat-value" style={{ fontSize: '2.5rem', fontWeight: 700, color: '#ef4444', marginTop: '0.5rem' }}>
+              {stats.rejected}
+            </div>
+            <span className="stat-badge danger" style={{ background: '#ef444420', color: '#ef4444', padding: '0.2rem 0.8rem', borderRadius: '9999px', fontSize: '0.75rem', display: 'inline-block', marginTop: '0.5rem' }}>
+              Rejetées
+            </span>
+          </div>
+        </div>
+
+        {/* Deux colonnes : Types et Départements */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: '1.5rem',
+          marginBottom: '2.5rem'
+        }}>
+          <div className="dashboard-section" style={{
+            background: 'var(--ynov-card)',
+            border: '1px solid var(--ynov-border)',
+            borderRadius: '1rem',
+            padding: '1.5rem'
+          }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--ynov-text-light)', marginBottom: '1rem' }}>
+              Répartition par type
             </h3>
-            <div className="donut-chart-container">
-              <div className="donut"></div>
+            <div className="card-list-item">
+              {Object.entries(stats.byType).length === 0 && <p style={{ color: 'var(--ynov-text-muted)' }}>Aucun type enregistré.</p>}
+              {Object.entries(stats.byType).map(([type, count]) => (
+                <div key={type} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  padding: '0.6rem 0',
+                  borderBottom: '1px solid var(--ynov-border)'
+                }}>
+                  <span style={{ color: 'var(--ynov-text-muted)' }}>{type}</span>
+                  <strong style={{ color: 'var(--ynov-cyan)' }}>{count}</strong>
+                </div>
+              ))}
             </div>
-            <div className="chart-legend">
-              <div className="legend-item"><span className="dot-approved"></span> Approved</div>
-              <div className="legend-item"><span className="dot-pending"></span> Pending</div>
-              <div className="legend-item"><span className="dot-urgent"></span> Rejected</div>
+          </div>
+
+          <div className="dashboard-section" style={{
+            background: 'var(--ynov-card)',
+            border: '1px solid var(--ynov-border)',
+            borderRadius: '1rem',
+            padding: '1.5rem'
+          }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--ynov-text-light)', marginBottom: '1rem' }}>
+              Répartition par département
+            </h3>
+            <div className="card-list-item">
+              {Object.entries(stats.byDepartment).length === 0 && <p style={{ color: 'var(--ynov-text-muted)' }}>Aucun département enregistré.</p>}
+              {Object.entries(stats.byDepartment).map(([dept, count]) => (
+                <div key={dept} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  padding: '0.6rem 0',
+                  borderBottom: '1px solid var(--ynov-border)'
+                }}>
+                  <span style={{ color: 'var(--ynov-text-muted)' }}>{dept}</span>
+                  <strong style={{ color: 'var(--ynov-cyan)' }}>{count}</strong>
+                </div>
+              ))}
             </div>
           </div>
         </div>
+
+        {/* Actions rapides */}
+        <div className="dashboard-section" style={{
+          background: 'var(--ynov-card)',
+          border: '1px solid var(--ynov-border)',
+          borderRadius: '1rem',
+          padding: '1.5rem'
+        }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--ynov-text-light)', marginBottom: '1rem' }}>
+            Actions rapides
+          </h3>
+          <div className="actions-group" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <button
+              className="ynov-btn-outline"
+              onClick={() => window.location.href = '/absences/demandes'}
+              style={{
+                padding: '0.6rem 1.5rem',
+                background: 'transparent',
+                border: '1px solid var(--ynov-cyan)',
+                color: 'var(--ynov-cyan)',
+                borderRadius: '0.75rem',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+                fontWeight: 500
+              }}
+              onMouseOver={(e) => e.target.style.background = 'var(--ynov-cyan)20'}
+              onMouseOut={(e) => e.target.style.background = 'transparent'}
+            >
+              📋 Gérer les demandes
+            </button>
+            <button
+              className="ynov-btn-outline"
+              onClick={() => window.location.href = '/users'}
+              style={{
+                padding: '0.6rem 1.5rem',
+                background: 'transparent',
+                border: '1px solid var(--ynov-cyan)',
+                color: 'var(--ynov-cyan)',
+                borderRadius: '0.75rem',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+                fontWeight: 500
+              }}
+              onMouseOver={(e) => e.target.style.background = 'var(--ynov-cyan)20'}
+              onMouseOut={(e) => e.target.style.background = 'transparent'}
+            >
+              👥 Utilisateurs
+            </button>
+            <button
+              className="ynov-btn-outline"
+              onClick={() => window.location.href = '/absences/demandes'}
+              style={{
+                padding: '0.6rem 1.5rem',
+                background: 'transparent',
+                border: '1px solid var(--ynov-cyan)',
+                color: 'var(--ynov-cyan)',
+                borderRadius: '0.75rem',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+                fontWeight: 500
+              }}
+              onMouseOver={(e) => e.target.style.background = 'var(--ynov-cyan)20'}
+              onMouseOut={(e) => e.target.style.background = 'transparent'}
+            >
+              📊 Exporter les données
+            </button>
+          </div>
+        </div>
       </div>
+    );
+  }
+
+  // Si le rôle n'est pas reconnu
+  return (
+    <div className="dashboard-page-content" style={{ padding: '2rem' }}>
+      <h3>Rôle non reconnu</h3>
+      <p>Votre rôle "{role}" n'est pas pris en charge par le tableau de bord.</p>
     </div>
   );
 }

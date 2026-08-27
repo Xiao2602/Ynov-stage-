@@ -54,14 +54,14 @@ export async function createUserByAdmin({ email, password, displayName, role = '
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       user: {
         uid: userRecord.uid,
         email: userRecord.email,
         displayName: userRecord.displayName,
         role
-      } 
+      }
     };
   } catch (error) {
     return { success: false, error: error.message };
