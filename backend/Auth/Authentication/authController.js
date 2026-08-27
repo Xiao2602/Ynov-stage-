@@ -1,4 +1,4 @@
-import { loginService, resetPasswordService, logoutService } from "./authService.js";
+import { loginService, resetPasswordService, logoutService, changePasswordService } from "./authService.js";
 import { sendCustomPasswordResetEmail } from "./customEmailService.js";
 
 /**
@@ -43,3 +43,25 @@ export async function handleLogout(req, res) {
   const result = await logoutService();
   return res.status(200).json(result);
 }
+
+/**
+ * Controller pour changer le mot de passe de l'utilisateur connecté (PATCH /api/auth/change-password)
+ */
+export async function handleChangePassword(req, res) {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ 
+      success: false, 
+      error: "Veuillez fournir le mot de passe actuel (currentPassword) et le nouveau mot de passe (newPassword)." 
+    });
+  }
+
+  const result = await changePasswordService(req.user.uid, req.user.email, currentPassword, newPassword);
+  if (result.success) {
+    return res.status(200).json(result);
+  } else {
+    return res.status(400).json(result);
+  }
+}
+

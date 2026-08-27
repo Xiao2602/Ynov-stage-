@@ -2,7 +2,10 @@ import {
   createUserService, 
   getAllUsersService,
   linkParentToStudentService,
-  getLinkedChildrenService
+  getLinkedChildrenService,
+  getMyProfileService,
+  updateMyProfileService,
+  uploadAvatarService
 } from "./userService.js";
 
 /**
@@ -67,3 +70,46 @@ export async function handleGetAllUsers(req, res) {
     return res.status(500).json(result);
   }
 }
+
+/**
+ * Controller pour obtenir le profil de l'utilisateur connecté (GET /api/users/me)
+ */
+export async function handleGetMyProfile(req, res) {
+  const result = await getMyProfileService(req.user.uid);
+  if (result.success) {
+    return res.status(200).json(result);
+  } else {
+    return res.status(404).json(result);
+  }
+}
+
+/**
+ * Controller pour mettre à jour le profil de l'utilisateur connecté (PATCH /api/users/me)
+ * Champs modifiables : displayName, department, phone
+ */
+export async function handleUpdateMyProfile(req, res) {
+  const result = await updateMyProfileService(req.user.uid, req.body);
+  if (result.success) {
+    return res.status(200).json(result);
+  } else {
+    return res.status(400).json(result);
+  }
+}
+
+/**
+ * Controller pour téléverser la photo de profil (POST /api/users/me/avatar)
+ */
+export async function handleUploadAvatar(req, res) {
+  if (!req.file) {
+    return res.status(400).json({ success: false, error: "Veuillez fournir une image pour la photo de profil." });
+  }
+
+  const result = await uploadAvatarService(req.file, req.user.uid);
+  if (result.success) {
+    return res.status(200).json(result);
+  } else {
+    return res.status(500).json(result);
+  }
+}
+
+

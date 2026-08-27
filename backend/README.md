@@ -26,27 +26,27 @@ backend/
 │   └── Services/
 │       └── notificationService.js   # Création, lecture et mise à jour des notifications
 │
-├── Auth/                            # Module d'authentification et d'administration des utilisateurs
-│   ├── Authentication/              # Authentification et réinitialisation de mot de passe
+├── Auth/                            # Module d'authentification, profil et utilisateurs
+│   ├── Authentication/              # Authentification, réinitialisation et changement de mot de passe
 │   │   ├── authController.js
 │   │   ├── authService.js
 │   │   └── customEmailService.js    # Envoi d'emails HTML (réinitialisation, alerte RH & notifications)
-│   ├── Users/                       # Gestion des comptes et liaisons
-│   │   ├── userController.js        # Endpoints Express (création compte, liaison Parent-Étudiant)
-│   │   └── userService.js           # Services Admin SDK (gestion utilisateurs & Firestore)
+│   ├── Users/                       # Profil, photo de profil (avatar), gestion des comptes et liaisons
+│   │   ├── userController.js        # Endpoints Express (profil, avatar, création compte, liaison Parent-Étudiant)
+│   │   └── userService.js           # Services Admin SDK (gestion profil, avatar & Firestore)
 │   └── Roles & Permissions/
 │       ├── roleController.js        # Endpoint d'assignation de rôles
 │       └── roleService.js           # Gestion des Custom Claims Firebase
 │
-├── Documents/                       # Module de téléversement des justificatifs via Stockage Local
+├── Documents/                       # Module de téléversement et consultation des justificatifs
 │   ├── Controllers/
-│   │   └── documentController.js    # Endpoint pour réceptionner le fichier via Multer
+│   │   └── documentController.js    # Endpoints Express (upload via Multer, consultation)
 │   ├── Services/
 │   │   └── documentService.js       # Stockage sur disque local (/uploads) & métadonnées Firestore
 │   └── Validators/
 │       └── documentValidator.js     # Validation de taille (5Mo max) et types MIME (PDF, PNG, JPEG)
 │
-├── uploads/                         # Dossier local d'hébergement des fichiers téléversés
+├── uploads/                         # Dossier local d'hébergement des fichiers téléversés (justificatifs & avatars)
 ├── Shared/
 │   ├── Firebase config/
 │   │   └── firebase.js              # Config Firebase Client & Admin SDK
@@ -139,16 +139,22 @@ app.post("/api/items", authenticateToken, authorizeRoles(ROLES.ADMIN, ROLES.RH),
 ### 1. Authentification (`/api/auth`)
 * `POST /api/auth/login` (Public) : Authentifie un utilisateur avec email et mot de passe. Renvoie le jeton ID Token et les informations de profil.
 * `POST /api/auth/reset-password` (Public) : Génère un lien sécurisé de réinitialisation de mot de passe et l'envoie par e-mail HTML via Nodemailer.
+* `PATCH /api/auth/change-password` (Authentifié) : Modifie le mot de passe de l'utilisateur connecté après vérification de l'ancien mot de passe.
 * `POST /api/auth/logout` (Public) : Déconnecte l'utilisateur actuel.
 
-### 2. Gestion des Utilisateurs et Rôles (`/api/users` & `/api/roles`)
+### 2. Profil Utilisateur (`/api/users/me`)
+* `GET /api/users/me` (Authentifié) : Récupère les données du profil de l'utilisateur connecté.
+* `PATCH /api/users/me` (Authentifié) : Mettre à jour les informations modifiables du profil (`displayName`, `department`, `phone`, `photoURL`).
+* `POST /api/users/me/avatar` (Authentifié) : Téléverse une nouvelle photo de profil (avatar) et met à jour `photoURL` dans Firestore et Firebase Auth.
+
+### 3. Gestion des Utilisateurs et Rôles (`/api/users` & `/api/roles`)
 * `GET /api/users` (Authentifié) : Récupère la liste de tous les comptes utilisateurs depuis Firestore.
 * `POST /api/users/create` (Admin / RH) : Crée un compte utilisateur dans Firebase Auth avec Custom Claims et enregistre son profil Firestore.
 * `POST /api/roles/assign` (Admin) : Assigne ou modifie le rôle Custom Claim d'un utilisateur.
 * `POST /api/users/link-parent-student` (Admin / RH) : Lie un compte Parent à un compte Étudiant dans Firestore (`childrenUids` et `parentUids`).
 * `GET /api/users/my-children` (Parent / Admin / RH) : Récupère la liste des profils étudiants liés au compte Parent connecté.
 
-### 3. Module des Absences (`/api/absences`)
+### 4. Module des Absences (`/api/absences`)
 * `POST /api/absences` (Authentifié) : Soumet une nouvelle demande d'absence. Déclenche automatiquement l'alerte e-mail RH et la notification In-App.
 * `GET /api/absences/my` (Authentifié) : Récupère l'historique des absences soumises par l'utilisateur connecté.
 * `GET /api/absences/children` (Parent / Admin / RH) : Permet aux parents de consulter les demandes d'absence de leurs enfants liés.
@@ -157,13 +163,15 @@ app.post("/api/items", authenticateToken, authorizeRoles(ROLES.ADMIN, ROLES.RH),
 * `PATCH /api/absences/:id/review` (Admin / RH / Manager) : Approuve ou rejette une demande d'absence. Déclenche l'e-mail de décision et la notification In-App à l'étudiant.
 * `DELETE /api/absences/:id` (Propriétaire uniquement) : Annule et supprime une demande d'absence tant qu'elle est en statut `pending`.
 
-### 4. Module des Notifications In-App (`/api/notifications`)
+### 5. Module des Notifications In-App (`/api/notifications`)
 * `GET /api/notifications/my` (Authentifié) : Récupère la liste des notifications In-App de l'utilisateur connecté et le compteur non-lu.
 * `PATCH /api/notifications/:id/read` (Authentifié) : Marque une notification spécifique comme lue (`read: true`).
 * `POST /api/notifications/read-all` (Authentifié) : Marque toutes les notifications de l'utilisateur comme lues.
 
-### 5. Module des Documents (`/api/documents/upload`)
+### 6. Module des Documents (`/api/documents`)
 * `POST /api/documents/upload` (Authentifié) : Réceptionne un fichier justificatif via `Multer`, l'enregistre sur le disque local dans `backend/uploads/justifications/`, et crée le document de métadonnées dans la collection Firestore `documents`.
+* `GET /api/documents/my` (Authentifié) : Récupère la liste des documents téléversés par l'utilisateur connecté (pour l'écran "Mes Documents").
+* `GET /api/documents` (Admin / RH / Manager) : Récupère la liste globale de tous les justificatifs avec possibilité de filtrer par catégorie ou statut (pour l'écran "Demandes Documentaires").
 
 ---
 
