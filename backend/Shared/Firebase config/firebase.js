@@ -36,13 +36,16 @@ export const adminAuth = admin.auth();
 // Admin SDK Initialization
 // Chercher le fichier de service account à plusieurs endroits possibles
 const possiblePaths = [
-  // À la racine du projet parent (là où se trouve le fichier)
+  process.env.FIREBASE_SERVICE_ACCOUNT_PATH,
+  join(process.cwd(), "firebase-service-account.json"),
+  join(process.cwd(), "backend-91067-firebase-adminsdk-fbsvc-48572794b4.json"),
+  join(__dirname, "../../../firebase-service-account.json"),
   join(__dirname, "../../../backend-91067-firebase-adminsdk-fbsvc-48572794b4.json"),
-  // Dans le dossier courant
-  join(__dirname, "backend-91067-firebase-adminsdk-fbsvc-48572794b4.json"),
-  // Dans le dossier backend ameliorer (si copié)
+  join(__dirname, "../../firebase-service-account.json"),
   join(__dirname, "../../backend-91067-firebase-adminsdk-fbsvc-48572794b4.json"),
-];
+  join(__dirname, "firebase-service-account.json"),
+  join(__dirname, "backend-91067-firebase-adminsdk-fbsvc-48572794b4.json"),
+].filter(Boolean);
 
 let serviceAccountPath = null;
 for (const p of possiblePaths) {
@@ -61,11 +64,12 @@ if (serviceAccountPath) {
     });
   }
 } else {
-  console.warn("⚠️ Aucun fichier de service account trouvé. Tentative avec les credentials par défaut (peut échouer en local).");
+  console.warn("⚠️ Aucun fichier de service account trouvé (firebase-service-account.json). Les actions Admin SDK requièrent ce fichier.");
   if (!admin.apps.length) {
     admin.initializeApp({
       projectId: firebaseConfig.projectId
     });
   }
 }
+
 

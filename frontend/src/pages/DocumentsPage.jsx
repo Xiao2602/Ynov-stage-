@@ -10,7 +10,10 @@ import {
   IconFileCheck,
   IconFolder,
   IconEye,
-  IconPlus
+  IconPlus,
+  IconDownload,
+  IconTrash,
+  IconArchive
 } from "../components/Icons";
 
 import {
@@ -208,6 +211,27 @@ export default function DocumentsPage() {
     actionMessage,
     setActionMessage
   ] = useState("");
+
+  const [
+    previewModal,
+    setPreviewModal
+  ] = useState({ open: false, url: null, document: null });
+
+  const [
+    deleteModal,
+    setDeleteModal
+  ] = useState({ open: false, document: null, loading: false });
+
+  const [toast, setToast] = useState({ message: "", type: "info" });
+
+  function showToast(message, type = "success") {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast({ message: "", type: "info" });
+    }, 3500);
+  }
+
+
 
   /*
   |--------------------------------------------------------------------------
@@ -504,55 +528,50 @@ export default function DocumentsPage() {
   |--------------------------------------------------------------------------
   */
 
-  async function handleView(
-    document
-  ) {
+  async function handleView(document) {
     try {
-      setActionMessage(
-        "Ouverture du document..."
-      );
+      setActionMessage("Ouverture du document...");
 
-      const blob =
-        await apiFetchBlob(
-          `/api/documents/${document.id}/view`
-        );
+      const blob = await apiFetchBlob(`/api/documents/${document.id}/view`);
+      const url = URL.createObjectURL(blob);
 
-      const url =
-        URL.createObjectURL(
-          blob
-        );
-
-      window.open(
+      setPreviewModal({
+        open: true,
         url,
-        "_blank",
-        "noopener,noreferrer"
-      );
+        document
+      });
 
-      /*
-       * On ne révoque pas immédiatement
-       * car le nouvel onglet en a besoin.
-       */
-
-      setTimeout(() => {
-        URL.revokeObjectURL(
-          url
-        );
-      }, 60000);
-
-      setActionMessage(
-        ""
-      );
-
+      setActionMessage("");
     } catch (error) {
-      console.error(
-        "Erreur consultation :",
-        error
-      );
-
+      console.error("Erreur consultation :", error);
       setActionMessage(
-        error.message ||
-          "Impossible de consulter le document."
+        error.message || "Impossible de consulter le document."
       );
+    }
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | TÉLÉCHARGER
+  |--------------------------------------------------------------------------
+  */
+
+  async function handleDownload(document) {
+    try {
+      showToast(`Téléchargement de "${document.originalName}" en cours...`, "info");
+      const blob = await apiFetchBlob(`/api/documents/${document.id}/download`);
+      const url = URL.createObjectURL(blob);
+      const a = window.document.createElement("a");
+      a.href = url;
+      a.download = document.originalName || "document";
+      window.document.body.appendChild(a);
+      a.click();
+      window.document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      showToast(`"${document.originalName}" téléchargé avec succès.`, "success");
+    } catch (error) {
+      console.error("Erreur téléchargement :", error);
+      showToast(error.message || "Impossible de télécharger le document.", "error");
     }
   }
 
@@ -562,42 +581,17 @@ export default function DocumentsPage() {
   |--------------------------------------------------------------------------
   */
 
-  async function handleArchive(
-    document
-  ) {
-    const confirmed =
-      window.confirm(
-        `Voulez-vous archiver "${document.originalName}" ?`
-      );
-
-    if (!confirmed) {
-      return;
-    }
-
+  async function handleArchive(document) {
     try {
-      await apiFetch(
-        `/api/documents/${document.id}/archive`,
-        {
-          method: "PATCH"
-        }
-      );
-
-      setActionMessage(
-        "Document archivé avec succès."
-      );
-
+      showToast("Archivage en cours...", "info");
+      await apiFetch(`/api/documents/${document.id}/archive`, {
+        method: "PATCH"
+      });
+      showToast(`"${document.originalName}" archivé avec succès.`, "success");
       await loadDocuments();
-
     } catch (error) {
-      console.error(
-        "Erreur archivage :",
-        error
-      );
-
-      setActionMessage(
-        error.message ||
-          "Impossible d'archiver le document."
-      );
+      console.error("Erreur archivage :", error);
+      showToast(error.message || "Impossible d'archiver le document.", "error");
     }
   }
 
@@ -607,33 +601,17 @@ export default function DocumentsPage() {
   |--------------------------------------------------------------------------
   */
 
-  async function handleUnarchive(
-    document
-  ) {
+  async function handleUnarchive(document) {
     try {
-      await apiFetch(
-        `/api/documents/${document.id}/unarchive`,
-        {
-          method: "PATCH"
-        }
-      );
-
-      setActionMessage(
-        "Document restauré avec succès."
-      );
-
+      showToast("Restauration en cours...", "info");
+      await apiFetch(`/api/documents/${document.id}/unarchive`, {
+        method: "PATCH"
+      });
+      showToast(`"${document.originalName}" restauré avec succès.`, "success");
       await loadDocuments();
-
     } catch (error) {
-      console.error(
-        "Erreur restauration :",
-        error
-      );
-
-      setActionMessage(
-        error.message ||
-          "Impossible de restaurer le document."
-      );
+      console.error("Erreur restauration :", error);
+      showToast(error.message || "Impossible de restaurer le document.", "error");
     }
   }
 
@@ -643,44 +621,31 @@ export default function DocumentsPage() {
   |--------------------------------------------------------------------------
   */
 
-  async function handleDelete(
-    document
-  ) {
-    const confirmed =
-      window.confirm(
-        `Supprimer définitivement "${document.originalName}" ?`
-      );
+  function promptDelete(document) {
+    setDeleteModal({
+      open: true,
+      document,
+      loading: false
+    });
+  }
 
-    if (!confirmed) {
-      return;
-    }
-
+  async function confirmDelete() {
+    if (!deleteModal.document) return;
     try {
-      await apiFetch(
-        `/api/documents/${document.id}`,
-        {
-          method: "DELETE"
-        }
-      );
-
-      setActionMessage(
-        "Document supprimé avec succès."
-      );
-
+      setDeleteModal((prev) => ({ ...prev, loading: true }));
+      await apiFetch(`/api/documents/${deleteModal.document.id}`, {
+        method: "DELETE"
+      });
+      showToast(`"${deleteModal.document.originalName}" supprimé avec succès.`, "success");
+      setDeleteModal({ open: false, document: null, loading: false });
       await loadDocuments();
-
     } catch (error) {
-      console.error(
-        "Erreur suppression :",
-        error
-      );
-
-      setActionMessage(
-        error.message ||
-          "Impossible de supprimer le document."
-      );
+      console.error("Erreur suppression :", error);
+      showToast(error.message || "Impossible de supprimer le document.", "error");
     }
   }
+
+
 
   /*
   |--------------------------------------------------------------------------
@@ -1227,13 +1192,18 @@ export default function DocumentsPage() {
                             type="button"
                             className="table-action-btn"
                             title="Consulter"
-                            onClick={() =>
-                              handleView(
-                                document
-                              )
-                            }
+                            onClick={() => handleView(document)}
                           >
-                            <IconEye />
+                            <IconEye size={18} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className="table-action-btn"
+                            title="Télécharger"
+                            onClick={() => handleDownload(document)}
+                          >
+                            <IconDownload size={18} />
                           </button>
 
                           {document.archived ? (
@@ -1241,26 +1211,18 @@ export default function DocumentsPage() {
                               type="button"
                               className="table-action-btn"
                               title="Désarchiver"
-                              onClick={() =>
-                                handleUnarchive(
-                                  document
-                                )
-                              }
+                              onClick={() => handleUnarchive(document)}
                             >
-                              ↩
+                              <IconArchive size={18} style={{ transform: "rotate(180deg)" }} />
                             </button>
                           ) : (
                             <button
                               type="button"
                               className="table-action-btn"
                               title="Archiver"
-                              onClick={() =>
-                                handleArchive(
-                                  document
-                                )
-                              }
+                              onClick={() => handleArchive(document)}
                             >
-                              🗄
+                              <IconArchive size={18} />
                             </button>
                           )}
 
@@ -1268,13 +1230,10 @@ export default function DocumentsPage() {
                             type="button"
                             className="table-action-btn"
                             title="Supprimer"
-                            onClick={() =>
-                              handleDelete(
-                                document
-                              )
-                            }
+                            style={{ color: "#ef4444" }}
+                            onClick={() => promptDelete(document)}
                           >
-                            ×
+                            <IconTrash size={18} />
                           </button>
                         </div>
                       </td>
@@ -1570,6 +1529,239 @@ export default function DocumentsPage() {
 
             </form>
           </div>
+        </div>
+      )}
+
+      {/* MODAL APERÇU / VISUALISATION */}
+      {previewModal.open && previewModal.document && (
+        <div
+          className="modal-overlay"
+          onClick={() => {
+            if (previewModal.url) URL.revokeObjectURL(previewModal.url);
+            setPreviewModal({ open: false, url: null, document: null });
+          }}
+          style={{ zIndex: 1000 }}
+        >
+          <div
+            className="user-modal"
+            style={{
+              maxWidth: "920px",
+              width: "95vw",
+              maxHeight: "92vh",
+              display: "flex",
+              flexDirection: "column",
+              padding: "20px"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header" style={{ marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <p className="modal-kicker">Aperçu du document</p>
+                <h2 className="modal-title" style={{ fontSize: "1.15rem", wordBreak: "break-all", margin: "2px 0" }}>
+                  {previewModal.document.originalName}
+                </h2>
+              </div>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <button
+                  type="button"
+                  style={{
+                    padding: "6px 14px",
+                    fontSize: "0.85rem",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    background: "var(--bg-secondary, #f1f5f9)",
+                    border: "1px solid #cbd5e1"
+                  }}
+                  onClick={() => window.open(previewModal.url, "_blank")}
+                >
+                  Plein écran ↗
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    padding: "6px 14px",
+                    fontSize: "0.85rem",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    background: "var(--ynov-cyan, #0ea5e9)",
+                    color: "#fff",
+                    border: "none"
+                  }}
+                  onClick={() => handleDownload(previewModal.document)}
+                >
+                  Télécharger 📥
+                </button>
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={() => {
+                    if (previewModal.url) URL.revokeObjectURL(previewModal.url);
+                    setPreviewModal({ open: false, url: null, document: null });
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                flex: 1,
+                minHeight: "500px",
+                height: "65vh",
+                background: "#f8fafc",
+                borderRadius: "8px",
+                overflow: "hidden",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                border: "1px solid #e2e8f0"
+              }}
+            >
+              {previewModal.document.mimeType === "application/pdf" ||
+              previewModal.document.originalName?.toLowerCase().endsWith(".pdf") ? (
+                <iframe
+                  src={previewModal.url}
+                  title={previewModal.document.originalName}
+                  style={{ width: "100%", height: "100%", border: "none" }}
+                />
+              ) : (
+                <img
+                  src={previewModal.url}
+                  alt={previewModal.document.originalName}
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "100%",
+                    objectFit: "contain"
+                  }}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMATION SUPPRESSION */}
+      {deleteModal.open && deleteModal.document && (
+        <div
+          className="modal-overlay"
+          onClick={() => {
+            if (!deleteModal.loading) setDeleteModal({ open: false, document: null, loading: false });
+          }}
+          style={{ zIndex: 1050 }}
+        >
+          <div
+            className="user-modal"
+            style={{
+              maxWidth: "480px",
+              width: "90vw",
+              padding: "24px",
+              textAlign: "center"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                width: "56px",
+                height: "56px",
+                borderRadius: "50%",
+                background: "#fee2e2",
+                color: "#ef4444",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 16px"
+              }}
+            >
+              <IconTrash size={28} />
+            </div>
+
+            <h3 style={{ fontSize: "1.2rem", fontWeight: "600", color: "#1e293b", marginBottom: "8px" }}>
+              Supprimer ce document ?
+            </h3>
+
+            <p style={{ fontSize: "0.92rem", color: "#64748b", lineHeight: "1.5", marginBottom: "20px" }}>
+              Voulez-vous vraiment supprimer définitivement le document{" "}
+              <strong style={{ color: "#0f172a" }}>"{deleteModal.document.originalName}"</strong> ?
+              Cette action est irréversible.
+            </p>
+
+            <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: "500"
+                }}
+                disabled={deleteModal.loading}
+                onClick={() => setDeleteModal({ open: false, document: null, loading: false })}
+              >
+                Annuler
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  padding: "8px 20px",
+                  borderRadius: "6px",
+                  cursor: deleteModal.loading ? "not-allowed" : "pointer",
+                  background: "#ef4444",
+                  color: "#fff",
+                  border: "none",
+                  fontWeight: "600",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+                disabled={deleteModal.loading}
+                onClick={confirmDelete}
+              >
+                {deleteModal.loading ? "Suppression..." : "Supprimer définitivement"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NOTIFICATION TOAST FLOTTANTE */}
+      {toast.message && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "24px",
+            right: "24px",
+            zIndex: 9999,
+            padding: "12px 20px",
+            borderRadius: "8px",
+            background: toast.type === "error" ? "#ef4444" : toast.type === "info" ? "#0284c7" : "#10b981",
+            color: "#ffffff",
+            boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            fontSize: "0.9rem",
+            fontWeight: "500",
+            animation: "slideIn 0.25s ease-out"
+          }}
+        >
+          <span>{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => setToast({ message: "", type: "info" })}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#fff",
+              cursor: "pointer",
+              fontSize: "1rem",
+              padding: "0 4px"
+            }}
+          >
+            ✕
+          </button>
         </div>
       )}
     </div>
