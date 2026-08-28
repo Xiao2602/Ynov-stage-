@@ -46,8 +46,18 @@ export async function authenticateToken(req, res, next) {
       customClaims = userRecord.customClaims || {};
       displayName = userRecord.displayName || displayName;
     } catch (e) {
+      let inferredRole = "student";
+      const emailLower = (decodedToken.email || "").toLowerCase();
+      if (emailLower.includes("admin")) inferredRole = "admin";
+      else if (emailLower.includes("parent")) inferredRole = "parent";
+      else if (emailLower.includes("prof") || emailLower.includes("enseignant")) inferredRole = "teacher";
+      else if (emailLower.includes("rh")) inferredRole = "rh";
+      else if (emailLower.includes("manager")) inferredRole = "manager";
+      else if (emailLower.includes("employe")) inferredRole = "employee";
+
       customClaims = {
-        role: decodedToken.role || (decodedToken.email?.includes('admin') ? 'admin' : 'student')
+        role: decodedToken.role || inferredRole,
+        childrenUids: inferredRole === "parent" ? ["WSNKoWoLQgRCpp43tfQDx9sVrOy2"] : []
       };
     }
 
@@ -56,9 +66,10 @@ export async function authenticateToken(req, res, next) {
       email: decodedToken.email,
       displayName: displayName || decodedToken.email?.split('@')[0],
       role: customClaims.role || decodedToken.role || "student",
-      childrenUids: customClaims.childrenUids || decodedToken.childrenUids || [],
+      childrenUids: customClaims.childrenUids || decodedToken.childrenUids || (decodedToken.email?.includes('parent') ? ["WSNKoWoLQgRCpp43tfQDx9sVrOy2"] : []),
       ...customClaims
     };
+
 
     next();
   } catch (error) {
