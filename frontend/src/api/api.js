@@ -1,6 +1,19 @@
 import { auth } from "../auth/firebase";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
+
+function buildUrl(baseUrl, endpoint) {
+  const cleanBase = baseUrl.replace(/\/+$/, '');
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  
+  if (cleanBase.endsWith('/api') && cleanEndpoint.startsWith('/api/')) {
+    return `${cleanBase}${cleanEndpoint.slice(4)}`;
+  }
+  if (!cleanBase.endsWith('/api') && !cleanEndpoint.startsWith('/api/')) {
+    return `${cleanBase}/api${cleanEndpoint}`;
+  }
+  return `${cleanBase}${cleanEndpoint}`;
+}
 
 const getValidToken = async () => {
   const user = auth.currentUser;
@@ -21,8 +34,9 @@ const getValidToken = async () => {
 export async function apiFetch(endpoint, options = {}) {
   try {
     const token = await getValidToken();
-    const url = `${API_URL}${endpoint}`;
+    const url = buildUrl(API_URL, endpoint);
     console.log(`🌐 [apiFetch] ${options.method || 'GET'} ${url}`);
+
     
     const headers = {
       ...(options.headers || {}),
@@ -78,8 +92,9 @@ export async function apiFetch(endpoint, options = {}) {
 export async function apiFetchBlob(endpoint, options = {}) {
   try {
     const token = await getValidToken();
-    const url = `${API_URL}${endpoint}`;
+    const url = buildUrl(API_URL, endpoint);
     console.log(`🌐 [apiFetchBlob] ${options.method || 'GET'} ${url}`);
+
     
     const headers = {
       ...(options.headers || {}),

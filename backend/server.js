@@ -84,12 +84,10 @@ import {
 } from "./Absence/Controllers/absenceController.js";
 
 // ============================================================
-// IMPORT DOCUMENTS
-// ============================================================
+import documentRoutes from "./Documents/documentRoutes.js";
+import documentRequestRoutes from "./Documents/Requests/documentRequestRoutes.js";
 
-import {
-  handleUploadDocument
-} from "./Documents/Controllers/documentController.js";
+
 
 // ============================================================
 // IMPORT NOTIFICATIONS
@@ -348,15 +346,10 @@ app.get(
 );
 
 // ============================================================
-// DOCUMENTS
-// ============================================================
+app.use("/api/documents", documentRoutes);
+app.use("/api/document-requests", documentRequestRoutes);
 
-app.post(
-  "/api/documents/upload",
-  authenticateToken,
-  upload.single("file"),
-  handleUploadDocument
-);
+
 
 // ============================================================
 // NOTIFICATIONS
