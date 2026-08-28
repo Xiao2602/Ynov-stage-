@@ -1,7 +1,20 @@
 import { auth } from '../auth/firebase';
 
 export const API_URL =
-  import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+
+function buildUrl(baseUrl, endpoint) {
+  const cleanBase = baseUrl.replace(/\/+$/, '');
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  
+  if (cleanBase.endsWith('/api') && cleanEndpoint.startsWith('/api/')) {
+    return `${cleanBase}${cleanEndpoint.slice(4)}`;
+  }
+  if (!cleanBase.endsWith('/api') && !cleanEndpoint.startsWith('/api/')) {
+    return `${cleanBase}/api${cleanEndpoint}`;
+  }
+  return `${cleanBase}${cleanEndpoint}`;
+}
 
 export async function apiFetch(endpoint, options = {}) {
   const user = auth.currentUser;
@@ -30,19 +43,22 @@ export async function apiFetch(endpoint, options = {}) {
     headers['Content-Type'] = 'application/json';
   }
 
+  const requestUrl = buildUrl(API_URL, endpoint);
+
   console.log('[API] Requête :', {
     method: options.method || 'GET',
-    url: `${API_URL}${endpoint}`,
+    url: requestUrl,
     isFormData,
   });
 
   const response = await fetch(
-    `${API_URL}${endpoint}`,
+    requestUrl,
     {
       ...options,
       headers,
     }
   );
+
 
   console.log(
     '[API] Réponse :',
