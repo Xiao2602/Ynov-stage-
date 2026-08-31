@@ -6,7 +6,8 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 import { adminDb } from "./firebaseAdmin.js";
-import { getActivityLogs } from "./Services/activityLogService.js";
+import admin from "firebase-admin";
+import { getActivityLogs, logActivity } from "./Services/activityLogService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -22,6 +23,12 @@ import {
   handleGetMe,
   handleVerify2FA
 } from "./Auth/Authentication/authController.js";
+
+import {
+  handleGetPlanning,
+  handleUpsertPlanning,
+  handleDeletePlanning
+} from "./Auth/Planning/planningController.js";
 
 // ============================================================
 // IMPORTS 2FA
@@ -79,6 +86,7 @@ import {
   handleJustifyAbsence,
   handleGetAbsencesByCourse,
   handleArchiveAbsences,
+  handleTransformLates,
   handleGetArchivedAbsences
 } from "./Absence/Controllers/absenceController.js";
 
@@ -149,6 +157,7 @@ app.post("/api/auth/reset-password", handleResetPassword);
 app.post("/api/auth/logout", handleLogout);
 app.get("/api/auth/me", authenticateToken, handleGetMe);
 
+
 // 🔥 2FA Routes
 app.get("/api/auth/2fa/setup", authenticateToken, handleTwoFactorSetup);
 app.post("/api/auth/2fa/enable", authenticateToken, handleTwoFactorEnable);
@@ -165,21 +174,21 @@ app.get("/api/users", authenticateToken, handleGetAllUsers);
 app.post(
   "/api/users/create",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleCreateUser
 );
 
 app.post(
   "/api/users/link-parent-student",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleLinkParentStudent
 );
 
 app.get(
   "/api/users/my-children",
   authenticateToken,
-  authorizeRoles(ROLES.PARENT, ROLES.ADMIN, ROLES.RH),
+  authorizeRoles(ROLES.PARENT, ROLES.ADMIN, ROLES.EMPLOYEE),
   handleGetLinkedChildren
 );
 
@@ -202,21 +211,21 @@ app.get(
 app.get(
   "/api/users/:uid",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleGetUser
 );
 
 app.patch(
   "/api/users/:uid",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleUpdateUser
 );
 
 app.patch(
   "/api/users/:uid/suspend",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleSuspendUser
 );
 
@@ -231,8 +240,16 @@ app.delete(
 app.post(
   "/api/users/assign-teacher",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleAssignTeacherClass
+);
+
+// Transformer les retards en absence
+app.post(
+  "/api/absences/transform-lates",
+  authenticateToken,
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
+  handleTransformLates
 );
 
 // ============================================================
@@ -255,25 +272,25 @@ app.get("/api/absences/my", authenticateToken, handleGetMyAbsences);
 app.get(
   "/api/absences/children",
   authenticateToken,
-  authorizeRoles(ROLES.PARENT, ROLES.ADMIN, ROLES.RH),
+  authorizeRoles(ROLES.PARENT, ROLES.ADMIN, ROLES.EMPLOYEE),
   handleGetChildrenAbsences
 );
 app.get(
   "/api/absences/pending",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.MANAGER),
   handleGetPendingAbsences
 );
 app.get(
   "/api/absences",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER, ROLES.TEACHER),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.MANAGER, ROLES.TEACHER),
   handleGetAllAbsences
 );
 app.patch(
   "/api/absences/:id/review",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.MANAGER),
   handleReviewAbsence
 );
 app.delete("/api/absences/:id", authenticateToken, handleDeleteAbsence);
@@ -312,9 +329,81 @@ app.post(
 app.get(
   "/api/absences/archived",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleGetArchivedAbsences
 );
+
+
+
+// ============================================================
+// ASSIGNATION DE PLANNING (Personnel / Admin)
+// ============================================================
+
+app.post(
+  "/api/plannings/assign",
+  authenticateToken,
+  authorizeRoles(ROLES.EMPLOYEE, ROLES.ADMIN),
+  async (req, res) => {
+    console.log("📥 [POST] /api/plannings/assign");
+    try {
+      const { teacherUid, courses, academicYear } = req.body;
+      if (!teacherUid || !courses || !Array.isArray(courses) || courses.length === 0) {
+        return res.status(400).json({ success: false, error: "Données invalides." });
+      }
+
+      // Vérifier que le professeur existe
+      const teacherDoc = await adminDb.collection("users").doc(teacherUid).get();
+      if (!teacherDoc.exists) {
+        return res.status(404).json({ success: false, error: "Professeur introuvable." });
+      }
+
+      // Sauvegarder le planning
+      const planningRef = adminDb.collection("plannings").doc(teacherUid);
+      await planningRef.set({
+        teacherUid,
+        courses: courses.map(c => ({
+          day: c.day,
+          start: c.start,
+          duration: c.duration || 2,
+          title: c.title,
+          group: c.group,
+          room: c.room || ''
+        })),
+        academicYear: academicYear || new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy: req.user.uid
+      });
+
+      await logActivity(req.user.uid, 'assign_planning', { teacherUid, courseCount: courses.length }, req);
+
+      return res.status(200).json({ success: true, message: "Planning assigné avec succès." });
+    } catch (error) {
+      console.error("❌ Erreur assignation planning:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
+app.get(
+  "/api/plannings/:teacherUid",
+  authenticateToken,
+  async (req, res) => {
+    console.log("📥 [GET] /api/plannings/" + req.params.teacherUid);
+    try {
+      const { teacherUid } = req.params;
+      const doc = await adminDb.collection("plannings").doc(teacherUid).get();
+      if (!doc.exists) {
+        return res.status(200).json({ success: true, planning: null });
+      }
+      return res.status(200).json({ success: true, planning: { id: doc.id, ...doc.data() } });
+    } catch (error) {
+      console.error("❌ Erreur récupération planning:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
+
 
 // ============================================================
 // STATISTIQUES
@@ -323,7 +412,7 @@ app.get(
 app.get(
   "/api/absences/statistics",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleGetStatistics
 );
 
@@ -334,14 +423,14 @@ app.get(
 app.get(
   "/api/absences/export/excel",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleExportExcel
 );
 
 app.get(
   "/api/absences/export/pdf",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleExportPdf
 );
 

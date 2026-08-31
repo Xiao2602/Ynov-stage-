@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { IconCalendar, IconSearch } from '../components/Icons';
+import { IconCalendar, IconSearch, IconFilter } from '../components/Icons';
 import { useAuth } from '../auth/AuthContext';
 import { apiFetch } from '../api/api';
 import './TeacherPages.css';
@@ -9,9 +9,9 @@ function getInitials(name = '') {
 }
 
 export default function TeacherAttendancePage() {
-  const { backendUser } = useAuth();
+  const { user } = useAuth();
   const [students, setStudents] = useState([]);
-  const [courses, setCourses] = useState([]);
+  const [planning, setPlanning] = useState(null);
   const [selectedCourseId, setSelectedCourseId] = useState(null);
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,27 +20,35 @@ export default function TeacherAttendancePage() {
   const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Charger les élèves et les cours
+  // 1. Charger le planning du professeur
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    const fetchPlanning = async () => {
       try {
-        const [studentsData, coursesData] = await Promise.all([
-          apiFetch('/users/my-students'),
-          apiFetch('/users/my-courses')
-        ]);
-
-        if (studentsData.success) {
-          setStudents(studentsData.students);
+        const data = await apiFetch(`/plannings/${user?.uid}`);
+        if (data.success && data.planning) {
+          setPlanning(data.planning);
+          if (data.planning.courses.length > 0) {
+            setSelectedCourseId(data.planning.courses[0].id || `${data.planning.courses[0].day}-${data.planning.courses[0].start}`);
+          }
         } else {
-          setError('Erreur chargement élèves: ' + (studentsData.error || ''));
+          setPlanning(null);
         }
+      } catch (err) {
+        setError('Erreur chargement planning: ' + err.message);
+      }
+    };
+    if (user?.uid) fetchPlanning();
+  }, [user]);
 
-        if (coursesData.success && coursesData.courses.length > 0) {
-          setCourses(coursesData.courses);
-          setSelectedCourseId(coursesData.courses[0].id || `${coursesData.courses[0].day}-${coursesData.courses[0].start}`);
+  // 2. Charger les étudiants du professeur
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        const data = await apiFetch('/users/my-students');
+        if (data.success) {
+          setStudents(data.students);
         } else {
-          setError('Erreur chargement cours: ' + (coursesData.error || ''));
+          setError('Erreur chargement élèves: ' + (data.error || ''));
         }
       } catch (err) {
         setError('Erreur de connexion : ' + err.message);
@@ -48,28 +56,62 @@ export default function TeacherAttendancePage() {
         setLoading(false);
       }
     };
-    fetchData();
+    fetchStudents();
   }, []);
 
+  // 3. Filtrer les étudiants par classe sélectionnée (si le cours a une classe)
   const filteredStudents = useMemo(() => {
+    const selectedCourse = planning?.courses.find(c => (c.id || `${c.day}-${c.start}`) === selectedCourseId);
+    const className = selectedCourse?.group || '';
     const query = search.trim().toLowerCase();
-    return students.filter((student) =>
-      `${student.displayName || ''} ${student.email || ''}`.toLowerCase().includes(query)
-    );
-  }, [search, students]);
 
-  const selectedCourse = courses.find((c) => (c.id || `${c.day}-${c.start}`) === selectedCourseId) || courses[0];
+    let studentsList = students;
+    if (className) {
+      studentsList = studentsList.filter(s => {
+        const studentClass = s.className || s.department || '';
+        return studentClass === className;
+      });
+    }
 
-  const toggleStudent = (uid) => {
-    setSelectedStudents(prev =>
-      prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
-    );
+    if (query) {
+      studentsList = studentsList.filter(s =>
+        `${s.displayName || ''} ${s.email || ''}`.toLowerCase().includes(query)
+      );
+    }
+
+    return studentsList;
+  }, [students, planning, selectedCourseId, search]);
+
+  const selectedCourse = planning?.courses.find(c => (c.id || `${c.day}-${c.start}`) === selectedCourseId);
+
+  const toggleStudent = (uid, status = 'absent') => {
+    setSelectedStudents(prev => {
+      const existing = prev.find(s => s.uid === uid);
+      if (existing) {
+        if (existing.status === status) {
+          return prev.filter(s => s.uid !== uid);
+        } else {
+          return prev.map(s => s.uid === uid ? { ...s, status } : s);
+        }
+      } else {
+        return [...prev, { uid, status }];
+      }
+    });
+  };
+
+  const isSelected = (uid, status) => {
+    const entry = selectedStudents.find(s => s.uid === uid);
+    return entry && entry.status === status;
+  };
+
+  const countByStatus = (status) => {
+    return selectedStudents.filter(s => s.status === status).length;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (selectedStudents.length === 0) {
-      setError('Veuillez sélectionner au moins un étudiant absent.');
+      setError('Veuillez sélectionner au moins un étudiant absent ou en retard.');
       return;
     }
     if (!selectedCourse) {
@@ -83,23 +125,31 @@ export default function TeacherAttendancePage() {
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      const promises = selectedStudents.map(studentId =>
-        apiFetch('/absences/teacher/declare', {
+      const promises = selectedStudents.map(({ uid, status }) => {
+        const isLate = status === 'late';
+        const body = {
+          studentId: uid,
+          startDate: today,
+          endDate: today,
+          reason: isLate ? 'Retard en cours - ' + selectedCourse.title : 'Absence en cours - ' + selectedCourse.title,
+          courseName: selectedCourse.title,
+          isLate
+        };
+        return apiFetch('/absences/teacher/declare', {
           method: 'POST',
-          body: JSON.stringify({
-            studentId,
-            startDate: today,
-            endDate: today,
-            reason: 'Absence en cours - ' + selectedCourse.title,
-            courseName: selectedCourse.title
-          })
-        })
-      );
+          body: JSON.stringify(body)
+        });
+      });
 
       const results = await Promise.all(promises);
       const allSuccess = results.every(r => r.success);
       if (allSuccess) {
-        setSuccessMessage(`${selectedStudents.length} absence(s) déclarée(s) avec succès.`);
+        const lateCount = selectedStudents.filter(s => s.status === 'late').length;
+        const absentCount = selectedStudents.filter(s => s.status === 'absent').length;
+        let message = '';
+        if (absentCount > 0) message += `${absentCount} absence(s)`;
+        if (lateCount > 0) message += (message ? ' et ' : '') + `${lateCount} retard(s)`;
+        setSuccessMessage(`${message} déclaré(s) avec succès.`);
         setSelectedStudents([]);
       } else {
         const errors = results.filter(r => !r.success).map(r => r.error);
@@ -118,7 +168,7 @@ export default function TeacherAttendancePage() {
         <div>
           <p className="teacher-kicker">Espace pédagogique</p>
           <h1>Appel</h1>
-          <p>Déclarez les absences pour votre cours du jour.</p>
+          <p>Déclarez les absences et retards pour votre cours du jour.</p>
         </div>
         <div className="teacher-page-icon"><IconCalendar /></div>
       </header>
@@ -131,7 +181,7 @@ export default function TeacherAttendancePage() {
       {!loading && !error && (
         <>
           <div className="teacher-course-picker" aria-label="Sélectionner un cours">
-            {courses.map((course) => {
+            {planning?.courses.map((course) => {
               const courseId = course.id || `${course.day}-${course.start}`;
               return (
                 <button
@@ -145,6 +195,7 @@ export default function TeacherAttendancePage() {
                 >
                   <strong>{course.day}</strong>
                   <span>{course.start} · {course.title}</span>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--ynov-text-muted)', display: 'block' }}>{course.group}</span>
                 </button>
               );
             })}
@@ -156,16 +207,21 @@ export default function TeacherAttendancePage() {
                 <div>
                   <strong>{selectedCourse.title}</strong>
                   <span>{selectedCourse.group} · {selectedCourse.day}, {selectedCourse.start}</span>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--ynov-text-muted)', display: 'block' }}>
+                    {selectedCourse.room ? `Salle: ${selectedCourse.room}` : ''}
+                  </span>
                 </div>
-                <label className="teacher-search">
-                  <IconSearch />
-                  <input
-                    type="search"
-                    placeholder="Rechercher un élève"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                  />
-                </label>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <label className="teacher-search">
+                    <IconSearch style={{ width: '16px', height: '16px' }} />
+                    <input
+                      type="search"
+                      placeholder="Rechercher un élève"
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                    />
+                  </label>
+                </div>
               </div>
 
               <div className="teacher-attendance-summary">
@@ -175,8 +231,20 @@ export default function TeacherAttendancePage() {
                 </div>
                 <div>
                   <strong>{selectedStudents.length}</strong>
-                  <span>Absents sélectionnés</span>
+                  <span>Sélectionnés</span>
                 </div>
+                {selectedStudents.length > 0 && (
+                  <>
+                    <div>
+                      <strong>{countByStatus('absent')}</strong>
+                      <span>Absents</span>
+                    </div>
+                    <div>
+                      <strong>{countByStatus('late')}</strong>
+                      <span>Retards</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="teacher-attendance-table-wrap">
@@ -186,14 +254,16 @@ export default function TeacherAttendancePage() {
                       <th>Élève</th>
                       <th>Classe</th>
                       <th>Absent</th>
+                      <th>Retard</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredStudents.map((student) => {
                       const uid = student.uid || student.email;
                       const name = student.displayName || student.email || 'Élève';
-                      const studentClass = [student.level, student.department].filter(Boolean).join(' - ') || selectedCourse.group;
-                      const isSelected = selectedStudents.includes(uid);
+                      const studentClass = student.className || student.department || selectedCourse.group || 'Classe non définie';
+                      const isAbsent = isSelected(uid, 'absent');
+                      const isLate = isSelected(uid, 'late');
                       return (
                         <tr key={uid}>
                           <td>
@@ -210,10 +280,20 @@ export default function TeacherAttendancePage() {
                             <button
                               type="button"
                               aria-label={`Déclarer absent pour ${name}`}
-                              className={`attendance-mark ${isSelected ? 'selected absence' : ''}`}
-                              onClick={() => toggleStudent(uid)}
+                              className={`attendance-mark ${isAbsent ? 'selected absence' : ''}`}
+                              onClick={() => toggleStudent(uid, 'absent')}
                             >
-                              {isSelected ? 'X' : ''}
+                              {isAbsent ? 'X' : ''}
+                            </button>
+                          </td>
+                          <td className="attendance-cell">
+                            <button
+                              type="button"
+                              aria-label={`Déclarer retard pour ${name}`}
+                              className={`attendance-mark late ${isLate ? 'selected' : ''}`}
+                              onClick={() => toggleStudent(uid, 'late')}
+                            >
+                              {isLate ? 'R' : ''}
                             </button>
                           </td>
                         </tr>
@@ -221,8 +301,8 @@ export default function TeacherAttendancePage() {
                     })}
                     {filteredStudents.length === 0 && (
                       <tr>
-                        <td className="teacher-empty" colSpan="3">
-                          Aucun élève ne correspond à la recherche.
+                        <td className="teacher-empty" colSpan="4">
+                          Aucun élève ne correspond à la recherche ou à la classe de ce cours.
                         </td>
                       </tr>
                     )}
@@ -230,7 +310,7 @@ export default function TeacherAttendancePage() {
                 </table>
               </div>
 
-              <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+              <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                 <button
                   type="submit"
                   disabled={isSubmitting || selectedStudents.length === 0}
@@ -247,7 +327,7 @@ export default function TeacherAttendancePage() {
                     opacity: isSubmitting || selectedStudents.length === 0 ? 0.6 : 1
                   }}
                 >
-                  {isSubmitting ? 'Envoi...' : `Déclarer les absences (${selectedStudents.length})`}
+                  {isSubmitting ? 'Envoi...' : `Déclarer (${selectedStudents.length} sélectionné(s))`}
                 </button>
               </div>
             </form>

@@ -243,11 +243,17 @@ export default function DashboardLayout() {
                 <span>Données Archivées</span>
               </NavLink>
               )}
-              {role === 'admin' && (
+              
               <NavLink to="/notifications" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
                 <div className="nav-icon"><IconArchive /></div>
                 <span>Notifications</span>
               </NavLink>
+              
+              {role === 'admin' && (
+                <NavLink to="/assign-planning" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
+                  <div className="nav-icon"><IconCalendar /></div>
+                  <span>Assigner planning</span>
+                </NavLink>
               )}
               <NavLink 
                 to="/settings" 

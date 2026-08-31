@@ -1,4 +1,4 @@
-import admin from "firebase-admin"; // ✅ OBLIGATOIRE
+import admin from "firebase-admin"; // ✅ Ajout de l'import
 import { adminDb } from "../firebaseAdmin.js";
 
 export async function logActivity(userId, action, details = {}, req = null) {
@@ -12,7 +12,7 @@ export async function logActivity(userId, action, details = {}, req = null) {
       details,
       ip,
       userAgent,
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
+      timestamp: admin.firestore.FieldValue.serverTimestamp() // ✅ admin est défini
     };
     const docRef = await adminDb.collection("activity_logs").add(logEntry);
     console.log(`✅ Log enregistré: ${action} (ID: ${docRef.id})`);

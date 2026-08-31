@@ -7,9 +7,12 @@ import {
   IconEye,
   IconX,
   IconCheckCircle,
-  IconAlertTriangle
+  IconAlertTriangle,
+  IconUpload,
+  IconDownload
 } from '../components/Icons';
-import { apiFetch } from '../services/api';
+import { apiFetch } from '../api/api'; // ✅ Correction : plus de /api en double
+import * as XLSX from 'xlsx';
 import '../components/DashboardLayout.css';
 
 // ============================================================
@@ -129,35 +132,27 @@ export default function UsersPage() {
 
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedTeacher, setSelectedTeacher] = useState(null);
-  const [selectedClass, setSelectedClass] = useState('');
+  const [selectedClasses, setSelectedClasses] = useState([]);
   const [isAssigning, setIsAssigning] = useState(false);
 
+  // ----------------------------------------------------------
+  // MODAL D'ÉDITION
+  // ----------------------------------------------------------
 
-  // Ajoute ces états après les autres useState
-const [showEditModal, setShowEditModal] = useState(false);
-const [editingUser, setEditingUser] = useState(null);
-const [editFormData, setEditFormData] = useState({});
-const [isEditing, setIsEditing] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
+  const [isEditing, setIsEditing] = useState(false);
 
-const openEditModal = (user) => {
-  setEditingUser(user);
-  setEditFormData({
-    displayName: user.displayName || '',
-    email: user.email || '',
-    phone: user.phone || '',
-    department: user.department || '',
-    className: user.className || '',
-    assignedClasses: user.assignedClasses || [],
-  });
-  setShowEditModal(true);
-};
+  // ----------------------------------------------------------
+  // 🔥 MODAL D'IMPORT MASSIF
+  // ----------------------------------------------------------
 
-const closeEditModal = () => {
-  setShowEditModal(false);
-  setEditingUser(null);
-  setEditFormData({});
-  setIsEditing(false);
-};
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importPreview, setImportPreview] = useState([]);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState(null);
 
   // ==========================================================
   // CHARGEMENT DES UTILISATEURS
@@ -167,7 +162,7 @@ const closeEditModal = () => {
     try {
       setIsLoadingUsers(true);
       setUsersError('');
-      const result = await apiFetch('/api/users');
+      const result = await apiFetch('/users');
       if (!result?.success) {
         throw new Error(result?.error || 'Impossible de récupérer les utilisateurs.');
       }
@@ -209,8 +204,6 @@ const closeEditModal = () => {
   const totalUsers = users.length;
   const activeUsers = users.filter((user) => user.disabled !== true).length;
   const inactiveUsers = users.filter((user) => user.disabled === true).length;
-
-  const [selectedClasses, setSelectedClasses] = useState([]);
 
   // ==========================================================
   // OUVERTURE / FERMETURE MODAL DE CRÉATION
@@ -334,7 +327,7 @@ const closeEditModal = () => {
         payload.department = department || '—';
       }
 
-      const result = await apiFetch('/api/users/create', {
+      const result = await apiFetch('/users/create', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
@@ -376,7 +369,7 @@ const closeEditModal = () => {
       return;
     }
     try {
-      const result = await apiFetch('/api/roles/assign', {
+      const result = await apiFetch('/roles/assign', {
         method: 'POST',
         body: JSON.stringify({ uid: user.uid, role: normalizedRole }),
       });
@@ -402,7 +395,7 @@ const closeEditModal = () => {
       : `Réactiver le compte de ${user.displayName || user.email} ?`;
     if (!window.confirm(confirmMsg)) return;
     try {
-      const result = await apiFetch(`/api/users/${user.uid}/suspend`, {
+      const result = await apiFetch(`/users/${user.uid}/suspend`, {
         method: 'PATCH',
         body: JSON.stringify({ disabled: newStatus }),
       });
@@ -417,7 +410,7 @@ const closeEditModal = () => {
   const handleDeleteUser = async (user) => {
     if (!window.confirm(`Supprimer définitivement le compte de ${user.displayName || user.email} ?`)) return;
     try {
-      const result = await apiFetch(`/api/users/${user.uid}`, { method: 'DELETE' });
+      const result = await apiFetch(`/users/${user.uid}`, { method: 'DELETE' });
       if (!result.success) throw new Error(result.error || 'Erreur');
       alert(result.message);
       await loadUsers();
@@ -439,7 +432,7 @@ const closeEditModal = () => {
     }
     setIsAssigning(true);
     try {
-      const result = await apiFetch('/api/users/assign-teacher', {
+      const result = await apiFetch('/users/assign-teacher', {
         method: 'POST',
         body: JSON.stringify({
           teacherUid: selectedTeacher.uid,
@@ -450,12 +443,220 @@ const closeEditModal = () => {
       alert(result.message);
       setShowAssignModal(false);
       setSelectedTeacher(null);
-      setSelectedClass([]);
+      setSelectedClasses([]);
       await loadUsers();
     } catch (error) {
       alert('Erreur : ' + error.message);
     } finally {
       setIsAssigning(false);
+    }
+  };
+
+  // ==========================================================
+  // 🔥 GESTION DE L'IMPORT MASSIF
+  // ==========================================================
+
+  const openEditModal = (user) => {
+    setEditingUser(user);
+    setEditFormData({
+      displayName: user.displayName || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      department: user.department || '',
+      className: user.className || '',
+      assignedClasses: user.assignedClasses || [],
+    });
+    setShowEditModal(true);
+  };
+
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setEditingUser(null);
+    setEditFormData({});
+    setIsEditing(false);
+  };
+
+  // 🔥 Télécharger le template avec listes de validation
+  const downloadTemplate = () => {
+    const roleList = roleOptions.map(r => r.key).join(',');
+    const classList = classOptions.join(',');
+
+    const templateData = [
+      ['Email', 'Mot de passe', 'Nom complet', 'Rôle', 'Département (optionnel)', 'Classe (étudiant)', 'Classe assignée (professeur)', 'Téléphone']
+    ];
+    templateData.push(['prenom.nom@ynov.com', 'Password123!', 'Jean Dupont', 'student', 'Informatique', 'Bachelor 1 - Informatique', '', '0612345678']);
+    templateData.push(['prof@ynov.com', 'Password123!', 'Marie Martin', 'teacher', 'Informatique', '', 'Bachelor 1 - Informatique', '0612345679']);
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(templateData);
+
+    // 🔥 Ajouter des listes de validation (Data Validation) pour les colonnes
+    // Colle D (Rôle) : colonne 4
+    // Colle F (Classe étudiant) : colonne 6
+    // Colle G (Classe assignée professeur) : colonne 7
+
+    ws['!dataValidation'] = [
+      {
+        type: 'list',
+        operator: 'equal',
+        formula1: `"${roleList}"`,
+        ranges: [
+          { s: { r: 1, c: 3 }, e: { r: 100, c: 3 } } // Colonne D (Rôle) de la ligne 2 à 100
+        ],
+        showErrorMessage: true,
+        errorTitle: 'Rôle invalide',
+        error: 'Veuillez choisir un rôle parmi : ' + roleList
+      },
+      {
+        type: 'list',
+        operator: 'equal',
+        formula1: `"${classList}"`,
+        ranges: [
+          { s: { r: 1, c: 5 }, e: { r: 100, c: 5 } } // Colonne F (Classe étudiant)
+        ],
+        showErrorMessage: true,
+        errorTitle: 'Classe invalide',
+        error: 'Veuillez choisir une classe parmi : ' + classList
+      },
+      {
+        type: 'list',
+        operator: 'equal',
+        formula1: `"${classList}"`,
+        ranges: [
+          { s: { r: 1, c: 6 }, e: { r: 100, c: 6 } } // Colonne G (Classe assignée professeur)
+        ],
+        showErrorMessage: true,
+        errorTitle: 'Classe invalide',
+        error: 'Veuillez choisir une classe parmi : ' + classList
+      }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Utilisateurs');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const url = window.URL.createObjectURL(new Blob([buffer], { type: 'application/octet-stream' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'utilisateurs_template.xlsx');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  // 🔥 Gestion du changement de fichier
+  const handleImportFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImportFile(file);
+    setImportResult(null);
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = new Uint8Array(ev.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        setImportPreview(rows.slice(0, 6));
+      } catch (err) {
+        setImportResult({ success: false, message: 'Erreur lecture fichier: ' + err.message });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // 🔥 Importation des utilisateurs
+  const handleImportUsers = async () => {
+    if (!importFile) {
+      setImportResult({ success: false, message: 'Veuillez sélectionner un fichier.' });
+      return;
+    }
+
+    setImportLoading(true);
+    setImportResult(null);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+          const usersToCreate = [];
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length < 3) continue;
+
+            // 🔥 Sécurisation des accès : convertir chaque valeur en chaîne
+            const email = String(row[0] || '').trim();
+            const password = String(row[1] || '').trim();
+            const displayName = String(row[2] || '').trim();
+            const role = String(row[3] || 'student').trim().toLowerCase();
+            const department = String(row[4] || '').trim();
+            const className = String(row[5] || '').trim();
+            const assignedClass = String(row[6] || '').trim();
+            const phone = String(row[7] || '').trim();
+
+            if (email && password && displayName) {
+              const userData = { email, password, displayName, role, phone };
+              if (department) userData.department = department;
+              if (role === 'student' && className) userData.className = className;
+              if (role === 'teacher' && assignedClass) userData.assignedClass = assignedClass;
+              usersToCreate.push(userData);
+            }
+          }
+
+          if (usersToCreate.length === 0) {
+            setImportResult({ success: false, message: 'Aucun utilisateur valide trouvé.' });
+            setImportLoading(false);
+            return;
+          }
+
+          let successCount = 0;
+          let failCount = 0;
+          const errors = [];
+
+          for (const user of usersToCreate) {
+            try {
+              // 🔥 Utiliser /users/create (pas /api/users/create car apiFetch ajoute déjà /api)
+              const result = await apiFetch('/users/create', {
+                method: 'POST',
+                body: JSON.stringify(user)
+              });
+              if (result.success) {
+                successCount++;
+              } else {
+                failCount++;
+                errors.push(`${user.email}: ${result.error}`);
+              }
+            } catch (err) {
+              failCount++;
+              errors.push(`${user.email}: ${err.message}`);
+            }
+          }
+
+          setImportResult({
+            success: true,
+            message: `${successCount} utilisateur(s) créé(s) avec succès. ${failCount} échec(s).`,
+            details: errors.length > 0 ? errors : null
+          });
+
+          await loadUsers();
+          setImportFile(null);
+          setImportPreview([]);
+          document.getElementById('import-file-input').value = '';
+        } catch (err) {
+          setImportResult({ success: false, message: 'Erreur: ' + err.message });
+        } finally {
+          setImportLoading(false);
+        }
+      };
+      reader.readAsArrayBuffer(importFile);
+    } catch (err) {
+      setImportResult({ success: false, message: 'Erreur: ' + err.message });
+      setImportLoading(false);
     }
   };
 
@@ -471,9 +672,12 @@ const closeEditModal = () => {
           <h2 className="overview-title">Utilisateurs</h2>
           <p className="overview-subtitle">Gérez les accès, les rôles, les classes et les comptes.</p>
         </div>
-        <div className="overview-actions" style={{ display: 'flex', gap: '12px' }}>
+        <div className="overview-actions" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <button className="btn-primary" onClick={openModal} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <IconPlus className="icon-sm" /> Ajouter un utilisateur
+          </button>
+          <button className="btn-secondary" onClick={() => setShowImportModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <IconUpload className="icon-sm" /> Importer
           </button>
         </div>
       </div>
@@ -605,12 +809,8 @@ const closeEditModal = () => {
                         <button className="table-action-btn" onClick={() => window.alert(
                           `${displayName}\nEmail : ${user.email || '—'}\nRôle : ${getRoleLabel(user.role)}${isStudent ? `\nClasse : ${user.className || '—'}` : ''}${isTeacher ? `\nClasse assignée : ${user.assignedClass || '—'}` : ''}`
                         )}><IconEye className="action-icon" /></button>
-                        <button className="table-action-btn" onClick={() => openEditModal(user)} title="Modifier">
-                          ✏️
-                        </button>
-                        <button className="table-action-btn" onClick={() => handleChangeRole(user)} title="Changer rôle">
-                          <IconDots className="action-icon" />
-                        </button>
+                        <button className="table-action-btn" onClick={() => openEditModal(user)} title="Modifier">✏️</button>
+                        <button className="table-action-btn" onClick={() => handleChangeRole(user)} title="Changer rôle"><IconDots className="action-icon" /></button>
                         {isTeacher && (
                           <button className="table-action-btn" style={{ color: '#23b2a4' }} onClick={() => openAssignModal(user)}>📚</button>
                         )}
@@ -628,21 +828,16 @@ const closeEditModal = () => {
         </table>
       </div>
 
-      {/* MODAL CREATION */}
+      {/* MODAL CREATION (inchangée) */}
       {isModalOpen && (
         <div className="modal-overlay" onClick={closeModal}>
           <div className="user-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <div>
-                <p className="modal-kicker">Nouvel accès</p>
-                <h3>Ajouter un utilisateur</h3>
-              </div>
+              <div><p className="modal-kicker">Nouvel accès</p><h3>Ajouter un utilisateur</h3></div>
               <button className="modal-close" onClick={closeModal} disabled={isSubmitting}>×</button>
             </div>
-
             {formError && <div className="form-error">{formError}</div>}
             {formSuccess && <div className="form-success">{formSuccess}</div>}
-
             <form className="user-form" onSubmit={handleSubmit}>
               <div className="field-group">
                 <label className="field-label">Type de compte</label>
@@ -661,64 +856,38 @@ const closeEditModal = () => {
                   ))}
                 </div>
               </div>
-
               <div className="form-grid">
-                <div className="field-group">
-                  <label className="field-label">Prénom *</label>
-                  <input className="field-input" type="text" name="firstName" value={formData.firstName} onChange={handleFieldChange} disabled={isSubmitting} />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Nom *</label>
-                  <input className="field-input" type="text" name="lastName" value={formData.lastName} onChange={handleFieldChange} disabled={isSubmitting} />
-                </div>
-                <div className="field-group full-width">
-                  <label className="field-label">Email professionnel *</label>
-                  <input className="field-input" type="email" name="email" value={formData.email} onChange={handleFieldChange} placeholder="prenom.nom@ynov.com" disabled={isSubmitting} />
-                </div>
-                <div className="field-group full-width">
-                  <label className="field-label">Mot de passe initial *</label>
-                  <input className="field-input" type="password" name="password" value={formData.password} onChange={handleFieldChange} placeholder="Minimum 6 caractères" disabled={isSubmitting} minLength={6} />
-                </div>
-                <div className="field-group full-width">
-                  <label className="field-label">Téléphone</label>
-                  <input className="field-input" type="tel" name="phone" value={formData.phone} onChange={handleFieldChange} placeholder="Ex : +33 6 12 34 56 78" disabled={isSubmitting} />
-                </div>
-
+                <div className="field-group"><label className="field-label">Prénom *</label><input className="field-input" type="text" name="firstName" value={formData.firstName} onChange={handleFieldChange} disabled={isSubmitting} /></div>
+                <div className="field-group"><label className="field-label">Nom *</label><input className="field-input" type="text" name="lastName" value={formData.lastName} onChange={handleFieldChange} disabled={isSubmitting} /></div>
+                <div className="field-group full-width"><label className="field-label">Email professionnel *</label><input className="field-input" type="email" name="email" value={formData.email} onChange={handleFieldChange} placeholder="prenom.nom@ynov.com" disabled={isSubmitting} /></div>
+                <div className="field-group full-width"><label className="field-label">Mot de passe initial *</label><input className="field-input" type="password" name="password" value={formData.password} onChange={handleFieldChange} placeholder="Minimum 6 caractères" disabled={isSubmitting} minLength={6} /></div>
+                <div className="field-group full-width"><label className="field-label">Téléphone</label><input className="field-input" type="tel" name="phone" value={formData.phone} onChange={handleFieldChange} placeholder="Ex : +33 6 12 34 56 78" disabled={isSubmitting} /></div>
                 {selectedRole === 'student' && (
                   <div className="field-group full-width">
                     <label className="field-label">Classe *</label>
                     <select name="className" value={formData.className} onChange={handleFieldChange} className="field-input" disabled={isSubmitting}>
                       <option value="">-- Sélectionner --</option>
-                      {classOptions.map((cls) => (
-                        <option key={cls} value={cls}>{cls}</option>
-                      ))}
+                      {classOptions.map((cls) => <option key={cls} value={cls}>{cls}</option>)}
                     </select>
                   </div>
                 )}
-
                 {selectedRole === 'teacher' && (
                   <div className="field-group full-width">
                     <label className="field-label">Classe assignée *</label>
                     <select name="assignedClass" value={formData.assignedClass} onChange={handleFieldChange} className="field-input" disabled={isSubmitting}>
                       <option value="">-- Sélectionner --</option>
-                      {classOptions.map((cls) => (
-                        <option key={cls} value={cls}>{cls}</option>
-                      ))}
+                      {classOptions.map((cls) => <option key={cls} value={cls}>{cls}</option>)}
                     </select>
                   </div>
                 )}
-
                 {selectedRole === 'rh' && (
                   <div className="field-group full-width">
                     <label className="field-label">Service</label>
                     <select name="service" value={formData.service} onChange={handleFieldChange} className="field-input" disabled={isSubmitting}>
-                      {serviceOptions.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
+                      {serviceOptions.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
                 )}
-
                 {(selectedRole === 'admin' || selectedRole === 'manager' || selectedRole === 'employee') && (
                   <div className="field-group full-width">
                     <label className="field-label">Département (optionnel)</label>
@@ -726,27 +895,21 @@ const closeEditModal = () => {
                   </div>
                 )}
               </div>
-
               <div className="modal-actions">
                 <button type="button" className="btn-secondary" onClick={closeModal} disabled={isSubmitting}>Annuler</button>
-                <button type="submit" className="btn-primary" disabled={isSubmitting}>
-                  {isSubmitting ? 'Création...' : 'Créer le compte'}
-                </button>
+                <button type="submit" className="btn-primary" disabled={isSubmitting}>{isSubmitting ? 'Création...' : 'Créer le compte'}</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL D'ASSIGNATION DE CLASSE (pour professeurs) avec cases à cocher */}
+      {/* MODAL D'ASSIGNATION DE CLASSE */}
       {showAssignModal && selectedTeacher && (
         <div className="modal-overlay" onClick={() => setShowAssignModal(false)}>
           <div className="user-modal" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <div>
-                <p className="modal-kicker">Assigner des classes</p>
-                <h3>Professeur : {selectedTeacher.displayName}</h3>
-              </div>
+              <div><p className="modal-kicker">Assigner des classes</p><h3>Professeur : {selectedTeacher.displayName}</h3></div>
               <button className="modal-close" onClick={() => setShowAssignModal(false)} disabled={isAssigning}>×</button>
             </div>
             <div style={{ padding: '0 24px 24px' }}>
@@ -754,23 +917,10 @@ const closeEditModal = () => {
                 <label className="field-label">Classes assignées (cochez plusieurs)</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', maxHeight: '200px', overflowY: 'auto', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
                   {classOptions.map((cls) => {
-                    const isChecked = (selectedClass ? [selectedClass] : []).includes(cls) || (selectedTeacher?.assignedClasses || []).includes(cls);
-                    // Pour simplifier, on utilise selectedClass comme string mais on va gérer un tableau
-                    // On va utiliser un état local selectedClasses
                     const isSelected = (selectedClasses || []).includes(cls);
                     return (
                       <label key={cls} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '4px 8px', background: isSelected ? '#e0f2fe' : 'transparent', borderRadius: '4px' }}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedClasses(prev => [...prev, cls]);
-                            } else {
-                              setSelectedClasses(prev => prev.filter(c => c !== cls));
-                            }
-                          }}
-                        />
+                        <input type="checkbox" checked={isSelected} onChange={(e) => { if (e.target.checked) { setSelectedClasses(prev => [...prev, cls]); } else { setSelectedClasses(prev => prev.filter(c => c !== cls)); } }} />
                         <span>{cls}</span>
                       </label>
                     );
@@ -780,32 +930,7 @@ const closeEditModal = () => {
               </div>
               <div className="modal-actions" style={{ marginTop: '16px' }}>
                 <button className="btn-secondary" onClick={() => setShowAssignModal(false)} disabled={isAssigning}>Annuler</button>
-                <button className="btn-primary" onClick={async () => {
-                  if (selectedClasses.length === 0) {
-                    alert('Veuillez sélectionner au moins une classe.');
-                    return;
-                  }
-                  setIsAssigning(true);
-                  try {
-                    const result = await apiFetch('/api/users/assign-teacher', {
-                      method: 'POST',
-                      body: JSON.stringify({
-                        teacherUid: selectedTeacher.uid,
-                        assignedClasses: selectedClasses,
-                      }),
-                    });
-                    if (!result.success) throw new Error(result.error || 'Erreur');
-                    alert(result.message);
-                    setShowAssignModal(false);
-                    setSelectedTeacher(null);
-                    setSelectedClasses([]);
-                    await loadUsers();
-                  } catch (error) {
-                    alert('Erreur : ' + error.message);
-                  } finally {
-                    setIsAssigning(false);
-                  }
-                }} disabled={isAssigning || selectedClasses.length === 0}>
+                <button className="btn-primary" onClick={async () => { if (selectedClasses.length === 0) { alert('Veuillez sélectionner au moins une classe.'); return; } setIsAssigning(true); try { const result = await apiFetch('/users/assign-teacher', { method: 'POST', body: JSON.stringify({ teacherUid: selectedTeacher.uid, assignedClasses: selectedClasses }) }); if (!result.success) throw new Error(result.error || 'Erreur'); alert(result.message); setShowAssignModal(false); setSelectedTeacher(null); setSelectedClasses([]); await loadUsers(); } catch (error) { alert('Erreur : ' + error.message); } finally { setIsAssigning(false); } }} disabled={isAssigning || selectedClasses.length === 0}>
                   {isAssigning ? 'Assignation...' : `Assigner (${selectedClasses.length})`}
                 </button>
               </div>
@@ -814,127 +939,33 @@ const closeEditModal = () => {
         </div>
       )}
 
-
-      {/* ================================================== */}
-      {/* MODAL D'ÉDITION UTILISATEUR                        */}
-      {/* ================================================== */}
-
+      {/* MODAL D'ÉDITION */}
       {showEditModal && editingUser && (
         <div className="modal-overlay" onClick={closeEditModal}>
-          <div className="modal-content" style={{
-            maxWidth: '600px',
-            padding: '24px',
-            background: 'white',
-            borderRadius: '12px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-            maxHeight: '90vh',
-            overflowY: 'auto'
-          }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header" style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              borderBottom: '1px solid #e2e8f0',
-              paddingBottom: '16px',
-              marginBottom: '20px'
-            }}>
+          <div className="modal-content" style={{ maxWidth: '600px', padding: '24px', background: 'white', borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px', marginBottom: '20px' }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Modifier le compte</h3>
-              <button className="modal-close" onClick={closeEditModal} disabled={isEditing} style={{
-                background: 'none',
-                border: 'none',
-                fontSize: '1.5rem',
-                cursor: 'pointer',
-                color: '#94a3b8'
-              }}>×</button>
+              <button className="modal-close" onClick={closeEditModal} disabled={isEditing} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#94a3b8' }}>×</button>
             </div>
-
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              setIsEditing(true);
-              try {
-                const result = await apiFetch(`/api/users/${editingUser.uid}`, {
-                  method: 'PATCH',
-                  body: JSON.stringify(editFormData),
-                });
-                if (!result.success) throw new Error(result.error || 'Erreur');
-                alert('Compte modifié avec succès.');
-                closeEditModal();
-                await loadUsers();
-              } catch (error) {
-                alert('Erreur : ' + error.message);
-              } finally {
-                setIsEditing(false);
-              }
-            }}>
+            <form onSubmit={async (e) => { e.preventDefault(); setIsEditing(true); try { const result = await apiFetch(`/users/${editingUser.uid}`, { method: 'PATCH', body: JSON.stringify(editFormData) }); if (!result.success) throw new Error(result.error || 'Erreur'); alert('Compte modifié avec succès.'); closeEditModal(); await loadUsers(); } catch (error) { alert('Erreur : ' + error.message); } finally { setIsEditing(false); } }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div className="field-group">
-                  <label className="field-label">Nom complet</label>
-                  <input className="field-input" type="text" value={editFormData.displayName || ''} onChange={(e) => setEditFormData({ ...editFormData, displayName: e.target.value })} />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Email</label>
-                  <input className="field-input" type="email" value={editFormData.email || ''} onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })} />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Téléphone</label>
-                  <input className="field-input" type="tel" value={editFormData.phone || ''} onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })} />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Département</label>
-                  <input className="field-input" type="text" value={editFormData.department || ''} onChange={(e) => setEditFormData({ ...editFormData, department: e.target.value })} />
-                </div>
+                <div className="field-group"><label className="field-label">Nom complet</label><input className="field-input" type="text" value={editFormData.displayName || ''} onChange={(e) => setEditFormData({ ...editFormData, displayName: e.target.value })} /></div>
+                <div className="field-group"><label className="field-label">Email</label><input className="field-input" type="email" value={editFormData.email || ''} onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })} /></div>
+                <div className="field-group"><label className="field-label">Téléphone</label><input className="field-input" type="tel" value={editFormData.phone || ''} onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })} /></div>
+                <div className="field-group"><label className="field-label">Département</label><input className="field-input" type="text" value={editFormData.department || ''} onChange={(e) => setEditFormData({ ...editFormData, department: e.target.value })} /></div>
               </div>
-
-              {/* Champs spécifiques selon le rôle */}
               {editingUser.role === 'student' && (
-                <div className="field-group" style={{ marginTop: '16px' }}>
-                  <label className="field-label">Classe</label>
-                  <select className="field-input" value={editFormData.className || ''} onChange={(e) => setEditFormData({ ...editFormData, className: e.target.value })}>
-                    <option value="">-- Sélectionner --</option>
-                    {classOptions.map(cls => <option key={cls} value={cls}>{cls}</option>)}
-                  </select>
-                </div>
+                <div className="field-group" style={{ marginTop: '16px' }}><label className="field-label">Classe</label><select className="field-input" value={editFormData.className || ''} onChange={(e) => setEditFormData({ ...editFormData, className: e.target.value })}><option value="">-- Sélectionner --</option>{classOptions.map(cls => <option key={cls} value={cls}>{cls}</option>)}</select></div>
               )}
-
               {editingUser.role === 'teacher' && (
                 <div className="field-group" style={{ marginTop: '16px' }}>
                   <label className="field-label">Classes assignées (cochez plusieurs)</label>
-                  <div style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: '8px',
-                    maxHeight: '150px',
-                    overflowY: 'auto',
-                    padding: '8px',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '6px',
-                    background: '#f8fafc'
-                  }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', maxHeight: '150px', overflowY: 'auto', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#f8fafc' }}>
                     {classOptions.map(cls => {
                       const isChecked = (editFormData.assignedClasses || []).includes(cls);
                       return (
-                        <label key={cls} style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          cursor: 'pointer',
-                          padding: '4px 10px',
-                          background: isChecked ? '#e0f2fe' : 'transparent',
-                          borderRadius: '4px',
-                          border: isChecked ? '1px solid #23b2a4' : '1px solid transparent'
-                        }}>
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              const current = editFormData.assignedClasses || [];
-                              if (e.target.checked) {
-                                setEditFormData({ ...editFormData, assignedClasses: [...current, cls] });
-                              } else {
-                                setEditFormData({ ...editFormData, assignedClasses: current.filter(c => c !== cls) });
-                              }
-                            }}
-                          />
+                        <label key={cls} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '4px 10px', background: isChecked ? '#e0f2fe' : 'transparent', borderRadius: '4px', border: isChecked ? '1px solid #23b2a4' : '1px solid transparent' }}>
+                          <input type="checkbox" checked={isChecked} onChange={(e) => { const current = editFormData.assignedClasses || []; if (e.target.checked) { setEditFormData({ ...editFormData, assignedClasses: [...current, cls] }); } else { setEditFormData({ ...editFormData, assignedClasses: current.filter(c => c !== cls) }); } }} />
                           <span>{cls}</span>
                         </label>
                       );
@@ -943,14 +974,59 @@ const closeEditModal = () => {
                   <small style={{ color: '#64748b' }}>Cochez toutes les classes que ce professeur doit enseigner.</small>
                 </div>
               )}
-
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
                 <button type="button" className="btn-secondary" onClick={closeEditModal} disabled={isEditing}>Annuler</button>
-                <button type="submit" className="btn-primary" disabled={isEditing}>
-                  {isEditing ? 'Enregistrement...' : 'Enregistrer'}
-                </button>
+                <button type="submit" className="btn-primary" disabled={isEditing}>{isEditing ? 'Enregistrement...' : 'Enregistrer'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 MODAL D'IMPORT MASSIF */}
+      {showImportModal && (
+        <div className="modal-overlay" onClick={() => setShowImportModal(false)}>
+          <div className="modal-content" style={{ maxWidth: '650px', padding: '24px', background: 'white', borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Importer des utilisateurs</h3>
+              <button className="modal-close" onClick={() => setShowImportModal(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+            </div>
+
+            <p style={{ color: '#64748b', marginBottom: '16px' }}>Téléchargez le template, remplissez les données, puis importez le fichier Excel.</p>
+
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+              <button className="btn-secondary" onClick={downloadTemplate}><IconDownload className="icon-sm" /> Télécharger le template</button>
+              <label className="btn-secondary" style={{ cursor: 'pointer' }}>
+                <IconUpload className="icon-sm" /> Sélectionner un fichier
+                <input id="import-file-input" type="file" accept=".xlsx,.xls" onChange={handleImportFileChange} style={{ display: 'none' }} />
+              </label>
+            </div>
+
+            {importFile && <p style={{ marginBottom: '12px', color: '#0f172a' }}>Fichier sélectionné : <strong>{importFile.name}</strong> ({(importFile.size / 1024).toFixed(0)} Ko)</p>}
+
+            {importPreview.length > 0 && (
+              <div style={{ marginBottom: '16px', overflowX: 'auto' }}>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px' }}>Aperçu (5 premières lignes)</h4>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <thead><tr style={{ background: '#f1f5f9' }}>{importPreview[0]?.map((h, i) => <th key={i} style={{ padding: '0.5rem', textAlign: 'left', border: '1px solid #e2e8f0' }}>{h}</th>)}</tr></thead>
+                  <tbody>{importPreview.slice(1).map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j} style={{ padding: '0.5rem', border: '1px solid #e2e8f0' }}>{cell}</td>)}</tr>)}</tbody>
+                </table>
+              </div>
+            )}
+
+            {importResult && (
+              <div style={{ padding: '12px', borderRadius: '8px', marginBottom: '16px', background: importResult.success ? '#d1fae5' : '#fee2e2', color: importResult.success ? '#065f46' : '#991b1b', border: importResult.success ? '1px solid #10b981' : '1px solid #fca5a5' }}>
+                <strong>{importResult.message}</strong>
+                {importResult.details && <ul style={{ marginTop: '8px', paddingLeft: '16px', fontSize: '0.85rem' }}>{importResult.details.map((err, i) => <li key={i}>{err}</li>)}</ul>}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button className="btn-secondary" onClick={() => setShowImportModal(false)}>Annuler</button>
+              <button className="btn-primary" onClick={handleImportUsers} disabled={importLoading || !importFile}>
+                {importLoading ? 'Importation...' : 'Importer'}
+              </button>
+            </div>
           </div>
         </div>
       )}
