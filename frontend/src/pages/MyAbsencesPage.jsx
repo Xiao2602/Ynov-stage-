@@ -15,7 +15,7 @@ import { apiFetch } from '../api/api';
 import { useAuth } from '../auth/AuthContext';
 import '../components/DashboardLayout.css';
 
-// 🔥 Fonction robuste pour extraire une date
+// 🔥 Fonction pour extraire une date
 const getDateFromValue = (value) => {
   if (!value) return null;
   if (typeof value === 'object' && value.seconds !== undefined) {
@@ -44,8 +44,8 @@ const getDaysBetween = (start, end) => {
   return Math.max(1, Math.ceil(diff) + 1);
 };
 
-// 🔥 Calcule le nombre d'heures pour une absence
-const calculateHours = (absence) => {
+// 🔥 Calcule le nombre d'heures pour une absence (hors retard)
+const calculateNormalHours = (absence) => {
   const days = getDaysBetween(absence.startDate, absence.endDate);
   if (absence.declaredBy) {
     return days * 3;
@@ -176,32 +176,58 @@ export default function MyAbsencesPage() {
     }
   };
 
-  // 🔥 NOUVELLE LOGIQUE STATISTIQUES
+  // ============================================================
+  // 🔥 DÉTECTION DES RETARDS (flexible)
+  // ============================================================
 
-  // Absences justifiées (validées par RH)
-  const justifiedAbsences = absences.filter(a => a.status === 'approved');
-  const justifiedCount = justifiedAbsences.length;
+  const isLateAbsence = (absence) => {
+    if (absence.isLate === true) return true;
+    if (absence.type === 'late') return true;
+    if (absence.reason && absence.reason.toLowerCase().includes('retard')) return true;
+    return false;
+  };
 
-  // Absences non justifiées (toutes les autres : pending, to_justify, rejected)
-  const unJustifiedAbsences = absences.filter(a => a.status !== 'approved');
-  const unJustifiedCount = unJustifiedAbsences.length;
+  const normalAbsences = absences.filter(a => !isLateAbsence(a));
+  const lateAbsences = absences.filter(a => isLateAbsence(a));
 
-  // Total cumulé des heures = somme des heures des absences non justifiées
-  const totalCumulatedHours = unJustifiedAbsences.reduce((acc, a) => {
-    return acc + calculateHours(a);
-  }, 0);
+  // Absences normales justifiées / non justifiées
+  const justifiedNormal = normalAbsences.filter(a => a.status === 'approved');
+  const unJustifiedNormal = normalAbsences.filter(a => a.status !== 'approved');
 
-  // Heures validées = somme des heures des absences justifiées (pour affichage)
-  const totalValidatedHours = justifiedAbsences.reduce((acc, a) => {
-    return acc + calculateHours(a);
-  }, 0);
+  // Retards justifiés / non justifiés
+  const justifiedLate = lateAbsences.filter(a => a.status === 'approved');
+  const unJustifiedLate = lateAbsences.filter(a => a.status !== 'approved');
 
-  // Taux d'assiduité = (nombre d'absences justifiées / nombre total d'absences) * 100
-  const totalAbsences = absences.length;
-  const presenceRate = totalAbsences > 0 ? Math.round((justifiedCount / totalAbsences) * 100) : 100;
+  // Heures des absences normales non justifiées
+  const normalHoursUnJustified = unJustifiedNormal.reduce((acc, a) => acc + calculateNormalHours(a), 0);
+
+  // Heures des retards non justifiés : 2 retards = 3h
+  const lateCountUnJustified = unJustifiedLate.length;
+  const lateGroups = Math.floor(lateCountUnJustified / 2);
+  const lateHoursUnJustified = lateGroups * 3;
+
+  // Total cumulé des heures non justifiées
+  const totalCumulatedHours = normalHoursUnJustified + lateHoursUnJustified;
+
+  // Heures validées (justifiées) : seules les absences normales comptent
+  const totalValidatedHours = justifiedNormal.reduce((acc, a) => acc + calculateNormalHours(a), 0);
 
   // Nombre d'absences à justifier (to_justify + pending) pour la carte "À justifier"
   const toJustifyCount = absences.filter(a => a.status === 'to_justify' || a.status === 'pending').length;
+
+  // Taux d'assiduité
+  const justifiedTotal = absences.filter(a => a.status === 'approved').length;
+  const totalAbsences = absences.length;
+  const presenceRate = totalAbsences > 0 ? Math.round((justifiedTotal / totalAbsences) * 100) : 100;
+
+  // Nombre d'absences non justifiées (retards groupés par 2)
+  const unJustifiedNormalCount = unJustifiedNormal.length;
+  const unJustifiedLateGroups = Math.floor(unJustifiedLate.length / 2);
+  const unJustifiedCount = unJustifiedNormalCount + unJustifiedLateGroups;
+
+  console.log('unJustifiedLate.length:', unJustifiedLate.length);
+  console.log('unJustifiedLateGroups:', unJustifiedLateGroups);
+  console.log('unJustifiedCount:', unJustifiedCount);
 
   const filteredAbsences = absences.filter(a => {
     const matchStatus = statusFilter === 'all' || a.status === statusFilter;
@@ -211,8 +237,13 @@ export default function MyAbsencesPage() {
     return matchStatus && matchSearch;
   });
 
+  // ============================================================
+  // RENDU
+  // ============================================================
+
   return (
     <div className="dashboard-scroll-area" style={{ height: '100%', overflowY: 'auto', padding: '0 2rem 2rem' }}>
+      {/* HEADER */}
       <div className="overview-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
           <h2 className="overview-title">Mes Absences</h2>
@@ -222,7 +253,6 @@ export default function MyAbsencesPage() {
 
       {/* STATISTIQUES – 5 cartes */}
       <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-        {/* Total cumulé (heures non justifiées) */}
         <div className="stat-card">
           <div className="stat-header">
             <span className="stat-title">Total cumulé</span>
@@ -234,7 +264,6 @@ export default function MyAbsencesPage() {
           <div className="stat-subtitle">Heures non justifiées</div>
         </div>
 
-        {/* Heures validées (justifiées) */}
         <div className="stat-card">
           <div className="stat-header">
             <span className="stat-title">Heures validées</span>
@@ -243,10 +272,9 @@ export default function MyAbsencesPage() {
           <div className="stat-value-container">
             <span className="stat-value">{totalValidatedHours.toFixed(1)}h</span>
           </div>
-          <div className="stat-subtitle">{justifiedCount} absence(s) justifiée(s)</div>
+          <div className="stat-subtitle">{justifiedTotal} absence(s) justifiée(s)</div>
         </div>
 
-        {/* À justifier */}
         <div className="stat-card highlight">
           <div className="stat-header">
             <span className="stat-title">À justifier</span>
@@ -258,7 +286,6 @@ export default function MyAbsencesPage() {
           <div className="stat-subtitle">Délai : 48h</div>
         </div>
 
-        {/* Taux d'assiduité */}
         <div className="stat-card">
           <div className="stat-header">
             <span className="stat-title">Taux d'assiduité</span>
@@ -273,16 +300,18 @@ export default function MyAbsencesPage() {
           </div>
         </div>
 
-        {/* Total absences non justifiées */}
         <div className="stat-card">
           <div className="stat-header">
-            <span className="stat-title">Absences non justifiées</span>
+            <span className="stat-title">Non justifiées</span>
             <div className="stat-icon-wrapper"><IconAlertTriangle className="icon-md" /></div>
           </div>
           <div className="stat-value-container">
             <span className="stat-value">{unJustifiedCount}</span>
           </div>
-          <div className="stat-subtitle">Dont refusées : {absences.filter(a => a.status === 'rejected').length}</div>
+          <div className="stat-subtitle">
+            {unJustifiedLate.length > 0 && `${unJustifiedLate.length} retard(s) non justifié(s) → ${lateGroups} absence(s)`}
+            {unJustifiedLate.length === 0 && 'Aucun retard non justifié'}
+          </div>
         </div>
       </div>
 
@@ -312,7 +341,6 @@ export default function MyAbsencesPage() {
         ) : filteredAbsences.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px', color: 'var(--ynov-text-muted)' }}>
             <p>Aucune absence enregistrée.</p>
-            <p style={{ fontSize: '0.85rem' }}>Les absences apparaîtront ici une fois déclarées.</p>
           </div>
         ) : (
           <table className="data-table" style={{ width: '100%' }}>
@@ -320,6 +348,7 @@ export default function MyAbsencesPage() {
               <tr>
                 <th>Période</th>
                 <th>Motif</th>
+                <th>Type</th>
                 <th>Source</th>
                 <th>Statut</th>
                 <th>Heures</th>
@@ -333,11 +362,35 @@ export default function MyAbsencesPage() {
                 const StatusIcon = statusInfo.icon;
                 const isTeacherDeclared = item.declaredBy && item.declaredByName;
                 const canJustify = item.status === 'to_justify' && (!item.justificationDeadline || new Date(item.justificationDeadline) > new Date());
-                const hours = calculateHours(item);
+                
+                const isLate = isLateAbsence(item);
+                const typeLabel = isLate ? '🕐 Retard' : (item.type || 'Absence');
+                let hoursDisplay = 0;
+                if (!isLate) {
+                  hoursDisplay = calculateNormalHours(item);
+                }
+                
                 return (
                   <tr key={item.id}>
                     <td>{formatDate(item.startDate)} → {formatDate(item.endDate)}</td>
                     <td>{item.reason || 'Non précisé'}</td>
+                    <td>
+                      <span style={{ 
+                        padding: '2px 8px', 
+                        borderRadius: '4px', 
+                        fontSize: '0.75rem', 
+                        fontWeight: '500',
+                        background: isLate ? '#fef3c7' : '#e2e8f0',
+                        color: isLate ? '#92400e' : '#475569'
+                      }}>
+                        {typeLabel}
+                      </span>
+                      {isLate && (
+                        <span style={{ fontSize: '0.65rem', color: '#64748b', display: 'block', marginTop: '2px' }}>
+                          2 retards = 1 absence (3h)
+                        </span>
+                      )}
+                    </td>
                     <td>
                       {isTeacherDeclared ? (
                         <span style={{ fontSize: '0.8rem', color: 'var(--ynov-text-muted)' }}>
@@ -354,7 +407,7 @@ export default function MyAbsencesPage() {
                         {statusInfo.label}
                       </span>
                     </td>
-                    <td><strong>{hours}h</strong></td>
+                    <td><strong>{hoursDisplay}h</strong></td>
                     <td>
                       {item.justificationUrl ? (
                         <a href={item.justificationUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ynov-cyan)', textDecoration: 'underline' }}>📄 Voir</a>
@@ -424,7 +477,7 @@ export default function MyAbsencesPage() {
                 <div className="form-group">
                   <label>Motif</label>
                   <select value={motif} onChange={(e) => setMotif(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1.5px solid #e2e8f0' }}>
-                    <option value="">Sélectionnez...</option>
+                    <option value="">Sélectionnez un motif...</option>
                     <option value="Raison médicale / Maladie">Raison médicale / Maladie</option>
                     <option value="Rendez-vous médical">Rendez-vous médical</option>
                     <option value="Problème de transport">Problème de transport</option>

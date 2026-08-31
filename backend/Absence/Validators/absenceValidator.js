@@ -2,13 +2,14 @@
  * Validator pour les demandes d'absence
  */
 
-export const ABSENCE_TYPES = ["medical", "personal", "authorized_leave", "unjustified", "other"];
+export const ABSENCE_TYPES = ["medical", "personal", "authorized_leave", "unjustified", "other", "late"];
 
 export const ABSENCE_STATUS = {
   PENDING: "pending",
   APPROVED: "approved",
   REJECTED: "rejected",
-  TO_JUSTIFY: "to_justify"  // ← AJOUTÉ
+  TO_JUSTIFY: "to_justify",
+  TO_JUSTIFY_LATE: "to_justify_late" // 🔥 NOUVEAU : statut pour les retards à justifier
 };
 
 /**
@@ -59,9 +60,9 @@ export function validateReviewAbsence({ status }) {
 }
 
 /**
- * 🔥 Valide les données pour la déclaration d'absence par un professeur
+ * Valide les données pour la déclaration d'absence par un professeur
  */
-export function validateTeacherDeclareAbsence({ studentId, startDate, endDate, reason, courseName }) {
+export function validateTeacherDeclareAbsence({ studentId, startDate, endDate, reason, courseName, type }) {
   if (!studentId) {
     return { valid: false, error: "L'ID de l'étudiant est obligatoire." };
   }
@@ -83,6 +84,14 @@ export function validateTeacherDeclareAbsence({ studentId, startDate, endDate, r
 
   if (!reason || reason.trim().length === 0) {
     return { valid: false, error: "Le motif de l'absence est obligatoire." };
+  }
+
+  // 🔥 Valider le type si fourni
+  if (type && !ABSENCE_TYPES.includes(type)) {
+    return { 
+      valid: false, 
+      error: `Type d'absence invalide. Valeurs autorisées: ${ABSENCE_TYPES.join(", ")}` 
+    };
   }
 
   return { valid: true };
