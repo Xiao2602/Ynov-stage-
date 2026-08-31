@@ -206,21 +206,66 @@ export async function handleJustifyAbsence(req, res) {
   }
 }
 
+/**
+ * POST /api/absences/teacher/declare - Déclarer une absence pour un étudiant (professeur)
+ */
 export async function handleTeacherDeclareAbsence(req, res) {
+  console.log("📥 [handleTeacherDeclareAbsence] Requête reçue");
+  console.log("👤 Professeur:", req.user?.uid);
+  console.log("📦 Body:", req.body);
+
   try {
     const validation = validateTeacherDeclareAbsence(req.body);
     if (!validation.valid) {
       return res.status(400).json({ success: false, error: validation.error });
     }
-    const result = await teacherDeclareAbsenceService(req.user, req.body);
+
+    // 🔥 Ajout du type "late" si le professeur a coché "Retard"
+    const isLate = req.body.isLate === true || req.body.isLate === 'true';
+    const absenceType = isLate ? 'late' : 'unjustified';
+    
+    const result = await teacherDeclareAbsenceService(req.user, { 
+      ...req.body, 
+      type: absenceType,
+      isLate 
+    });
+
     if (result.success) {
-      await logActivity(req.user.uid, 'teacher_declare_absence', { studentId: req.body.studentId, courseName: req.body.courseName, startDate: req.body.startDate, endDate: req.body.endDate }, req);
+      await logActivity(req.user.uid, 'teacher_declare_absence', { 
+        studentId: req.body.studentId, 
+        courseName: req.body.courseName, 
+        startDate: req.body.startDate, 
+        endDate: req.body.endDate,
+        isLate 
+      }, req);
       return res.status(201).json(result);
     } else {
       return res.status(400).json(result);
     }
   } catch (error) {
     console.error("❌ Erreur handleTeacherDeclareAbsence:", error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+/**
+ * POST /api/absences/transform-lates - Transformer les retards en absence (automatique ou manuel)
+ */
+export async function handleTransformLates(req, res) {
+  try {
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ success: false, error: "userId requis." });
+    }
+    const result = await transformLatesToAbsenceService(userId);
+    if (result.success) {
+      await logActivity(req.user.uid, 'transform_lates', { userId }, req);
+      return res.status(200).json(result);
+    } else {
+      return res.status(400).json(result);
+    }
+  } catch (error) {
+    console.error("❌ Erreur handleTransformLates:", error);
     return res.status(500).json({ success: false, error: error.message });
   }
 }

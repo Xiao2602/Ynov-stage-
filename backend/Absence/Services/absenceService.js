@@ -576,13 +576,20 @@ export async function justifyAbsenceService(absenceId, userId, justificationUrl,
 }
 
 /**
- * 🔥 Déclarer une absence pour un étudiant (par un professeur)
+ * Déclarer une absence pour un étudiant (par un professeur)
  * @param {Object} teacherUser - Professeur (req.user)
- * @param {Object} data - { studentId, startDate, endDate, reason, courseName }
+ * @param {Object} data - { studentId, startDate, endDate, reason, courseName, type }
  */
-export async function teacherDeclareAbsenceService(teacherUser, { studentId, startDate, endDate, reason, courseName }) {
+export async function teacherDeclareAbsenceService(teacherUser, { 
+  studentId, 
+  startDate, 
+  endDate, 
+  reason, 
+  courseName,
+  type = 'unjustified',  // 🔥 nouveau paramètre
+  isLate = false         // 🔥 nouveau paramètre
+}) {
   try {
-    // Vérifier que l'étudiant existe
     const studentDoc = await adminDb.collection("users").doc(studentId).get();
     if (!studentDoc.exists) {
       return { success: false, error: "Étudiant introuvable." };
@@ -590,6 +597,7 @@ export async function teacherDeclareAbsenceService(teacherUser, { studentId, sta
     const studentData = studentDoc.data();
 
     const docRef = adminDb.collection(COLLECTION_NAME).doc();
+    // Dans teacherDeclareAbsenceService (ligne où vous créez newAbsence)
     const newAbsence = {
       id: docRef.id,
       userId: studentId,
@@ -597,18 +605,19 @@ export async function teacherDeclareAbsenceService(teacherUser, { studentId, sta
       displayName: studentData.displayName || "Étudiant",
       role: studentData.role || "student",
       department: studentData.department || "",
-      type: "unjustified",
+      type: type, // "unjustified" ou "late"
       startDate,
       endDate,
-      reason: reason || "Absence déclarée par le professeur",
+      reason: reason || (isLate ? "Retard en cours - " + courseName : "Absence en cours - " + courseName),
       justificationUrl: "",
-      status: ABSENCE_STATUS.TO_JUSTIFY, // 🔥 maintenant défini
+      status: ABSENCE_STATUS.TO_JUSTIFY,
       declaredBy: teacherUser.uid,
       declaredByName: teacherUser.displayName || teacherUser.email || "Professeur",
       courseName: courseName || "Cours non spécifié",
       justificationDeadline: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
       reviewedBy: null,
       reviewNotes: null,
+      isLate: isLate === true, // 🔥 IMPORTANT
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
@@ -616,31 +625,35 @@ export async function teacherDeclareAbsenceService(teacherUser, { studentId, sta
     await docRef.set(newAbsence);
 
     // Notification à l'étudiant
+    const message = type === "late" 
+      ? `Le professeur ${teacherUser.displayName} vous a déclaré en retard pour le cours "${courseName || 'non spécifié'}" le ${startDate}. Vous avez 48h pour justifier ce retard.`
+      : `Le professeur ${teacherUser.displayName} vous a déclaré absent pour le cours "${courseName || 'non spécifié'}" le ${startDate}. Vous avez 48h pour justifier cette absence.`;
+
     createNotificationService({
       userId: studentId,
-      title: "Absence déclarée par votre professeur",
-      message: `Le professeur ${teacherUser.displayName} vous a déclaré absent pour le cours "${courseName || 'non spécifié'}" le ${startDate}. Vous avez 48h pour justifier cette absence.`,
-      type: "teacher_absence_declaration",
+      title: type === "late" ? "Retard déclaré par votre professeur" : "Absence déclarée par votre professeur",
+      message: message,
+      type: type === "late" ? "teacher_late_declaration" : "teacher_absence_declaration",
       relatedId: docRef.id
     }).catch(err => console.warn("Notification étudiant échouée:", err.message));
 
-    // Notification aux admins/RH
+    // Notification aux admins/RH/Personnel
     try {
       const usersSnapshot = await adminDb.collection("users").get();
-      const adminRhUsers = [];
+      const adminUsers = [];
       usersSnapshot.forEach(doc => {
         const userData = doc.data();
-        if (['admin', 'rh'].includes(userData.role)) {
-          adminRhUsers.push(userData.uid);
+        if (['admin', 'rh', 'employee'].includes(userData.role)) {
+          adminUsers.push(userData.uid);
         }
       });
 
-      const notificationPromises = adminRhUsers.map(adminId => {
+      const notificationPromises = adminUsers.map(adminId => {
         return createNotificationService({
           userId: adminId,
-          title: "Nouvelle absence déclarée par un professeur",
-          message: `L'étudiant ${studentData.displayName} a été déclaré absent par le professeur ${teacherUser.displayName}.`,
-          type: "teacher_absence_declaration_admin",
+          title: type === "late" ? "Nouveau retard déclaré par un professeur" : "Nouvelle absence déclarée par un professeur",
+          message: `L'étudiant ${studentData.displayName} a été déclaré ${type === "late" ? "en retard" : "absent"} par le professeur ${teacherUser.displayName}.`,
+          type: type === "late" ? "teacher_late_declaration_admin" : "teacher_absence_declaration_admin",
           relatedId: docRef.id
         });
       });
@@ -652,7 +665,7 @@ export async function teacherDeclareAbsenceService(teacherUser, { studentId, sta
 
     return {
       success: true,
-      message: "Absence déclarée pour l'étudiant avec succès.",
+      message: isLate ? "Retard déclaré pour l'étudiant." : "Absence déclarée pour l'étudiant.",
       absence: {
         ...newAbsence,
         createdAt: new Date().toISOString(),
@@ -660,7 +673,115 @@ export async function teacherDeclareAbsenceService(teacherUser, { studentId, sta
       }
     };
   } catch (error) {
-    return { success: false, error: "Erreur lors de la déclaration d'absence : " + error.message };
+    return { success: false, error: "Erreur lors de la déclaration : " + error.message };
+  }
+}
+
+/**
+ * 🔥 Récupérer le nombre de retards non justifiés pour un étudiant
+ * @param {string} userId - UID de l'étudiant
+ */
+export async function getLateCountService(userId) {
+  try {
+    const snapshot = await adminDb.collection(COLLECTION_NAME)
+      .where("userId", "==", userId)
+      .where("type", "==", "late")
+      .where("status", "in", [ABSENCE_STATUS.TO_JUSTIFY_LATE, ABSENCE_STATUS.PENDING])
+      .get();
+
+    let count = 0;
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      // Ne compter que les retards qui ne sont pas encore transformés en absence
+      if (!data.transformedToAbsence) {
+        count++;
+      }
+    });
+
+    return { success: true, count };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * 🔥 Transformer 2 retards non justifiés en 1 absence
+ * @param {string} userId - UID de l'étudiant
+ */
+export async function transformLatesToAbsenceService(userId) {
+  try {
+    // Récupérer les retards non justifiés
+    const snapshot = await adminDb.collection(COLLECTION_NAME)
+      .where("userId", "==", userId)
+      .where("type", "==", "late")
+      .where("status", "in", [ABSENCE_STATUS.TO_JUSTIFY_LATE, ABSENCE_STATUS.PENDING])
+      .where("transformedToAbsence", "==", false)
+      .orderBy("createdAt", "asc")
+      .get();
+
+    const lates = [];
+    snapshot.forEach(doc => lates.push({ id: doc.id, ...doc.data() }));
+
+    if (lates.length < 2) {
+      return { success: true, message: `Pas assez de retards (${lates.length}/2) pour créer une absence.` };
+    }
+
+    // Prendre les 2 premiers retards
+    const firstLate = lates[0];
+    const secondLate = lates[1];
+
+    // Créer une absence à partir des retards
+    const docRef = adminDb.collection(COLLECTION_NAME).doc();
+    const newAbsence = {
+      id: docRef.id,
+      userId: userId,
+      userEmail: firstLate.userEmail || "",
+      displayName: firstLate.displayName || "Étudiant",
+      role: firstLate.role || "student",
+      department: firstLate.department || "",
+      type: "unjustified",
+      startDate: firstLate.startDate,
+      endDate: secondLate.endDate || firstLate.endDate,
+      reason: `Absence générée automatiquement suite à ${lates.length} retards non justifiés.`,
+      justificationUrl: "",
+      status: ABSENCE_STATUS.TO_JUSTIFY,
+      declaredBy: "system",
+      declaredByName: "Système (automatique)",
+      courseName: firstLate.courseName || "Cours non spécifié",
+      justificationDeadline: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+      reviewedBy: null,
+      reviewNotes: null,
+      transformedFromLates: [firstLate.id, secondLate.id],
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    await docRef.set(newAbsence);
+
+    // Marquer les retards comme transformés
+    const batch = adminDb.batch();
+    lates.forEach(late => {
+      const ref = adminDb.collection(COLLECTION_NAME).doc(late.id);
+      batch.update(ref, { transformedToAbsence: true });
+    });
+    await batch.commit();
+
+    // Notification à l'étudiant
+    createNotificationService({
+      userId: userId,
+      title: "Absence générée automatiquement",
+      message: `Vos ${lates.length} retards non justifiés ont été transformés en une absence. Vous avez 48h pour la justifier.`,
+      type: "lates_transformed_to_absence",
+      relatedId: docRef.id
+    }).catch(err => console.warn("Notification échouée:", err.message));
+
+    return {
+      success: true,
+      message: `${lates.length} retards transformés en 1 absence.`,
+      absenceId: docRef.id
+    };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la transformation des retards : " + error.message };
   }
 }
 

@@ -1,50 +1,88 @@
 import admin from "firebase-admin";
 import { adminAuth, adminDb } from "../../Shared/Firebase config/firebase.js";
+import { sendWelcomeEmail } from "../../Services/emailService.js"; // ✅ AJOUT
 
 /**
  * Service pour la création d'utilisateurs par Admin / RH (avec support du rôle Parent et liaison Étudiant)
  */
-export async function createUserService({ email, password, displayName, role = "employee", department = "", childrenUids = [] }) {
+export async function createUserService({
+  email,
+  password,
+  displayName,
+  role = "employee",
+  department = "",
+  className = "",
+  assignedClasses = []
+}) {
   try {
-    // 1. Créer le compte Firebase Authentication
+    const cleanEmail = email?.trim().toLowerCase();
+    const cleanDisplayName = displayName?.trim();
+
+    if (!cleanEmail) {
+      return { success: false, error: "L'adresse email est obligatoire." };
+    }
+    if (!cleanEmail.endsWith("@ynov.com")) {
+      return { success: false, error: "L'adresse email doit appartenir au domaine @ynov.com." };
+    }
+    if (!cleanDisplayName) {
+      return { success: false, error: "Le nom complet est obligatoire." };
+    }
+    if (!password) {
+      return { success: false, error: "Le mot de passe initial est obligatoire." };
+    }
+    if (password.length < 6) {
+      return { success: false, error: "Le mot de passe doit contenir au moins 6 caractères." };
+    }
+
+    // Création Firebase Auth
     const userRecord = await adminAuth.createUser({
-      email,
+      email: cleanEmail,
       password,
-      displayName,
+      displayName: cleanDisplayName,
       disabled: false
     });
 
-    // 2. Assigner le rôle (Custom User Claims)
+    // Attribution du rôle
     await adminAuth.setCustomUserClaims(userRecord.uid, { role });
 
-    // 3. Enregistrer dans la collection Firestore `users`
+    // Préparer les données Firestore
     const userData = {
       uid: userRecord.uid,
-      email,
-      displayName,
+      email: cleanEmail,
+      displayName: cleanDisplayName,
       role,
-      department,
-      childrenUids: Array.isArray(childrenUids) ? childrenUids : [],
-      parentUids: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      department: department || "",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
+
+    // Ajouter les champs spécifiques selon le rôle
+    if (role === 'student' && className) {
+      userData.className = className;
+      userData.department = className; // pour compatibilité
+    }
+    if (role === 'teacher' && assignedClasses && assignedClasses.length > 0) {
+      userData.assignedClasses = assignedClasses;
+      userData.department = assignedClasses[0] || ''; // pour compatibilité
+    }
 
     await adminDb.collection("users").doc(userRecord.uid).set(userData);
 
-    // 4. Si des étudiants sont liés lors de la création du parent, mettre à jour le document des étudiants
-    if (role === "parent" && Array.isArray(childrenUids) && childrenUids.length > 0) {
-      for (const studentUid of childrenUids) {
-        const studentRef = adminDb.collection("users").doc(studentUid);
-        const studentDoc = await studentRef.get();
-        if (studentDoc.exists) {
-          await studentRef.update({
-            parentUids: admin.firestore.FieldValue.arrayUnion(userRecord.uid),
-            updatedAt: new Date().toISOString()
-          });
-        }
+    // ✅ ENVOI DE L'EMAIL DE BIENVENUE (non bloquant)
+    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    sendWelcomeEmail({
+      email: cleanEmail,
+      displayName: cleanDisplayName,
+      password: password,
+      role: role,
+      loginUrl
+    }).then(result => {
+      if (!result.success) {
+        console.warn('⚠️ Email de bienvenue non envoyé pour', cleanEmail, ':', result.error);
       }
-    }
+    }).catch(err => {
+      console.warn('⚠️ Erreur lors de l\'envoi de l\'email pour', cleanEmail, ':', err);
+    });
 
     return {
       success: true,
@@ -53,11 +91,13 @@ export async function createUserService({ email, password, displayName, role = "
         email: userRecord.email,
         displayName: userRecord.displayName,
         role,
-        department,
-        childrenUids: userData.childrenUids
+        department: department || '',
+        className: className || '',
+        assignedClasses: assignedClasses || []
       }
     };
   } catch (error) {
+    console.error("Erreur création utilisateur :", error);
     return { success: false, error: error.message };
   }
 }

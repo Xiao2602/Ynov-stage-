@@ -24,6 +24,7 @@ import ArchivePage from "./pages/ArchivePage";
 import TeacherAbsencesList from './pages/TeacherAbsencesList';
 import ArchivedAbsencesPage from './pages/ArchivedAbsencesPage';
 import TwoFactorLoginPage from './pages/TwoFactorLoginPage';
+import AssignPlanningPage from './pages/AssignPlanningPage';
 
 
 import ProtectedRoute from './auth/ProtectedRoute';
@@ -107,6 +108,7 @@ export default function App() {
               <Route path="/profile-requests" element={<ProfileRequestsPage />} />
               <Route path="/admin/archive" element={<ArchivePage />} />
               <Route path="/admin/archives" element={<ArchivedAbsencesPage />} />
+              <Route path="/assign-planning" element={<AssignPlanningPage />} />
             </Route>
             <Route element={<TeacherRoute />}>
               <Route path="/pedagogie/eleves" element={<TeacherStudentsPage />} />
