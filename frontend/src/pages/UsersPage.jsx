@@ -207,10 +207,17 @@ export default function UsersPage() {
   // MODAL D'ASSIGNATION DE CLASSE (pour professeurs)
   // ----------------------------------------------------------
 
+  // MODAL D'ASSIGNATION DE CLASSE (POUR PROFESSEURS)
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedTeacher, setSelectedTeacher] = useState(null);
   const [selectedClasses, setSelectedClasses] = useState([]);
   const [isAssigning, setIsAssigning] = useState(false);
+
+  // MODAL DE CHANGEMENT DE CLASSE (POUR ÉTUDIANTS - SÉPARÉ)
+  const [showStudentClassModal, setShowStudentClassModal] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [targetStudentClass, setTargetStudentClass] = useState('');
+  const [isUpdatingStudentClass, setIsUpdatingStudentClass] = useState(false);
 
   // ----------------------------------------------------------
   // MODAL D'ÉDITION
@@ -546,68 +553,81 @@ export default function UsersPage() {
     }
   };
 
-  const openAssignModal = (user) => {
-    const userUid = user.uid || user.id;
-    setSelectedAssignUser({ ...user, uid: userUid });
-    if (user.role === 'teacher') {
-      const classes = Array.isArray(user.assignedClasses) && user.assignedClasses.length > 0
-        ? user.assignedClasses
-        : (user.assignedClass ? [user.assignedClass] : []);
-      setSelectedClasses(classes);
-      setSelectedStudentClass('');
-    } else if (user.role === 'student') {
-      setSelectedStudentClass(user.className || user.department || '');
-      setSelectedClasses([]);
-    }
+  // ==========================================================
+  // ASSIGNATION DE CLASSES (PROFESSEUR - LOGIQUE ORIGINALE RESTAURÉE)
+  // ==========================================================
+  const openAssignModal = (teacher) => {
+    const classes = Array.isArray(teacher.assignedClasses) && teacher.assignedClasses.length > 0
+      ? teacher.assignedClasses
+      : (teacher.assignedClass ? [teacher.assignedClass] : []);
+    setSelectedTeacher({ ...teacher, uid: teacher.uid || teacher.id });
+    setSelectedClasses(classes);
     setShowAssignModal(true);
   };
 
-  const handleAssignClass = async () => {
-    const userUid = selectedAssignUser?.uid || selectedAssignUser?.id;
-    if (!userUid) return;
-
+  const handleAssignClass = async (classes) => {
+    const teacherUid = selectedTeacher?.uid || selectedTeacher?.id;
+    if (!teacherUid || !classes || classes.length === 0) {
+      alert('Veuillez sélectionner au moins une classe.');
+      return;
+    }
     setIsAssigning(true);
     try {
-      if (selectedAssignUser.role === 'teacher') {
-        if (!selectedClasses || selectedClasses.length === 0) {
-          alert('Veuillez sélectionner au moins une classe.');
-          setIsAssigning(false);
-          return;
-        }
-        const result = await apiFetch('/users/assign-teacher', {
-          method: 'POST',
-          body: JSON.stringify({
-            teacherUid: userUid,
-            assignedClasses: selectedClasses
-          }),
-        });
-        if (!result.success) throw new Error(result.error || 'Erreur');
-        alert(result.message || "Classes assignées avec succès.");
-      } else if (selectedAssignUser.role === 'student') {
-        if (!selectedStudentClass) {
-          alert('Veuillez sélectionner une classe pour l\'étudiant.');
-          setIsAssigning(false);
-          return;
-        }
-        const result = await apiFetch(`/users/${userUid}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            className: selectedStudentClass,
-            department: selectedStudentClass
-          }),
-        });
-        if (!result.success) throw new Error(result.error || 'Erreur');
-        alert(result.message || "Classe de l'étudiant mise à jour avec succès.");
-      }
+      const result = await apiFetch('/users/assign-teacher', {
+        method: 'POST',
+        body: JSON.stringify({
+          teacherUid,
+          assignedClasses: classes
+        }),
+      });
+      if (!result.success) throw new Error(result.error || 'Erreur');
+      alert(result.message || "Classes assignées avec succès.");
       setShowAssignModal(false);
-      setSelectedAssignUser(null);
+      setSelectedTeacher(null);
       setSelectedClasses([]);
-      setSelectedStudentClass('');
       await loadUsers();
     } catch (error) {
       alert('Erreur : ' + error.message);
     } finally {
       setIsAssigning(false);
+    }
+  };
+
+  // ==========================================================
+  // CHANGEMENT DE CLASSE (ÉTUDIANT - LOGIQUE SÉPARÉE)
+  // ==========================================================
+  const openStudentClassModal = (student) => {
+    const uid = student.uid || student.id;
+    setSelectedStudent({ ...student, uid });
+    setTargetStudentClass(student.className || student.department || '');
+    setShowStudentClassModal(true);
+  };
+
+  const handleUpdateStudentClass = async () => {
+    const studentUid = selectedStudent?.uid || selectedStudent?.id;
+    if (!studentUid || !targetStudentClass) {
+      alert("Veuillez sélectionner une classe.");
+      return;
+    }
+    setIsUpdatingStudentClass(true);
+    try {
+      const result = await apiFetch(`/users/${studentUid}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          className: targetStudentClass,
+          department: targetStudentClass
+        }),
+      });
+      if (!result.success) throw new Error(result.error || 'Erreur');
+      alert(result.message || "Classe de l'étudiant modifiée avec succès.");
+      setShowStudentClassModal(false);
+      setSelectedStudent(null);
+      setTargetStudentClass('');
+      await loadUsers();
+    } catch (error) {
+      alert('Erreur : ' + error.message);
+    } finally {
+      setIsUpdatingStudentClass(false);
     }
   };
 
