@@ -1145,12 +1145,33 @@ export default function UsersPage() {
                             <IconDots style={{ width: '14px', height: '14px' }} />
                           </button>
 
-                          {/* Row 2, Col 1: Assigner / Changer de classe (Prof ou Étudiant) */}
-                          {(isTeacher || isStudent) ? (
+                                                    {/* Row 2, Col 1: Assigner (Prof) ou Changer classe (Étudiant) */}
+                          {isTeacher ? (
                             <button
                               className="table-action-btn"
                               onClick={() => openAssignModal(user)}
-                              title={isTeacher ? "Assigner des classes (multiple)" : "Changer la classe"}
+                              title="Assigner des classes"
+                              style={{
+                                cursor: 'pointer',
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '6px',
+                                border: '1px solid #ccfbf1',
+                                background: '#f0fdfa',
+                                color: '#0d9488',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: 0
+                              }}
+                            >
+                              <IconFolder style={{ width: '14px', height: '14px' }} />
+                            </button>
+                          ) : isStudent ? (
+                            <button
+                              className="table-action-btn"
+                              onClick={() => openStudentClassModal(user)}
+                              title="Changer la classe"
                               style={{
                                 cursor: 'pointer',
                                 width: '28px',
@@ -1339,6 +1360,60 @@ export default function UsersPage() {
                 <button className="btn-secondary" onClick={() => setShowAssignModal(false)} disabled={isAssigning}>Annuler</button>
                 <button className="btn-primary" onClick={() => handleAssignClass(selectedClasses)} disabled={isAssigning || selectedClasses.length === 0}>
                   {isAssigning ? 'Assignation...' : `Assigner (${selectedClasses.length})`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL D'ÉDITION */}
+      
+      {/* MODAL DE CHANGEMENT DE CLASSE (ÉTUDIANT - SÉPARÉE) */}
+      {showStudentClassModal && selectedStudent && (
+        <div className="modal-overlay" onClick={() => setShowStudentClassModal(false)}>
+          <div className="user-modal" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <p className="modal-kicker">Changer de classe</p>
+                <h3 style={{ margin: 0, fontSize: '1.15rem' }}>
+                  Étudiant : {selectedStudent.displayName || selectedStudent.email}
+                </h3>
+              </div>
+              <button className="modal-close" onClick={() => setShowStudentClassModal(false)} disabled={isUpdatingStudentClass}>×</button>
+            </div>
+            <div style={{ padding: '0 24px 24px' }}>
+              <div className="field-group">
+                <label className="field-label">Classe actuelle de l'étudiant</label>
+                <div style={{ padding: '8px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.85rem', color: '#475569', marginBottom: '12px' }}>
+                  {selectedStudent.className || selectedStudent.department || 'Aucune classe assignée'}
+                </div>
+
+                <label className="field-label">Nouvelle classe (sélectionnez pour remplacer)</label>
+                <select
+                  className="field-input"
+                  value={targetStudentClass}
+                  onChange={(e) => setTargetStudentClass(e.target.value)}
+                  disabled={isUpdatingStudentClass}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.9rem', outline: 'none' }}
+                >
+                  <option value="">-- Sélectionner une classe --</option>
+                  {classOptions.map((cls) => (
+                    <option key={cls} value={cls}>{cls}</option>
+                  ))}
+                </select>
+                <small style={{ color: '#64748b', marginTop: '6px', display: 'block' }}>
+                  La classe de l'étudiant sera immédiatement mise à jour.
+                </small>
+              </div>
+              <div className="modal-actions" style={{ marginTop: '20px' }}>
+                <button className="btn-secondary" onClick={() => setShowStudentClassModal(false)} disabled={isUpdatingStudentClass}>Annuler</button>
+                <button
+                  className="btn-primary"
+                  onClick={handleUpdateStudentClass}
+                  disabled={isUpdatingStudentClass || !targetStudentClass}
+                >
+                  {isUpdatingStudentClass ? 'Mise à jour...' : 'Changer la classe'}
                 </button>
               </div>
             </div>
