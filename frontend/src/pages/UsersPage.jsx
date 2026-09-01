@@ -145,6 +145,11 @@ export default function UsersPage() {
   const [isEditing, setIsEditing] = useState(false);
 
   // ----------------------------------------------------------
+  // MODAL DE VISUALISATION UTILISATEUR
+  // ----------------------------------------------------------
+  const [viewingUser, setViewingUser] = useState(null);
+
+  // ----------------------------------------------------------
   // 🔥 MODAL D'IMPORT MASSIF
   // ----------------------------------------------------------
 
@@ -153,6 +158,32 @@ export default function UsersPage() {
   const [importPreview, setImportPreview] = useState([]);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState(null);
+
+  // ----------------------------------------------------------
+  // 🔥 EXPORTATION EXCEL (.XLSX)
+  // ----------------------------------------------------------
+  const handleExportUsers = () => {
+    if (!users || users.length === 0) {
+      alert("Aucun utilisateur à exporter.");
+      return;
+    }
+    const dataToExport = filteredUsers.map(user => ({
+      "Nom complet": user.displayName || '—',
+      "Email": user.email || '—',
+      "Rôle": getRoleLabel(user.role),
+      "Département": user.department || '—',
+      "Classe (Étudiant)": user.className || '—',
+      "Classe(s) Assignée(s) (Prof)": Array.isArray(user.assignedClasses) ? user.assignedClasses.join(', ') : (user.assignedClass || '—'),
+      "Téléphone": user.phone || '—',
+      "Date de création": formatDate(user.createdAt),
+      "Statut": user.disabled ? "Inactif / Suspendu" : "Actif"
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    XLSX.utils.book_append_sheet(wb, ws, "Utilisateurs");
+    XLSX.writeFile(wb, `utilisateurs_ynov_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
 
   // ==========================================================
   // CHARGEMENT DES UTILISATEURS
@@ -677,7 +708,10 @@ export default function UsersPage() {
             <IconPlus className="icon-sm" /> Ajouter un utilisateur
           </button>
           <button className="btn-secondary" onClick={() => setShowImportModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <IconUpload className="icon-sm" /> Importer
+            <IconUpload className="icon-sm" /> Importer (.xlsx)
+          </button>
+          <button className="btn-secondary" onClick={handleExportUsers} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <IconDownload className="icon-sm" /> Exporter (.xlsx)
           </button>
         </div>
       </div>
@@ -805,19 +839,27 @@ export default function UsersPage() {
                       </span>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        <button className="table-action-btn" onClick={() => window.alert(
-                          `${displayName}\nEmail : ${user.email || '—'}\nRôle : ${getRoleLabel(user.role)}${isStudent ? `\nClasse : ${user.className || '—'}` : ''}${isTeacher ? `\nClasse assignée : ${user.assignedClass || '—'}` : ''}`
-                        )}><IconEye className="action-icon" /></button>
-                        <button className="table-action-btn" onClick={() => openEditModal(user)} title="Modifier">✏️</button>
-                        <button className="table-action-btn" onClick={() => handleChangeRole(user)} title="Changer rôle"><IconDots className="action-icon" /></button>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <button className="table-action-btn" onClick={() => setViewingUser(user)} title="Voir les détails" style={{ cursor: 'pointer', padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }}>
+                          <IconEye className="action-icon" />
+                        </button>
+                        <button className="table-action-btn" onClick={() => openEditModal(user)} title="Modifier les informations" style={{ cursor: 'pointer', padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }}>
+                          ✏️
+                        </button>
+                        <button className="table-action-btn" onClick={() => handleChangeRole(user)} title="Changer de rôle" style={{ cursor: 'pointer', padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }}>
+                          <IconDots className="action-icon" />
+                        </button>
                         {isTeacher && (
-                          <button className="table-action-btn" style={{ color: '#23b2a4' }} onClick={() => openAssignModal(user)}>📚</button>
+                          <button className="table-action-btn" style={{ color: '#23b2a4', cursor: 'pointer', padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }} onClick={() => openAssignModal(user)} title="Assigner des classes">
+                            📚
+                          </button>
                         )}
-                        <button className="table-action-btn" style={{ color: isDisabled ? '#10b981' : '#f59e0b' }} onClick={() => handleSuspendUser(user)}>
+                        <button className="table-action-btn" style={{ color: isDisabled ? '#10b981' : '#f59e0b', cursor: 'pointer', padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }} onClick={() => handleSuspendUser(user)} title={isDisabled ? "Réactiver le compte" : "Suspendre le compte"}>
                           {isDisabled ? '🔓' : '🔒'}
                         </button>
-                        <button className="table-action-btn" style={{ color: '#ef4444' }} onClick={() => handleDeleteUser(user)}>🗑️</button>
+                        <button className="table-action-btn" style={{ color: '#ef4444', cursor: 'pointer', padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }} onClick={() => handleDeleteUser(user)} title="Supprimer définitivement">
+                          🗑️
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1026,6 +1068,36 @@ export default function UsersPage() {
               <button className="btn-primary" onClick={handleImportUsers} disabled={importLoading || !importFile}>
                 {importLoading ? 'Importation...' : 'Importer'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE VISUALISATION UTILISATEUR */}
+      {viewingUser && (
+        <div className="modal-overlay" onClick={() => setViewingUser(null)}>
+          <div className="modal-content" style={{ maxWidth: '540px', padding: '24px', background: 'white', borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Détails de l'utilisateur</h3>
+              <button className="modal-close" onClick={() => setViewingUser(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.9rem', color: '#1e293b' }}>
+              <div><strong>Nom complet :</strong> {viewingUser.displayName || '—'}</div>
+              <div><strong>Email :</strong> {viewingUser.email || '—'}</div>
+              <div><strong>Rôle :</strong> <span style={{ padding: '3px 8px', borderRadius: '4px', background: '#e0f2fe', color: '#0369a1', fontWeight: 600 }}>{getRoleLabel(viewingUser.role)}</span></div>
+              {viewingUser.department && <div><strong>Département :</strong> {viewingUser.department}</div>}
+              {viewingUser.className && <div><strong>Classe :</strong> {viewingUser.className}</div>}
+              {viewingUser.assignedClass && <div><strong>Classe assignée :</strong> {viewingUser.assignedClass}</div>}
+              {viewingUser.assignedClasses && viewingUser.assignedClasses.length > 0 && (
+                <div><strong>Classes enseignées :</strong> {viewingUser.assignedClasses.join(', ')}</div>
+              )}
+              <div><strong>Téléphone :</strong> {viewingUser.phone || '—'}</div>
+              <div><strong>Date d'inscription :</strong> {formatDate(viewingUser.createdAt)}</div>
+              <div><strong>Statut du compte :</strong> <span style={{ color: viewingUser.disabled ? '#ef4444' : '#10b981', fontWeight: 600 }}>{viewingUser.disabled ? 'Suspendu / Inactif' : 'Actif'}</span></div>
+              <div><strong>Identifiant unique (UID) :</strong> <code style={{ fontSize: '0.8rem', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>{viewingUser.uid || viewingUser.id}</code></div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+              <button className="btn-secondary" onClick={() => setViewingUser(null)}>Fermer</button>
             </div>
           </div>
         </div>
