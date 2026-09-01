@@ -5,6 +5,9 @@ import {
   IconPlus,
   IconDots,
   IconEye,
+  IconEdit,
+  IconFolder,
+  IconTrash,
   IconX,
   IconCheckCircle,
   IconAlertTriangle,
@@ -14,6 +17,80 @@ import {
 import { apiFetch } from '../api/api'; // ✅ Correction : plus de /api en double
 import * as XLSX from 'xlsx';
 import '../components/DashboardLayout.css';
+
+
+// ============================================================
+// ABRÉVIATION AUTOMATIQUE DES CLASSES (AUTO-ABBREVIATION)
+// ============================================================
+
+export function formatClassAbbrev(className) {
+  if (!className || typeof className !== 'string') return '';
+  let str = className.trim();
+
+  // Dictionnaire des filières/spécialités courantes
+  const trackMap = {
+    'cybersécurité': 'Cyber',
+    'cybersecurite': 'Cyber',
+    'intelligence artificielle': 'IA',
+    'génie logiciel': 'GL',
+    'genie logiciel': 'GL',
+    'data science': 'Data',
+    'big data': 'Data',
+    'cloud & devops': 'Cloud',
+    'cloud computing': 'Cloud',
+    'web & mobile': 'Web',
+    'informatique': 'Info',
+    'systèmes embarqués': 'SE',
+    'systemes embarques': 'SE',
+    'creation & digital design': 'Design',
+    'création & digital design': 'Design',
+    '3d, animation & jeux vidéo': '3D/JV',
+    '3d, animation & jeux video': '3D/JV',
+    'business & management': 'Business',
+    'communication & marketing': 'Com'
+  };
+
+  // 1. Remplacement des niveaux : Bachelor -> B, Master/Mastère -> M, Licence -> L, Doctorat -> D
+  str = str.replace(/\bBachelor\s*(\d)?/gi, (_, p1) => (p1 ? `B${p1}` : 'B'));
+  str = str.replace(/\b(Master|Mastère|Mastere)\s*(\d)?/gi, (_, __, p2) => (p2 ? `M${p2}` : 'M'));
+  str = str.replace(/\bLicence\s*(\d)?/gi, (_, p1) => (p1 ? `L${p1}` : 'L'));
+  str = str.replace(/\bDoctorat\s*(\d)?/gi, (_, p1) => (p1 ? `D${p1}` : 'D'));
+
+  // 2. Découpage niveau / filière (ex: "B3 - Génie Logiciel" ou "M1 - Cybersécurité")
+  if (str.includes('-') || str.includes(':')) {
+    const parts = str.split(/[-:]/).map((p) => p.trim());
+    const levelPart = parts[0];
+    const trackPart = parts.slice(1).join(' ').trim();
+    const trackLower = trackPart.toLowerCase();
+
+    if (trackMap[trackLower]) {
+      return `${levelPart} ${trackMap[trackLower]}`;
+    }
+
+    // Heuristique automatique pour les filières créées dynamiquement
+    const words = trackPart
+      .split(/\s+/)
+      .filter((w) => !['et', 'and', '&', 'de', 'du', 'en', 'la', 'le', 'pour', "d'"].includes(w.toLowerCase()));
+
+    if (words.length >= 2) {
+      // Acronyme si multi-mots (ex: "Marketing Digital" -> "MD", "Sécurité Réseaux" -> "SR")
+      const acronym = words.map((w) => w[0].toUpperCase()).join('');
+      return `${levelPart} ${acronym}`;
+    } else if (words.length === 1) {
+      // Raccourci si mot unique long (ex: "Robotique" -> "Robot")
+      const word = words[0];
+      const shortened = word.length > 6 ? word.slice(0, 5) : word;
+      return `${levelPart} ${shortened}`;
+    }
+    return `${levelPart} ${trackPart}`;
+  }
+
+  if (trackMap[str.toLowerCase()]) {
+    return trackMap[str.toLowerCase()];
+  }
+
+  return str;
+}
 
 // ============================================================
 // CONFIGURATION DES RÔLES
@@ -796,103 +873,264 @@ export default function UsersPage() {
           </div>
         </div>
 
-        <table className="data-table" style={{ marginTop: '16px' }}>
-          <thead>
-            <tr>
-              <th>Utilisateur</th>
-              <th>Email</th>
-              <th>Rôle</th>
-              <th>Classe (étudiant)</th>
-              <th>Classe assignée (prof)</th>
-              <th>Date création</th>
-              <th>Statut</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoadingUsers ? (
-              <tr><td colSpan="8" style={{ textAlign: 'center', padding: '32px' }}>Chargement...</td></tr>
-            ) : filteredUsers.length === 0 ? (
-              <tr><td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>Aucun utilisateur trouvé.</td></tr>
-            ) : (
-              filteredUsers.map((user) => {
-                const displayName = user.displayName || user.email || 'Utilisateur';
-                const isDisabled = user.disabled === true;
-                const isStudent = user.role === 'student';
-                const isTeacher = user.role === 'teacher';
-                return (
-                  <tr key={user.uid || user.id}>
-                    <td>
-                      <div className="user-cell">
-                        <div className="mini-avatar">{getInitials(displayName)}</div>
-                        <span>{displayName}</span>
-                      </div>
-                    </td>
-                    <td style={{ color: '#64748b' }}>{user.email || '—'}</td>
-                    <td>
-                      <span style={{
-                        padding: '3px 8px',
-                        borderRadius: '4px',
-                        fontSize: '0.78rem',
-                        fontWeight: '500',
-                        background: user.role === 'admin' ? '#fee2e2' : user.role === 'rh' ? '#fef3c7' : user.role === 'manager' ? '#dbeafe' : '#f1f5f9',
-                        color: user.role === 'admin' ? '#991b1b' : user.role === 'rh' ? '#92400e' : user.role === 'manager' ? '#1d4ed8' : '#475569'
-                      }}>
-                        {getRoleLabel(user.role)}
-                      </span>
-                    </td>
-                    <td>
-                      {isStudent ? (user.className || user.department || '—') : '—'}
-                    </td>
-                    <td>
-                      {isTeacher ? (
-                        Array.isArray(user.assignedClasses) && user.assignedClasses.length > 0 ? (
-                          <span style={{ color: 'var(--ynov-cyan)', fontWeight: '500' }}>{user.assignedClasses.join(', ')}</span>
-                        ) : user.assignedClass ? (
-                          <span style={{ color: 'var(--ynov-cyan)', fontWeight: '500' }}>{user.assignedClass}</span>
+        <div style={{ overflowX: 'auto', width: '100%', marginTop: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+          <table className="data-table" style={{ width: '100%', minWidth: '880px', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f8fafc' }}>
+                <th style={{ minWidth: '150px', padding: '12px' }}>Utilisateur</th>
+                <th style={{ minWidth: '150px', padding: '12px' }}>Email</th>
+                <th style={{ minWidth: '90px', padding: '12px' }}>Rôle</th>
+                <th style={{ minWidth: '110px', padding: '12px' }}>Classe (étudiant)</th>
+                <th style={{ minWidth: '170px', padding: '12px' }}>Classe(s) assignée(s) (prof)</th>
+                <th style={{ minWidth: '100px', padding: '12px' }}>Date création</th>
+                <th style={{ minWidth: '80px', padding: '12px' }}>Statut</th>
+                <th style={{ minWidth: '190px', padding: '12px 16px 12px 12px', textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoadingUsers ? (
+                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>Chargement des utilisateurs...</td></tr>
+              ) : filteredUsers.length === 0 ? (
+                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>Aucun utilisateur trouvé.</td></tr>
+              ) : (
+                filteredUsers.map((user) => {
+                  const displayName = user.displayName || user.email || 'Utilisateur';
+                  const isDisabled = user.disabled === true;
+                  const isStudent = user.role === 'student';
+                  const isTeacher = user.role === 'teacher';
+
+                  const teacherClasses = Array.isArray(user.assignedClasses) && user.assignedClasses.length > 0
+                    ? user.assignedClasses
+                    : user.assignedClass
+                      ? [user.assignedClass]
+                      : [];
+
+                  return (
+                    <tr key={user.uid || user.id}>
+                      <td>
+                        <div className="user-cell">
+                          <div className="mini-avatar">{getInitials(displayName)}</div>
+                          <span style={{ fontWeight: '500', color: '#1e293b' }}>{displayName}</span>
+                        </div>
+                      </td>
+                      <td style={{ color: '#64748b', fontSize: '0.82rem' }}>{user.email || '—'}</td>
+                      <td>
+                        <span style={{
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          fontSize: '0.78rem',
+                          fontWeight: '600',
+                          background: user.role === 'admin' ? '#fee2e2' : user.role === 'rh' ? '#fef3c7' : user.role === 'manager' ? '#dbeafe' : '#f1f5f9',
+                          color: user.role === 'admin' ? '#991b1b' : user.role === 'rh' ? '#92400e' : user.role === 'manager' ? '#1d4ed8' : '#475569'
+                        }}>
+                          {getRoleLabel(user.role)}
+                        </span>
+                      </td>
+                      <td>
+                        {isStudent && (user.className || user.department) ? (
+                          <span
+                            title={user.className || user.department}
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              borderRadius: '5px',
+                              fontSize: '0.75rem',
+                              fontWeight: '600',
+                              background: '#f1f5f9',
+                              color: '#334155',
+                              border: '1px solid #e2e8f0',
+                              cursor: 'default',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {formatClassAbbrev(user.className || user.department)}
+                          </span>
                         ) : (
-                          <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Non assigné</span>
-                        )
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td>{formatDate(user.createdAt)}</td>
-                    <td>
-                      <span className={`status-badge ${isDisabled ? 'urgent' : 'approved'}`}>
-                        {isDisabled ? 'Inactif' : 'Actif'}
-                      </span>
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap', width: '1%' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        <button className="table-action-btn" onClick={() => setViewingUser(user)} title="Voir les détails" style={{ cursor: 'pointer', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <IconEye className="action-icon" />
-                        </button>
-                        <button className="table-action-btn" onClick={() => openEditModal(user)} title="Modifier les informations" style={{ cursor: 'pointer', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                          ✏️
-                        </button>
-                        <button className="table-action-btn" onClick={() => handleChangeRole(user)} title="Changer de rôle" style={{ cursor: 'pointer', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <IconDots className="action-icon" />
-                        </button>
-                        {isTeacher && (
-                          <button className="table-action-btn" style={{ color: '#23b2a4', cursor: 'pointer', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => openAssignModal(user)} title="Assigner des classes">
-                            📚
-                          </button>
+                          <span style={{ color: '#94a3b8' }}>—</span>
                         )}
-                        <button className="table-action-btn" style={{ color: isDisabled ? '#10b981' : '#f59e0b', cursor: 'pointer', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => handleSuspendUser(user)} title={isDisabled ? "Réactiver le compte" : "Suspendre le compte"}>
-                          {isDisabled ? '🔓' : '🔒'}
-                        </button>
-                        <button className="table-action-btn" style={{ color: '#ef4444', cursor: 'pointer', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => handleDeleteUser(user)} title="Supprimer définitivement">
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                      </td>
+                      <td>
+                        {isTeacher ? (
+                          teacherClasses.length > 0 ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '220px' }}>
+                              {teacherClasses.map((cls, idx) => (
+                                <span
+                                  key={idx}
+                                  title={cls}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    padding: '2px 7px',
+                                    borderRadius: '5px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: '600',
+                                    background: '#f0fdfa',
+                                    color: '#0d9488',
+                                    border: '1px solid #ccfbf1',
+                                    cursor: 'default',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  {formatClassAbbrev(cls)}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.8rem' }}>Non assigné</span>
+                          )
+                        ) : (
+                          <span style={{ color: '#94a3b8' }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ fontSize: '0.8rem', color: '#64748b' }}>{formatDate(user.createdAt)}</td>
+                      <td>
+                        <span className={`status-badge ${isDisabled ? 'urgent' : 'approved'}`}>
+                          {isDisabled ? 'Inactif' : 'Actif'}
+                        </span>
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap', width: '1%', textAlign: 'right', paddingRight: '14px' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '5px' }}>
+                          <button
+                            className="table-action-btn"
+                            onClick={() => setViewingUser(user)}
+                            title="Voir les détails complets"
+                            style={{
+                              cursor: 'pointer',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '6px',
+                              border: '1px solid #e2e8f0',
+                              background: '#fff',
+                              color: '#475569',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: 0
+                            }}
+                          >
+                            <IconEye style={{ width: '14px', height: '14px' }} />
+                          </button>
+                          <button
+                            className="table-action-btn"
+                            onClick={() => openEditModal(user)}
+                            title="Modifier l'utilisateur"
+                            style={{
+                              cursor: 'pointer',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '6px',
+                              border: '1px solid #e2e8f0',
+                              background: '#fff',
+                              color: '#0284c7',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: 0
+                            }}
+                          >
+                            <IconEdit style={{ width: '14px', height: '14px' }} />
+                          </button>
+                          <button
+                            className="table-action-btn"
+                            onClick={() => handleChangeRole(user)}
+                            title="Changer le rôle"
+                            style={{
+                              cursor: 'pointer',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '6px',
+                              border: '1px solid #e2e8f0',
+                              background: '#fff',
+                              color: '#6366f1',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: 0
+                            }}
+                          >
+                            <IconDots style={{ width: '14px', height: '14px' }} />
+                          </button>
+                          {isTeacher && (
+                            <button
+                              className="table-action-btn"
+                              onClick={() => openAssignModal(user)}
+                              title="Assigner des classes"
+                              style={{
+                                cursor: 'pointer',
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '6px',
+                                border: '1px solid #ccfbf1',
+                                background: '#f0fdfa',
+                                color: '#0d9488',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: 0
+                              }}
+                            >
+                              <IconFolder style={{ width: '14px', height: '14px' }} />
+                            </button>
+                          )}
+                          <button
+                            className="table-action-btn"
+                            onClick={() => handleSuspendUser(user)}
+                            title={isDisabled ? "Réactiver le compte" : "Suspendre le compte"}
+                            style={{
+                              cursor: 'pointer',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '6px',
+                              border: `1px solid ${isDisabled ? '#bbf7d0' : '#fed7aa'}`,
+                              background: isDisabled ? '#f0fdf4' : '#fff7ed',
+                              color: isDisabled ? '#16a34a' : '#d97706',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: 0
+                            }}
+                          >
+                            {isDisabled ? (
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                              </svg>
+                            ) : (
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                              </svg>
+                            )}
+                          </button>
+                          <button
+                            className="table-action-btn"
+                            onClick={() => handleDeleteUser(user)}
+                            title="Supprimer définitivement"
+                            style={{
+                              cursor: 'pointer',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '6px',
+                              border: '1px solid #fecdd3',
+                              background: '#fff1f2',
+                              color: '#e11d48',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: 0
+                            }}
+                          >
+                            <IconTrash style={{ width: '14px', height: '14px' }} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* MODAL CREATION (inchangée) */}
