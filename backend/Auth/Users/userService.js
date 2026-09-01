@@ -12,7 +12,9 @@ export async function createUserService({
   role = "employee",
   department = "",
   className = "",
-  assignedClasses = []
+  assignedClass = "",
+  assignedClasses = [],
+  phone = ""
 }) {
   try {
     const cleanEmail = email?.trim().toLowerCase();
@@ -45,12 +47,18 @@ export async function createUserService({
     // Attribution du rôle
     await adminAuth.setCustomUserClaims(userRecord.uid, { role });
 
+    let finalAssignedClasses = Array.isArray(assignedClasses) ? [...assignedClasses] : [];
+    if (assignedClass && !finalAssignedClasses.includes(assignedClass)) {
+      finalAssignedClasses.push(assignedClass);
+    }
+
     // Préparer les données Firestore
     const userData = {
       uid: userRecord.uid,
       email: cleanEmail,
       displayName: cleanDisplayName,
       role,
+      phone: phone || "",
       department: department || "",
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -61,9 +69,16 @@ export async function createUserService({
       userData.className = className;
       userData.department = className; // pour compatibilité
     }
-    if (role === 'teacher' && assignedClasses && assignedClasses.length > 0) {
-      userData.assignedClasses = assignedClasses;
-      userData.department = assignedClasses[0] || ''; // pour compatibilité
+    if (role === 'teacher') {
+      if (finalAssignedClasses.length > 0) {
+        userData.assignedClasses = finalAssignedClasses;
+        userData.assignedClass = finalAssignedClasses[0];
+        userData.department = finalAssignedClasses[0];
+      } else if (assignedClass) {
+        userData.assignedClass = assignedClass;
+        userData.assignedClasses = [assignedClass];
+        userData.department = assignedClass;
+      }
     }
 
     await adminDb.collection("users").doc(userRecord.uid).set(userData);
@@ -185,7 +200,15 @@ export async function getAllUsersService() {
   try {
     const snapshot = await adminDb.collection("users").get();
     const users = [];
-    snapshot.forEach(doc => users.push(doc.data()));
+    snapshot.forEach(doc => {
+      const data = doc.data() || {};
+      users.push({
+        uid: doc.id,
+        id: doc.id,
+        ...data,
+        uid: data.uid || doc.id
+      });
+    });
     return { success: true, data: users };
   } catch (error) {
     return { success: false, error: error.message };

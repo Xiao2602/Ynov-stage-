@@ -5,11 +5,21 @@ import { logActivity } from "../../Services/activityLogService.js";
 
 export async function handleCreateUser(req, res) {
   try {
-    const { email, password, displayName, role, department } = req.body;
+    const { email, password, displayName, role, department, className, assignedClass, assignedClasses, phone } = req.body;
     if (!email || !password || !displayName) {
       return res.status(400).json({ success: false, error: "Veuillez fournir un email, un mot de passe et un nom." });
     }
-    const result = await createUserService({ email, password, displayName, role, department });
+    const result = await createUserService({
+      email,
+      password,
+      displayName,
+      role,
+      department,
+      className,
+      assignedClass,
+      assignedClasses,
+      phone
+    });
     if (!result.success) return res.status(400).json(result);
     
     await logActivity(req.user.uid, 'create_user', { createdUid: result.data.uid, role }, req);
@@ -156,9 +166,16 @@ export async function handleAssignTeacherClass(req, res) {
     if (!teacherDoc.exists) return res.status(404).json({ success: false, error: "Professeur introuvable." });
     const teacherData = teacherDoc.data();
     if (teacherData.role !== "teacher") return res.status(400).json({ success: false, error: "L'utilisateur n'est pas un professeur." });
-    await teacherRef.update({ assignedClasses });
+    
+    await teacherRef.update({
+      assignedClasses,
+      assignedClass: assignedClasses.join(', '),
+      department: assignedClasses[0] || teacherData.department || '',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
     await logActivity(req.user.uid, 'assign_teacher_class', { teacherUid, assignedClasses }, req);
-    return res.status(200).json({ success: true, message: `${assignedClasses.length} classe(s) assignée(s).` });
+    return res.status(200).json({ success: true, message: `${assignedClasses.length} classe(s) assignée(s) avec succès.` });
   } catch (error) {
     console.error("Erreur handleAssignTeacherClass:", error);
     return res.status(500).json({ success: false, error: error.message });
