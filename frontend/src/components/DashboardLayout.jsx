@@ -164,6 +164,11 @@ export default function DashboardLayout() {
               {canAccess(absenceRoles.myAbsences, role) && <NavLink to="/absences/mes-absences" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
                 <div className="nav-icon"><IconCalendar /></div><span>{role === 'parent' ? parentAbsenceLabel : role === 'teacher' ? 'Mes absences déclarées' : 'Mes Absences'}</span>
               </NavLink>}
+              {(role === 'student' || role === 'parent') && (
+                <NavLink to="/planning" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
+                  <div className="nav-icon"><IconClock /></div><span>Mon planning</span>
+                </NavLink>
+              )}
               {canAccess(absenceRoles.requests, role) && <NavLink to="/absences/demandes" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
                 <div className="nav-icon"><IconInbox /></div><span>{staffRoles.includes(role) ? 'Absences à traiter' : 'Demandes'}</span>
               </NavLink>}
