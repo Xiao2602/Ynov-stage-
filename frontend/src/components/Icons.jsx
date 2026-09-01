@@ -687,3 +687,56 @@ export function IconRefreshCw({ size = 24, ...props }) {
     </svg>
   );
 }
+
+// Icône : ChevronLeft
+export const IconChevronLeft = (props) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    width="24"
+    height="24"
+    {...props}
+  >
+    <polyline points="15 18 9 12 15 6" />
+  </svg>
+);
+
+// Icône : ChevronRight
+export const IconChevronRight = (props) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    width="24"
+    height="24"
+    {...props}
+  >
+    <polyline points="9 18 15 12 9 6" />
+  </svg>
+);
+
+// Icône : MapPin (Salle / Lieu)
+export const IconMapPin = (props) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    width="24"
+    height="24"
+    {...props}
+  >
+    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+    <circle cx="12" cy="10" r="3" />
+  </svg>
+);
+
