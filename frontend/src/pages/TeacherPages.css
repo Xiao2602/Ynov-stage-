@@ -461,9 +461,21 @@
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-.schedule-course-card {
+/* Cluster Container for overlapping / stacked courses */
+.schedule-cluster-container {
   z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin: 3px 5px;
+  height: calc(100% - 6px);
+  box-sizing: border-box;
+}
+
+.schedule-course-card {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
   padding: 7px 9px;
   background: #f0fdfa;
   border: 1px solid #99f6e4;
@@ -475,16 +487,22 @@
   flex-direction: column;
   justify-content: space-between;
   box-sizing: border-box;
-  max-height: calc(100% - 6px);
-  min-width: 130px;
+  width: 100%;
   transition: all 0.15s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
+.schedule-course-card.multi-session-card {
+  padding: 5px 8px;
+  background: #f0fdfa;
+  border-left-width: 3.5px;
+}
+
 .schedule-course-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 14px rgba(13, 148, 136, 0.18);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(13, 148, 136, 0.2);
   border-color: #0d9488;
+  z-index: 5;
 }
 
 .course-card-topbar {

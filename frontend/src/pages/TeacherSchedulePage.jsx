@@ -407,8 +407,8 @@ export default function TeacherSchedulePage() {
     }
   };
 
-  // Layout propre avec pleine largeur lisible
-  const weekCoursesWithLayout = useMemo(() => {
+    // Regroupement intelligent des séances (séances uniques ou multiples/simultanées sur le même créneau)
+  const weekCourseClusters = useMemo(() => {
     try {
       const dayGroups = {};
       weekCourses.forEach((c) => {
@@ -418,50 +418,60 @@ export default function TeacherSchedulePage() {
         dayGroups[key].push({ ...c, pos });
       });
 
-      const result = [];
+      const clusters = [];
+
       Object.values(dayGroups).forEach((coursesInDay) => {
-        coursesInDay.sort((a, b) => (a.pos?.row || 0) - (b.pos?.row || 0));
+        // Trier par heure de début puis durée
+        const sorted = coursesInDay.slice().sort((a, b) => {
+          if (a.pos.row !== b.pos.row) return a.pos.row - b.pos.row;
+          return b.pos.span - a.pos.span;
+        });
 
-        coursesInDay.forEach((c, idx) => {
-          // Détecter un éventuel chevauchement réel sur la même tranche horaire
-          const overlapping = coursesInDay.filter((other, oIdx) => {
-            if (idx === oIdx) return true;
-            const aStart = c.pos?.row || 2;
-            const aEnd = aStart + (c.pos?.span || 2);
-            const bStart = other.pos?.row || 2;
-            const bEnd = bStart + (other.pos?.span || 2);
-            return aStart < bEnd && aEnd > bStart;
-          });
+        let currentCluster = null;
 
-          if (overlapping.length > 1) {
-            // Conflit rare : limiter à 2 sous-colonnes propres pour garder une lisibilité parfaite
-            const order = overlapping.findIndex((o) => (o.id || o.title) === (c.id || c.title));
-            const subCol = order % 2;
-            result.push({
-              ...c,
-              customLayout: {
-                width: 'calc(50% - 6px)',
-                marginLeft: subCol === 0 ? '3px' : 'calc(50% + 3px)',
-                zIndex: 3 + order
-              }
-            });
+        sorted.forEach((course) => {
+          const cStart = course.pos.row;
+          const cEnd = course.pos.row + course.pos.span;
+
+          if (!currentCluster) {
+            currentCluster = {
+              col: course.pos.col,
+              startRow: cStart,
+              endRow: cEnd,
+              courses: [course]
+            };
           } else {
-            // Pleine largeur par défaut
-            result.push({
-              ...c,
-              customLayout: {
-                width: 'calc(100% - 8px)',
-                margin: '3px 4px'
-              }
-            });
+            // Si le cours chevauche le cluster courant
+            if (cStart < currentCluster.endRow) {
+              currentCluster.courses.push(course);
+              currentCluster.endRow = Math.max(currentCluster.endRow, cEnd);
+            } else {
+              clusters.push(currentCluster);
+              currentCluster = {
+                col: course.pos.col,
+                startRow: cStart,
+                endRow: cEnd,
+                courses: [course]
+              };
+            }
           }
         });
+
+        if (currentCluster) {
+          clusters.push(currentCluster);
+        }
       });
 
-      return result;
+      return clusters.map((cl, idx) => ({
+        id: `cluster-${cl.col}-${cl.startRow}-${idx}`,
+        col: cl.col,
+        row: cl.startRow,
+        span: cl.endRow - cl.startRow,
+        courses: cl.courses
+      }));
     } catch (err) {
-      console.error('Erreur layout cours semaine:', err);
-      return weekCourses.map((c) => ({ ...c, pos: getCourseWeekPosition(c), customLayout: {} }));
+      console.error('Erreur clustering cours semaine:', err);
+      return [];
     }
   }, [weekCourses, weekDays]);
 
@@ -801,37 +811,43 @@ export default function TeacherSchedulePage() {
               </React.Fragment>
             ))}
 
-            {/* Placement des cours de la semaine */}
-            {weekCoursesWithLayout.map((course, idx) => {
-              const pos = course.pos || getCourseWeekPosition(course);
-              return (
-                <article
-                  key={`wc-${course.id || idx}`}
-                  className="schedule-course-card"
-                  style={{
-                    gridColumn: pos.col,
-                    gridRow: `${pos.row} / span ${pos.span}`,
-                    ...(course.customLayout || {})
-                  }}
-                  onClick={() => setSelectedCourseModal(course)}
-                >
-                  <div className="course-card-topbar">
-                    <span className="course-time-tag">
-                      {course.start} ({course.duration}h)
-                    </span>
-                    <span className="course-class-tag" title={course.group}>
-                      {formatClassAbbrev(course.group)}
-                    </span>
-                  </div>
-                  <strong className="course-title-text">{course.title}</strong>
-                  <div className="course-card-bottombar">
-                    <span className="course-room-text">
-                      <IconMapPin style={{ width: '11px', height: '11px' }} /> {course.room || 'Salle 402'}
-                    </span>
-                  </div>
-                </article>
-              );
-            })}
+            {/* Placement des cours de la semaine (gestion propre des séances uniques ou simultanées) */}
+            {weekCourseClusters.map((cluster) => (
+              <div
+                key={cluster.id}
+                className="schedule-cluster-container"
+                style={{
+                  gridColumn: cluster.col,
+                  gridRow: `${cluster.row} / span ${cluster.span}`
+                }}
+              >
+                {cluster.courses.map((course, idx) => {
+                  const isMulti = cluster.courses.length > 1;
+                  return (
+                    <article
+                      key={`wc-${course.id || idx}`}
+                      className={`schedule-course-card ${isMulti ? 'multi-session-card' : ''}`}
+                      onClick={() => setSelectedCourseModal(course)}
+                    >
+                      <div className="course-card-topbar">
+                        <span className="course-time-tag">
+                          {course.start} ({course.duration}h)
+                        </span>
+                        <span className="course-class-tag" title={course.group}>
+                          {formatClassAbbrev(course.group)}
+                        </span>
+                      </div>
+                      <strong className="course-title-text">{course.title}</strong>
+                      <div className="course-card-bottombar">
+                        <span className="course-room-text">
+                          <IconMapPin style={{ width: '11px', height: '11px' }} /> {course.room || 'Salle 402'}
+                        </span>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ))}
           </div>
 
           {weekCourses.length === 0 && (
