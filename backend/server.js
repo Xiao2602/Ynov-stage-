@@ -468,6 +468,101 @@ app.post(
   }
 );
 
+// ============================================================
+// PLANNING ÉTUDIANT (Agrégation des cours de la promotion de l'étudiant)
+// ============================================================
+app.get(
+  "/api/plannings/student/my",
+  authenticateToken,
+  async (req, res) => {
+    console.log("📥 [GET] /api/plannings/student/my for user:", req.user.uid);
+    try {
+      // 1. Récupérer le document de l'étudiant
+      const studentDoc = await adminDb.collection("users").doc(req.user.uid).get();
+      if (!studentDoc.exists) {
+        return res.status(404).json({ success: false, error: "Profil utilisateur introuvable." });
+      }
+      const studentData = studentDoc.data();
+      const studentClass = String(studentData.className || studentData.department || '').trim();
+
+      if (!studentClass) {
+        return res.status(200).json({
+          success: true,
+          studentClass: '',
+          courses: [],
+          message: "Aucune classe assignée à votre profil étudiant."
+        });
+      }
+
+      // 2. Récupérer tous les plannings des professeurs
+      const planningsSnapshot = await adminDb.collection("plannings").get();
+
+      // Récupérer les profils des professeurs
+      const teacherUids = [];
+      planningsSnapshot.forEach((doc) => {
+        if (doc.id) teacherUids.push(doc.id);
+      });
+
+      const teachersMap = {};
+      if (teacherUids.length > 0) {
+        for (let i = 0; i < teacherUids.length; i += 30) {
+          const batch = teacherUids.slice(i, i + 30);
+          const uSnap = await adminDb.collection("users").where(admin.firestore.FieldPath.documentId(), 'in', batch).get();
+          uSnap.forEach((uDoc) => {
+            const uData = uDoc.data();
+            teachersMap[uDoc.id] = uData.displayName || uData.email || 'Professeur';
+          });
+        }
+      }
+
+      const matchedCourses = [];
+      const studentClassNorm = studentClass.toLowerCase().replace(/\s+/g, ' ');
+
+      planningsSnapshot.forEach((pDoc) => {
+        const pData = pDoc.data();
+        const teacherName = teachersMap[pDoc.id] || teachersMap[pData.teacherUid] || 'Professeur';
+        const rawCourses = Array.isArray(pData.courses) ? pData.courses : [];
+
+        rawCourses.forEach((c) => {
+          const groupNorm = String(c.group || '').toLowerCase().replace(/\s+/g, ' ').trim();
+          
+          const isMatch = groupNorm === studentClassNorm ||
+            (groupNorm && studentClassNorm.includes(groupNorm)) ||
+            (studentClassNorm && groupNorm.includes(studentClassNorm));
+
+          if (isMatch) {
+            matchedCourses.push({
+              ...c,
+              teacherUid: pDoc.id,
+              teacherName
+            });
+          }
+        });
+      });
+
+      // Trier chronologiquement
+      matchedCourses.sort((a, b) => {
+        if (a.date && b.date) {
+          const comp = a.date.localeCompare(b.date);
+          if (comp !== 0) return comp;
+        }
+        return (a.start || '').localeCompare(b.start || '');
+      });
+
+      return res.status(200).json({
+        success: true,
+        studentClass,
+        courses: matchedCourses,
+        totalCourses: matchedCourses.length,
+        totalHours: matchedCourses.reduce((acc, c) => acc + (Number(c.duration) || 2), 0)
+      });
+    } catch (error) {
+      console.error("❌ Erreur planning étudiant:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
 app.get(
   "/api/plannings/:teacherUid",
   authenticateToken,
