@@ -19,7 +19,8 @@ import {
   exportAbsencesToPdfService,
   teacherDeclareAbsenceService,
   justifyAbsenceService,
-  archiveAbsencesService   
+  archiveAbsencesService,
+  transformLatesToAbsenceService
 } from "../Services/absenceService.js";
 
 export async function handleSubmitAbsence(req, res) {

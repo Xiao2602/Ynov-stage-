@@ -21,7 +21,8 @@ const getValidToken = async () => {
 export async function apiFetch(endpoint, options = {}) {
   try {
     const token = await getValidToken();
-    const url = `${API_URL}${endpoint}`;
+    const cleanEndpoint = endpoint.startsWith('/api/') ? endpoint.substring(4) : endpoint;
+    const url = `${API_URL}${cleanEndpoint.startsWith('/') ? '' : '/'}${cleanEndpoint}`;
     console.log(`🌐 [apiFetch] ${options.method || 'GET'} ${url}`);
     
     const headers = {
@@ -78,7 +79,8 @@ export async function apiFetch(endpoint, options = {}) {
 export async function apiFetchBlob(endpoint, options = {}) {
   try {
     const token = await getValidToken();
-    const url = `${API_URL}${endpoint}`;
+    const cleanEndpoint = endpoint.startsWith('/api/') ? endpoint.substring(4) : endpoint;
+    const url = `${API_URL}${cleanEndpoint.startsWith('/') ? '' : '/'}${cleanEndpoint}`;
     console.log(`🌐 [apiFetchBlob] ${options.method || 'GET'} ${url}`);
     
     const headers = {
