@@ -14,6 +14,7 @@ import ProfilePage from './pages/ProfilePage';
 import ActivityLogsPage from './pages/ActivityLogsPage';
 import TeacherStudentsPage from './pages/TeacherStudentsPage';
 import TeacherSchedulePage from './pages/TeacherSchedulePage';
+import StudentSchedulePage from './pages/StudentSchedulePage';
 import TeacherAttendancePage from './pages/TeacherAttendancePage';
 import AdministrativeDocumentsPage from './pages/AdministrativeDocumentsPage';
 import DocumentRequestsPage from './pages/DocumentRequestsPage';
@@ -122,6 +123,8 @@ export default function App() {
             <Route element={<StudentParentRoute />}>
               <Route path="/documents/demandes" element={<DocumentRequestsPage />} />
             </Route>
+            <Route path="/planning" element={<StudentSchedulePage />} />
+            <Route path="/etudiant/planning" element={<StudentSchedulePage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
