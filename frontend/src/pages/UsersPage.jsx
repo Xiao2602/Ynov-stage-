@@ -880,10 +880,10 @@ export default function UsersPage() {
               <col style={{ width: '19%' }} />
               <col style={{ width: '11%' }} />
               <col style={{ width: '11%' }} />
-              <col style={{ width: '22%' }} />
+              <col style={{ width: '21%' }} />
               <col style={{ width: '10%' }} />
               <col style={{ width: '8%' }} />
-              <col style={{ width: '72px' }} />
+              <col style={{ width: '84px' }} />
             </colgroup>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
@@ -1022,12 +1022,12 @@ export default function UsersPage() {
                         </span>
                       </td>
 
-                      {/* 8. Actions (3 on 3 grid, exactly 64px width, fits in 72px column) */}
+                      {/* 8. Actions (3 on 3 grid, 24px +20% size, fits in 84px column) */}
                       <td style={{ padding: '6px 4px', textAlign: 'right' }}>
                         <div style={{
                           display: 'grid',
-                          gridTemplateColumns: 'repeat(3, 20px)',
-                          gap: '2px',
+                          gridTemplateColumns: 'repeat(3, 24px)',
+                          gap: '3px',
                           justifyContent: 'end'
                         }}>
                           {/* Row 1, Col 1: Détails */}
@@ -1037,9 +1037,9 @@ export default function UsersPage() {
                             title="Voir les détails complets"
                             style={{
                               cursor: 'pointer',
-                              width: '20px',
-                              height: '20px',
-                              borderRadius: '4px',
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '5px',
                               border: '1px solid #e2e8f0',
                               background: '#fff',
                               color: '#475569',
@@ -1049,7 +1049,7 @@ export default function UsersPage() {
                               padding: 0
                             }}
                           >
-                            <IconEye style={{ width: '10px', height: '10px' }} />
+                            <IconEye style={{ width: '12px', height: '12px' }} />
                           </button>
 
                           {/* Row 1, Col 2: Modifier */}
@@ -1059,9 +1059,9 @@ export default function UsersPage() {
                             title="Modifier l'utilisateur"
                             style={{
                               cursor: 'pointer',
-                              width: '20px',
-                              height: '20px',
-                              borderRadius: '4px',
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '5px',
                               border: '1px solid #e2e8f0',
                               background: '#fff',
                               color: '#0284c7',
@@ -1071,7 +1071,7 @@ export default function UsersPage() {
                               padding: 0
                             }}
                           >
-                            <IconEdit style={{ width: '10px', height: '10px' }} />
+                            <IconEdit style={{ width: '12px', height: '12px' }} />
                           </button>
 
                           {/* Row 1, Col 3: Rôle */}
@@ -1081,9 +1081,9 @@ export default function UsersPage() {
                             title="Changer le rôle"
                             style={{
                               cursor: 'pointer',
-                              width: '20px',
-                              height: '20px',
-                              borderRadius: '4px',
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '5px',
                               border: '1px solid #e2e8f0',
                               background: '#fff',
                               color: '#6366f1',
@@ -1093,7 +1093,7 @@ export default function UsersPage() {
                               padding: 0
                             }}
                           >
-                            <IconDots style={{ width: '10px', height: '10px' }} />
+                            <IconDots style={{ width: '12px', height: '12px' }} />
                           </button>
 
                           {/* Row 2, Col 1: Assigner (Prof) ou Placeholder */}
@@ -1104,9 +1104,9 @@ export default function UsersPage() {
                               title="Assigner des classes"
                               style={{
                                 cursor: 'pointer',
-                                width: '20px',
-                                height: '20px',
-                                borderRadius: '4px',
+                                width: '24px',
+                                height: '24px',
+                                borderRadius: '5px',
                                 border: '1px solid #ccfbf1',
                                 background: '#f0fdfa',
                                 color: '#0d9488',
@@ -1116,10 +1116,10 @@ export default function UsersPage() {
                                 padding: 0
                               }}
                             >
-                              <IconFolder style={{ width: '10px', height: '10px' }} />
+                              <IconFolder style={{ width: '12px', height: '12px' }} />
                             </button>
                           ) : (
-                            <div style={{ width: '20px', height: '20px' }} />
+                            <div style={{ width: '24px', height: '24px' }} />
                           )}
 
                           {/* Row 2, Col 2: Suspendre / Réactiver */}
@@ -1129,9 +1129,9 @@ export default function UsersPage() {
                             title={isDisabled ? "Réactiver le compte" : "Suspendre le compte"}
                             style={{
                               cursor: 'pointer',
-                              width: '20px',
-                              height: '20px',
-                              borderRadius: '4px',
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '5px',
                               border: `1px solid ${isDisabled ? '#bbf7d0' : '#fed7aa'}`,
                               background: isDisabled ? '#f0fdf4' : '#fff7ed',
                               color: isDisabled ? '#16a34a' : '#d97706',
@@ -1142,12 +1142,12 @@ export default function UsersPage() {
                             }}
                           >
                             {isDisabled ? (
-                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                                 <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
                               </svg>
                             ) : (
-                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                               </svg>
@@ -1161,9 +1161,9 @@ export default function UsersPage() {
                             title="Supprimer définitivement"
                             style={{
                               cursor: 'pointer',
-                              width: '20px',
-                              height: '20px',
-                              borderRadius: '4px',
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '5px',
                               border: '1px solid #fecdd3',
                               background: '#fff1f2',
                               color: '#e11d48',
@@ -1173,7 +1173,7 @@ export default function UsersPage() {
                               padding: 0
                             }}
                           >
-                            <IconTrash style={{ width: '10px', height: '10px' }} />
+                            <IconTrash style={{ width: '12px', height: '12px' }} />
                           </button>
                         </div>
                       </td>
