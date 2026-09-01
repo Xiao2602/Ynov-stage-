@@ -876,14 +876,14 @@ export default function UsersPage() {
         <div style={{ width: '100%', marginTop: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
           <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
+              <col style={{ width: '17%' }} />
               <col style={{ width: '18%' }} />
-              <col style={{ width: '19%' }} />
-              <col style={{ width: '11%' }} />
-              <col style={{ width: '11%' }} />
-              <col style={{ width: '14%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '13%' }} />
               <col style={{ width: '10%' }} />
               <col style={{ width: '8%' }} />
-              <col style={{ width: '110px' }} />
+              <col style={{ width: '14%' }} />
             </colgroup>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
@@ -1022,13 +1022,14 @@ export default function UsersPage() {
                         </span>
                       </td>
 
-                      {/* 8. Actions (3 on 3 grid, comfortably centered with extra space) */}
+                      {/* 8. Actions (3 on 3 grid, 28px buttons +20% enlarged, 14% col width) */}
                       <td style={{ padding: '6px 8px', textAlign: 'center' }}>
                         <div style={{
                           display: 'grid',
-                          gridTemplateColumns: 'repeat(3, 24px)',
-                          gap: '3px',
-                          justifyContent: 'center'
+                          gridTemplateColumns: 'repeat(3, 28px)',
+                          gap: '4px',
+                          justifyContent: 'center',
+                          alignItems: 'center'
                         }}>
                           {/* Row 1, Col 1: Détails */}
                           <button
@@ -1037,9 +1038,9 @@ export default function UsersPage() {
                             title="Voir les détails complets"
                             style={{
                               cursor: 'pointer',
-                              width: '24px',
-                              height: '24px',
-                              borderRadius: '5px',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '6px',
                               border: '1px solid #e2e8f0',
                               background: '#fff',
                               color: '#475569',
@@ -1049,7 +1050,7 @@ export default function UsersPage() {
                               padding: 0
                             }}
                           >
-                            <IconEye style={{ width: '12px', height: '12px' }} />
+                            <IconEye style={{ width: '14px', height: '14px' }} />
                           </button>
 
                           {/* Row 1, Col 2: Modifier */}
@@ -1059,9 +1060,9 @@ export default function UsersPage() {
                             title="Modifier l'utilisateur"
                             style={{
                               cursor: 'pointer',
-                              width: '24px',
-                              height: '24px',
-                              borderRadius: '5px',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '6px',
                               border: '1px solid #e2e8f0',
                               background: '#fff',
                               color: '#0284c7',
@@ -1071,7 +1072,7 @@ export default function UsersPage() {
                               padding: 0
                             }}
                           >
-                            <IconEdit style={{ width: '12px', height: '12px' }} />
+                            <IconEdit style={{ width: '14px', height: '14px' }} />
                           </button>
 
                           {/* Row 1, Col 3: Rôle */}
@@ -1081,9 +1082,9 @@ export default function UsersPage() {
                             title="Changer le rôle"
                             style={{
                               cursor: 'pointer',
-                              width: '24px',
-                              height: '24px',
-                              borderRadius: '5px',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '6px',
                               border: '1px solid #e2e8f0',
                               background: '#fff',
                               color: '#6366f1',
@@ -1093,7 +1094,7 @@ export default function UsersPage() {
                               padding: 0
                             }}
                           >
-                            <IconDots style={{ width: '12px', height: '12px' }} />
+                            <IconDots style={{ width: '14px', height: '14px' }} />
                           </button>
 
                           {/* Row 2, Col 1: Assigner (Prof) ou Placeholder */}
@@ -1104,9 +1105,9 @@ export default function UsersPage() {
                               title="Assigner des classes"
                               style={{
                                 cursor: 'pointer',
-                                width: '24px',
-                                height: '24px',
-                                borderRadius: '5px',
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '6px',
                                 border: '1px solid #ccfbf1',
                                 background: '#f0fdfa',
                                 color: '#0d9488',
@@ -1116,10 +1117,10 @@ export default function UsersPage() {
                                 padding: 0
                               }}
                             >
-                              <IconFolder style={{ width: '12px', height: '12px' }} />
+                              <IconFolder style={{ width: '14px', height: '14px' }} />
                             </button>
                           ) : (
-                            <div style={{ width: '24px', height: '24px' }} />
+                            <div style={{ width: '28px', height: '28px' }} />
                           )}
 
                           {/* Row 2, Col 2: Suspendre / Réactiver */}
@@ -1129,9 +1130,9 @@ export default function UsersPage() {
                             title={isDisabled ? "Réactiver le compte" : "Suspendre le compte"}
                             style={{
                               cursor: 'pointer',
-                              width: '24px',
-                              height: '24px',
-                              borderRadius: '5px',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '6px',
                               border: `1px solid ${isDisabled ? '#bbf7d0' : '#fed7aa'}`,
                               background: isDisabled ? '#f0fdf4' : '#fff7ed',
                               color: isDisabled ? '#16a34a' : '#d97706',
@@ -1142,12 +1143,12 @@ export default function UsersPage() {
                             }}
                           >
                             {isDisabled ? (
-                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                                 <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
                               </svg>
                             ) : (
-                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                               </svg>
@@ -1161,9 +1162,9 @@ export default function UsersPage() {
                             title="Supprimer définitivement"
                             style={{
                               cursor: 'pointer',
-                              width: '24px',
-                              height: '24px',
-                              borderRadius: '5px',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '6px',
                               border: '1px solid #fecdd3',
                               background: '#fff1f2',
                               color: '#e11d48',
@@ -1173,7 +1174,7 @@ export default function UsersPage() {
                               padding: 0
                             }}
                           >
-                            <IconTrash style={{ width: '12px', height: '12px' }} />
+                            <IconTrash style={{ width: '13px', height: '13px' }} />
                           </button>
                         </div>
                       </td>
