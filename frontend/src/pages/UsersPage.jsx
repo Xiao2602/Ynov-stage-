@@ -873,7 +873,7 @@ export default function UsersPage() {
           </div>
         </div>
 
-        <div style={{ width: '100%', marginTop: '16px' }}>
+        <div style={{ width: '100%', marginTop: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
           <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: '18%' }} />
@@ -887,13 +887,13 @@ export default function UsersPage() {
             </colgroup>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px' }}>Utilisateur</th>
-                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px' }}>Email</th>
-                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px' }}>Rôle</th>
-                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px' }}>Classe (étudiant)</th>
-                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px' }}>Classe(s) assignée(s) (prof)</th>
-                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px' }}>Date création</th>
-                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px' }}>Statut</th>
+                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Utilisateur</th>
+                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Email</th>
+                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Rôle</th>
+                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Classe (étudiant)</th>
+                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Classe(s) assignée(s) (prof)</th>
+                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Date création</th>
+                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Statut</th>
                 <th style={{ padding: '10px 8px', textAlign: 'right', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px' }}>Actions</th>
               </tr>
             </thead>
@@ -916,9 +916,9 @@ export default function UsersPage() {
                       : [];
 
                   return (
-                    <tr key={user.uid || user.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <tr key={user.uid || user.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
                       {/* 1. Utilisateur */}
-                      <td style={{ padding: '8px 6px', overflow: 'hidden' }}>
+                      <td style={{ padding: '8px 6px', overflow: 'hidden', borderRight: '1px solid #e2e8f0' }}>
                         <div className="user-cell" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                           <div className="mini-avatar" style={{ flexShrink: 0, width: '26px', height: '26px', fontSize: '0.72rem' }}>{getInitials(displayName)}</div>
                           <span style={{ fontWeight: '500', color: '#1e293b', fontSize: '0.82rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={displayName}>{displayName}</span>
@@ -926,12 +926,12 @@ export default function UsersPage() {
                       </td>
 
                       {/* 2. Email */}
-                      <td style={{ color: '#64748b', fontSize: '0.78rem', padding: '8px 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={user.email || '—'}>
+                      <td style={{ color: '#64748b', fontSize: '0.78rem', padding: '8px 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', borderRight: '1px solid #e2e8f0' }} title={user.email || '—'}>
                         {user.email || '—'}
                       </td>
 
                       {/* 3. Rôle */}
-                      <td style={{ padding: '8px 6px' }}>
+                      <td style={{ padding: '8px 6px', borderRight: '1px solid #e2e8f0' }}>
                         <span style={{
                           display: 'inline-block',
                           padding: '2px 6px',
@@ -947,7 +947,7 @@ export default function UsersPage() {
                       </td>
 
                       {/* 4. Classe Étudiant */}
-                      <td style={{ padding: '8px 6px' }}>
+                      <td style={{ padding: '8px 6px', borderRight: '1px solid #e2e8f0' }}>
                         {isStudent && (user.className || user.department) ? (
                           <span
                             title={user.className || user.department}
@@ -972,7 +972,7 @@ export default function UsersPage() {
                       </td>
 
                       {/* 5. Classes Professeur (2 per line grid layout) */}
-                      <td style={{ padding: '8px 6px' }}>
+                      <td style={{ padding: '8px 6px', borderRight: '1px solid #e2e8f0' }}>
                         {isTeacher ? (
                           teacherClasses.length > 0 ? (
                             <div style={{
@@ -1013,10 +1013,10 @@ export default function UsersPage() {
                       </td>
 
                       {/* 6. Date création */}
-                      <td style={{ fontSize: '0.75rem', color: '#64748b', padding: '8px 6px', whiteSpace: 'nowrap' }}>{formatDate(user.createdAt)}</td>
+                      <td style={{ fontSize: '0.75rem', color: '#64748b', padding: '8px 6px', whiteSpace: 'nowrap', borderRight: '1px solid #e2e8f0' }}>{formatDate(user.createdAt)}</td>
 
                       {/* 7. Statut */}
-                      <td style={{ padding: '8px 6px' }}>
+                      <td style={{ padding: '8px 6px', borderRight: '1px solid #e2e8f0' }}>
                         <span className={`status-badge ${isDisabled ? 'urgent' : 'approved'}`} style={{ fontSize: '0.70rem', padding: '2px 6px', whiteSpace: 'nowrap' }}>
                           {isDisabled ? 'Inactif' : 'Actif'}
                         </span>
