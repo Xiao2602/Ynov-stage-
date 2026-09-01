@@ -9,9 +9,13 @@ export default function DashboardOverview() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const studentRoles = ['student', 'etudiant'];
+  const teacherRoles = ['teacher', 'professeur', 'enseignant'];
+  const adminRoles = ['admin', 'rh', 'administrateur', 'personnel', 'manager', 'employee'];
+
   useEffect(() => {
     const fetchStats = async () => {
-      if (!['admin', 'rh', 'administrateur', 'personnel'].includes(role)) {
+      if (!adminRoles.includes(role)) {
         return;
       }
       setLoading(true);
@@ -39,7 +43,7 @@ export default function DashboardOverview() {
   // ============================================================
 
   // --- Rôle Étudiant ---
-  if (role === 'etudiant') {
+  if (studentRoles.includes(role)) {
     return (
       <div className="dashboard-page-content">
         <div className="stats-grid">
@@ -92,7 +96,7 @@ export default function DashboardOverview() {
   }
 
   // --- Rôle Professeur ---
-  if (role === 'professeur') {
+  if (teacherRoles.includes(role)) {
     return (
       <div className="dashboard-page-content">
         <div className="stats-grid">
@@ -116,7 +120,7 @@ export default function DashboardOverview() {
   }
 
   // --- Rôle Admin / RH / Personnel (affichage des statistiques) ---
-  if (['admin', 'rh', 'administrateur', 'personnel'].includes(role)) {
+  if (adminRoles.includes(role)) {
     if (loading) {
       return (
         <div className="dashboard-page-content" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>

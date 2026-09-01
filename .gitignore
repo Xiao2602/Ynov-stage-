@@ -13,10 +13,13 @@ dist/
 
 
 # ==========================================
-# LOCAL STORAGE
+# LOCAL STORAGE & UPLOADS
 # ==========================================
 
 storage-local/
+backend/uploads/
+uploads/
+*.pdf
 
 
 # ==========================================

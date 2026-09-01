@@ -191,3 +191,65 @@ export async function getAllUsersService() {
     return { success: false, error: error.message };
   }
 }
+
+/**
+ * Mise à jour de son propre profil utilisateur
+ */
+export async function updateMyProfileService(uid, updateData) {
+  try {
+    const userRef = adminDb.collection("users").doc(uid);
+    const userDoc = await userRef.get();
+    if (!userDoc.exists) {
+      return { success: false, error: "Utilisateur non trouvé." };
+    }
+
+    const allowedFields = ["displayName", "phone", "department", "photoURL", "avatarUrl", "bio"];
+    const sanitizedData = {};
+    for (const key of Object.keys(updateData)) {
+      if (allowedFields.includes(key) && updateData[key] !== undefined) {
+        sanitizedData[key] = updateData[key];
+      }
+    }
+
+    sanitizedData.updatedAt = new Date().toISOString();
+
+    await userRef.update(sanitizedData);
+
+    if (sanitizedData.displayName) {
+      try {
+        await adminAuth.updateUser(uid, { displayName: sanitizedData.displayName });
+      } catch (authErr) {
+        console.warn("Mise à jour displayName Firebase Auth non bloquante:", authErr.message);
+      }
+    }
+
+    const updatedDoc = await userRef.get();
+    return { success: true, data: updatedDoc.data() };
+  } catch (error) {
+    return { success: false, error: "Erreur mise à jour profil : " + error.message };
+  }
+}
+
+/**
+ * Enregistrement de l'avatar utilisateur
+ */
+export async function uploadAvatarService(uid, avatarUrl) {
+  try {
+    const userRef = adminDb.collection("users").doc(uid);
+    await userRef.update({
+      photoURL: avatarUrl,
+      avatarUrl: avatarUrl,
+      updatedAt: new Date().toISOString()
+    });
+
+    try {
+      await adminAuth.updateUser(uid, { photoURL: avatarUrl });
+    } catch (authErr) {
+      console.warn("Mise à jour photoURL Firebase Auth non bloquante:", authErr.message);
+    }
+
+    return { success: true, avatarUrl };
+  } catch (error) {
+    return { success: false, error: "Erreur enregistrement avatar : " + error.message };
+  }
+}
