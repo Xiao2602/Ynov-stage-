@@ -349,6 +349,48 @@ app.get(
 // ASSIGNATION DE PLANNING (Personnel / Admin)
 // ============================================================
 
+
+function parseTimeToMinutes(timeStr) {
+  if (!timeStr) return 0;
+  const [h, m] = String(timeStr).split(':').map((v) => parseInt(v, 10) || 0);
+  return h * 60 + m;
+}
+
+function validatePlanningConflicts(courses) {
+  if (!Array.isArray(courses) || courses.length <= 1) {
+    return { valid: true };
+  }
+  const groups = {};
+  courses.forEach((c) => {
+    const key = (c.date && String(c.date).trim() !== '') 
+      ? `date:${String(c.date).trim()}` 
+      : `day:${String(c.day || 'Lundi').trim()}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(c);
+  });
+  const MIN_INTERVAL_HOURS = 3;
+  for (const [, groupCourses] of Object.entries(groups)) {
+    groupCourses.sort((a, b) => parseTimeToMinutes(a.start) - parseTimeToMinutes(b.start));
+    for (let i = 0; i < groupCourses.length - 1; i++) {
+      const c1 = groupCourses[i];
+      const c2 = groupCourses[i + 1];
+      const start1 = parseTimeToMinutes(c1.start || '08:00');
+      const dur1Hours = Math.max(Number(c1.duration) || MIN_INTERVAL_HOURS, MIN_INTERVAL_HOURS);
+      const end1 = start1 + dur1Hours * 60;
+      const start2 = parseTimeToMinutes(c2.start || '08:00');
+      if (start2 < end1) {
+        const dateLabel = c1.date || c1.day || 'date non précisée';
+        const diffHours = ((start2 - start1) / 60).toFixed(1).replace('.0', '');
+        return {
+          valid: false,
+          error: `Conflit d'horaire pour le professeur : Le cours "${c1.title || 'Sans titre'}" (${c1.start}) et "${c2.title || 'Sans titre'}" (${c2.start}) sont programmés le ${dateLabel} avec seulement ${diffHours}h d'intervalle. Un intervalle minimum de ${MIN_INTERVAL_HOURS}h est obligatoire entre chaque séance pour permettre la fin normale du premier cours.`
+        };
+      }
+    }
+  }
+  return { valid: true };
+}
+
 app.post(
   "/api/plannings/assign",
   authenticateToken,
