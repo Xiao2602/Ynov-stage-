@@ -368,40 +368,80 @@ export default function AssignPlanningPage() {
     }
   };
 
-  // Télécharger le Template Excel
+  // Télécharger le Template Excel Annuel Complet (88 séances réalistes)
   const downloadTemplate = () => {
     const templateData = [
       ['Date (AAAA-MM-JJ)', 'Jour', 'Heure début (HH:MM)', 'Durée (h)', 'Titre du cours', 'Classe', 'Salle']
     ];
 
-    // Exemples réalistes étalés sur l'année
-    templateData.push(['2026-09-14', 'Lundi', '09:00', 2, 'Architecture Web & MVC', 'Bachelor 3 - Génie Logiciel', 'Salle 402']);
-    templateData.push(['2026-09-15', 'Mardi', '10:00', 3, 'Bases de données NoSQL', 'Bachelor 3 - Intelligence Artificielle', 'Salle 204']);
-    templateData.push(['2026-09-21', 'Lundi', '09:00', 2, 'Architecture Web & MVC', 'Bachelor 3 - Génie Logiciel', 'Salle 402']);
-    templateData.push(['2026-09-22', 'Mardi', '10:00', 3, 'Bases de données NoSQL', 'Bachelor 3 - Intelligence Artificielle', 'Salle 204']);
-    templateData.push(['2026-10-05', 'Lundi', '14:00', 4, 'Atelier Projet Fil Rouge', 'Master 1 - Génie Logiciel', 'Lab 308']);
+    const fmt = (d) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    // Semestre 1 : Septembre 2026 à Janvier 2027 (16 semaines)
+    const s1Start = new Date(2026, 8, 14);
+    for (let w = 0; w < 16; w++) {
+      if (w === 7 || w === 14 || w === 15) continue; // Congés Toussaint & Noël
+
+      const monday = new Date(s1Start);
+      monday.setDate(s1Start.getDate() + w * 7);
+
+      templateData.push([fmt(monday), 'Lundi', '09:00', 3, 'Architecture Web & Microservices', 'Bachelor 3 - Génie Logiciel', 'Salle 402']);
+      templateData.push([fmt(monday), 'Lundi', '14:00', 3, 'DevOps & Conteneurisation Docker', 'Master 1 - Génie Logiciel', 'Lab 308']);
+
+      const tuesday = new Date(monday);
+      tuesday.setDate(monday.getDate() + 1);
+      templateData.push([fmt(tuesday), 'Mardi', '09:30', 3, 'Bases de données NoSQL & MongoDB', 'Bachelor 3 - Intelligence Artificielle', 'Salle 204']);
+
+      if (w % 2 === 0) {
+        const thursday = new Date(monday);
+        thursday.setDate(monday.getDate() + 3);
+        templateData.push([fmt(thursday), 'Jeudi', '13:30', 4, 'Sécurité des Systèmes & Réseaux', 'Master 1 - Cybersécurité', 'Salle 102']);
+      }
+    }
+
+    // Semestre 2 : Février 2027 à Juin 2027 (16 semaines)
+    const s2Start = new Date(2027, 1, 1);
+    for (let w = 0; w < 16; w++) {
+      if (w === 3 || w === 10) continue; // Congés Hiver & Printemps
+
+      const monday = new Date(s2Start);
+      monday.setDate(s2Start.getDate() + w * 7);
+
+      templateData.push([fmt(monday), 'Lundi', '09:00', 3, 'Frameworks Modernes & React / Node.js', 'Bachelor 3 - Génie Logiciel', 'Salle 402']);
+
+      const tuesday = new Date(monday);
+      tuesday.setDate(monday.getDate() + 1);
+      templateData.push([fmt(tuesday), 'Mardi', '10:00', 3, 'Machine Learning & Data Pipelines', 'Bachelor 3 - Intelligence Artificielle', 'Salle 204']);
+
+      const thursday = new Date(monday);
+      thursday.setDate(monday.getDate() + 3);
+      templateData.push([fmt(thursday), 'Jeudi', '14:00', 4, 'Atelier Projet Annuel & Soutenances', 'Master 1 - Génie Logiciel', 'Lab 308']);
+    }
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(templateData);
 
-    // Ajuster largeurs de colonnes
     ws['!cols'] = [
-      { wch: 18 }, // Date
-      { wch: 12 }, // Jour
-      { wch: 20 }, // Début
-      { wch: 12 }, // Durée
-      { wch: 30 }, // Titre
-      { wch: 35 }, // Classe
-      { wch: 15 }  // Salle
+      { wch: 20 },
+      { wch: 14 },
+      { wch: 22 },
+      { wch: 12 },
+      { wch: 42 },
+      { wch: 38 },
+      { wch: 16 }
     ];
 
-    XLSX.utils.book_append_sheet(wb, ws, 'Planning Annuel');
+    XLSX.utils.book_append_sheet(wb, ws, 'Planning 2026-2027');
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', 'template_planning_annuel.xlsx');
+    link.setAttribute('download', 'planning_annuel_2026_2027.xlsx');
     document.body.appendChild(link);
     link.click();
     link.remove();
