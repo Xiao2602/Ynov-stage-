@@ -250,7 +250,7 @@ export default function UsersPage() {
       "Rôle": getRoleLabel(user.role),
       "Département": user.department || '-',
       "Classe (Étudiant)": user.className || '-',
-      "Classe(s) Assignée(s) (Prof)": Array.isArray(user.assignedClasses) ? user.assignedClasses.join(', ') : (user.assignedClass || '-'),
+      "Classe (Prof)": Array.isArray(user.assignedClasses) ? user.assignedClasses.join(', ') : (user.assignedClass || '-'),
       "Téléphone": user.phone || '-',
       "Date de création": formatDate(user.createdAt),
       "Statut": user.disabled ? "Inactif / Suspendu" : "Actif"
@@ -891,7 +891,7 @@ export default function UsersPage() {
                 <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Email</th>
                 <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Rôle</th>
                 <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Classe (étudiant)</th>
-                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Classe(s) assignée(s) (prof)</th>
+                <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Classe (prof)</th>
                 <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Date création</th>
                 <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Statut</th>
                 <th style={{ padding: '10px 8px', textAlign: 'right', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px' }}>Actions</th>
