@@ -880,10 +880,10 @@ export default function UsersPage() {
               <col style={{ width: '19%' }} />
               <col style={{ width: '11%' }} />
               <col style={{ width: '11%' }} />
-              <col style={{ width: '21%' }} />
+              <col style={{ width: '14%' }} />
               <col style={{ width: '10%' }} />
               <col style={{ width: '8%' }} />
-              <col style={{ width: '84px' }} />
+              <col style={{ width: '110px' }} />
             </colgroup>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
@@ -894,7 +894,7 @@ export default function UsersPage() {
                 <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Classe (prof)</th>
                 <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Date création</th>
                 <th style={{ padding: '10px 8px', textAlign: 'left', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px', borderRight: '1px solid #e2e8f0' }}>Statut</th>
-                <th style={{ padding: '10px 8px', textAlign: 'right', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px' }}>Actions</th>
+                <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '0.70rem', fontWeight: 600, color: '#64748b', letterSpacing: '0.5px' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1022,13 +1022,13 @@ export default function UsersPage() {
                         </span>
                       </td>
 
-                      {/* 8. Actions (3 on 3 grid, 24px +20% size, fits in 84px column) */}
-                      <td style={{ padding: '6px 4px', textAlign: 'right' }}>
+                      {/* 8. Actions (3 on 3 grid, comfortably centered with extra space) */}
+                      <td style={{ padding: '6px 8px', textAlign: 'center' }}>
                         <div style={{
                           display: 'grid',
                           gridTemplateColumns: 'repeat(3, 24px)',
                           gap: '3px',
-                          justifyContent: 'end'
+                          justifyContent: 'center'
                         }}>
                           {/* Row 1, Col 1: Détails */}
                           <button
