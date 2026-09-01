@@ -20,24 +20,29 @@ export default function TeacherAttendancePage() {
   const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 1. Charger le planning du professeur
+    // 1. Charger le planning du professeur de façon sécurisée
   useEffect(() => {
     const fetchPlanning = async () => {
+      if (!user?.uid) return;
       try {
-        const data = await apiFetch(`/plannings/${user?.uid}`);
-        if (data.success && data.planning) {
-          setPlanning(data.planning);
-          if (data.planning.courses.length > 0) {
-            setSelectedCourseId(data.planning.courses[0].id || `${data.planning.courses[0].day}-${data.planning.courses[0].start}`);
+        const data = await apiFetch(`/plannings/${user.uid}`);
+        if (data && data.success) {
+          const rawPlanning = data.planning || (Array.isArray(data.plannings) && data.plannings[0]) || null;
+          if (rawPlanning && Array.isArray(rawPlanning.courses) && rawPlanning.courses.length > 0) {
+            setPlanning(rawPlanning);
+            setSelectedCourseId(rawPlanning.courses[0].id || `${rawPlanning.courses[0].day}-${rawPlanning.courses[0].start}`);
+          } else {
+            setPlanning(rawPlanning || null);
           }
         } else {
           setPlanning(null);
         }
       } catch (err) {
+        console.error('Erreur chargement planning attendance:', err);
         setError('Erreur chargement planning: ' + err.message);
       }
     };
-    if (user?.uid) fetchPlanning();
+    fetchPlanning();
   }, [user]);
 
   // 2. Charger les étudiants du professeur
