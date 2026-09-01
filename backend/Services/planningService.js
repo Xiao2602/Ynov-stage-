@@ -1,19 +1,20 @@
 import { adminDb } from "../firebaseAdmin.js";
+import admin from "firebase-admin";
 
 const COLLECTION_NAME = "plannings";
+const DAYS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
 /**
- * Récupère le planning d’un professeur
+ * Récupère le planning d'un professeur
  * @param {string} teacherUid 
  */
 export async function getPlanningService(teacherUid) {
   try {
-    const snapshot = await adminDb.collection(COLLECTION_NAME)
-      .where("teacherUid", "==", teacherUid)
-      .get();
-    const plannings = [];
-    snapshot.forEach(doc => plannings.push({ id: doc.id, ...doc.data() }));
-    return { success: true, plannings };
+    const doc = await adminDb.collection(COLLECTION_NAME).doc(teacherUid).get();
+    if (!doc.exists) {
+      return { success: true, plannings: [] };
+    }
+    return { success: true, plannings: [{ id: doc.id, ...doc.data() }] };
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -37,33 +38,63 @@ export async function upsertPlanningService(data, userId) {
       return { success: false, error: "Professeur introuvable." };
     }
 
-    // Vérifier si un planning existe déjà pour ce prof
-    const snapshot = await adminDb.collection(COLLECTION_NAME)
-      .where("teacherUid", "==", teacherUid)
-      .get();
+    const normalizedCourses = courses
+      .map((c, index) => {
+        let courseDate = c.date ? String(c.date).trim() : '';
+        let courseDay = c.day ? String(c.day).trim() : '';
+
+        if (courseDate && !courseDay) {
+          try {
+            const d = new Date(courseDate + 'T00:00:00');
+            if (!isNaN(d.getTime())) {
+              courseDay = DAYS_FR[d.getDay()] || 'Lundi';
+            }
+          } catch (_) {}
+        }
+
+        return {
+          id: c.id || Date.now() + index,
+          date: courseDate,
+          day: courseDay || 'Lundi',
+          start: c.start || '08:00',
+          duration: Number(c.duration) || 2,
+          title: String(c.title || '').trim(),
+          group: String(c.group || '').trim(),
+          room: String(c.room || '').trim()
+        };
+      })
+      .sort((a, b) => {
+        if (a.date && b.date) {
+          const comp = a.date.localeCompare(b.date);
+          if (comp !== 0) return comp;
+        }
+        return (a.start || '').localeCompare(b.start || '');
+      });
 
     const now = admin.firestore.FieldValue.serverTimestamp();
     const planningData = {
       teacherUid,
-      courses,
+      courses: normalizedCourses,
       type,
-      academicYear: academicYear || new Date().getFullYear() + "-" + (new Date().getFullYear() + 1),
+      academicYear: academicYear || (new Date().getFullYear() + '-' + (new Date().getFullYear() + 1)),
+      totalCourses: normalizedCourses.length,
+      totalHours: normalizedCourses.reduce((acc, c) => acc + (Number(c.duration) || 2), 0),
       updatedAt: now,
       updatedBy: userId
     };
 
-    if (snapshot.empty) {
-      // Créer un nouveau planning
-      const docRef = await adminDb.collection(COLLECTION_NAME).add({
+    const docRef = adminDb.collection(COLLECTION_NAME).doc(teacherUid);
+    const existingDoc = await docRef.get();
+
+    if (!existingDoc.exists) {
+      await docRef.set({
         ...planningData,
         createdAt: now
       });
-      return { success: true, message: "Planning créé.", id: docRef.id };
+      return { success: true, message: "Planning créé avec succès.", id: teacherUid };
     } else {
-      // Mettre à jour l'existant
-      const docRef = snapshot.docs[0].ref;
       await docRef.update(planningData);
-      return { success: true, message: "Planning mis à jour.", id: docRef.id };
+      return { success: true, message: "Planning mis à jour avec succès.", id: teacherUid };
     }
   } catch (error) {
     return { success: false, error: error.message };
