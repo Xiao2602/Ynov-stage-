@@ -1,5 +1,5 @@
-import { apiFetch } from './api';
+import { apiFetch } from '../api/api';
 
 export async function getCurrentUserFromBackend() {
-  return apiFetch('/api/auth/me');
+  return apiFetch('/auth/me');
 }

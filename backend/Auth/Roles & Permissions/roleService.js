@@ -6,7 +6,8 @@ const ALLOWED_ROLES = [
   "manager",
   "employee",
   "student",
-  "teacher"
+  "teacher",
+  "parent"
 ];
 
 /**

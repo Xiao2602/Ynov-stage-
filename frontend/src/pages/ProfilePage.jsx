@@ -92,25 +92,43 @@ export default function ProfilePage() {
 
   const handleSave = async () => {
     try {
-      const updateData = {
-        displayName: formData.name,
-        department: formData.department,
-        phone: formData.phone,
-      };
+      const isAdminOrStaff = ['admin', 'rh', 'employee', 'manager'].includes(role);
 
-      const result = await apiFetch(`/api/users/${user?.uid}`, {
-        method: 'PATCH',
-        body: JSON.stringify(updateData),
-      });
+      if (isAdminOrStaff) {
+        const result = await apiFetch(`/users/${user?.uid}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            displayName: formData.name,
+            department: formData.department,
+            phone: formData.phone,
+          }),
+        });
 
-      if (!result.success) throw new Error(result.error || 'Erreur');
-      setSuccessMessage('Vos informations ont été mises à jour.');
+        if (!result.success) throw new Error(result.error || 'Erreur');
+        setSuccessMessage('Vos informations ont été mises à jour avec succès.');
+      } else {
+        const result = await apiFetch('/profile/request', {
+          method: 'POST',
+          body: JSON.stringify({
+            requestedChanges: {
+              name: formData.name,
+              department: formData.department,
+              phone: formData.phone,
+            },
+            reason: 'Mise à jour demandée par l\'utilisateur'
+          }),
+        });
+
+        if (!result.success) throw new Error(result.error || 'Erreur');
+        setSuccessMessage('Votre demande de modification a été transmise à l\'administration pour validation.');
+      }
+
       setIsEditing(false);
       setIsSaved(true);
-      window.setTimeout(() => setIsSaved(false), 5000);
+      window.setTimeout(() => setIsSaved(false), 6000);
     } catch (error) {
       console.error("Erreur lors de l'enregistrement :", error);
-      alert("Une erreur est survenue lors de l'enregistrement de vos informations.");
+      alert("Une erreur est survenue lors de l'enregistrement : " + (error.message || error));
     }
   };
 

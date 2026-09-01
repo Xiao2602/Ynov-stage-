@@ -122,6 +122,7 @@ export default function App() {
             <Route element={<StudentParentRoute />}>
               <Route path="/documents/demandes" element={<DocumentRequestsPage />} />
             </Route>
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
           </Route>

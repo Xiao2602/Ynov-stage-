@@ -168,13 +168,13 @@ export default function UsersPage() {
       return;
     }
     const dataToExport = filteredUsers.map(user => ({
-      "Nom complet": user.displayName || '—',
-      "Email": user.email || '—',
+      "Nom complet": user.displayName || '-',
+      "Email": user.email || '-',
       "Rôle": getRoleLabel(user.role),
-      "Département": user.department || '—',
-      "Classe (Étudiant)": user.className || '—',
-      "Classe(s) Assignée(s) (Prof)": Array.isArray(user.assignedClasses) ? user.assignedClasses.join(', ') : (user.assignedClass || '—'),
-      "Téléphone": user.phone || '—',
+      "Département": user.department || '-',
+      "Classe (Étudiant)": user.className || '-',
+      "Classe(s) Assignée(s) (Prof)": Array.isArray(user.assignedClasses) ? user.assignedClasses.join(', ') : (user.assignedClass || '-'),
+      "Téléphone": user.phone || '-',
       "Date de création": formatDate(user.createdAt),
       "Statut": user.disabled ? "Inactif / Suspendu" : "Actif"
     }));
@@ -386,7 +386,16 @@ export default function UsersPage() {
   // MODIFICATION ROLE
   // ==========================================================
 
+  // ==========================================================
+  // MODIFICATION ROLE
+  // ==========================================================
+
   const handleChangeRole = async (user) => {
+    const uid = user.uid || user.id;
+    if (!uid) {
+      window.alert("Identifiant utilisateur manquant.");
+      return;
+    }
     const newRole = window.prompt(
       `Nouveau rôle pour ${user.displayName || user.email} :\n\n${roleOptions
         .map((r) => `${r.key} → ${r.label}`)
@@ -402,12 +411,12 @@ export default function UsersPage() {
     try {
       const result = await apiFetch('/roles/assign', {
         method: 'POST',
-        body: JSON.stringify({ uid: user.uid, role: normalizedRole }),
+        body: JSON.stringify({ uid, role: normalizedRole }),
       });
       if (!result?.success) {
         throw new Error(result?.error || 'Impossible de modifier le rôle.');
       }
-      window.alert(`Le rôle de ${user.displayName || user.email} a été modifié.`);
+      window.alert(`Le rôle de ${user.displayName || user.email} a été modifié en ${getRoleLabel(normalizedRole)}.`);
       await loadUsers();
     } catch (error) {
       console.error('Erreur modification rôle :', error);
@@ -420,18 +429,23 @@ export default function UsersPage() {
   // ==========================================================
 
   const handleSuspendUser = async (user) => {
+    const uid = user.uid || user.id;
+    if (!uid) {
+      window.alert("Identifiant utilisateur manquant.");
+      return;
+    }
     const newStatus = !user.disabled;
     const confirmMsg = newStatus
       ? `Suspendre le compte de ${user.displayName || user.email} ?`
       : `Réactiver le compte de ${user.displayName || user.email} ?`;
     if (!window.confirm(confirmMsg)) return;
     try {
-      const result = await apiFetch(`/users/${user.uid}/suspend`, {
+      const result = await apiFetch(`/users/${uid}/suspend`, {
         method: 'PATCH',
         body: JSON.stringify({ disabled: newStatus }),
       });
       if (!result.success) throw new Error(result.error || 'Erreur');
-      alert(result.message);
+      alert(result.message || (newStatus ? "Compte suspendu." : "Compte réactivé."));
       await loadUsers();
     } catch (error) {
       alert('Erreur : ' + error.message);
@@ -439,11 +453,16 @@ export default function UsersPage() {
   };
 
   const handleDeleteUser = async (user) => {
+    const uid = user.uid || user.id;
+    if (!uid) {
+      window.alert("Identifiant utilisateur manquant.");
+      return;
+    }
     if (!window.confirm(`Supprimer définitivement le compte de ${user.displayName || user.email} ?`)) return;
     try {
-      const result = await apiFetch(`/users/${user.uid}`, { method: 'DELETE' });
+      const result = await apiFetch(`/users/${uid}`, { method: 'DELETE' });
       if (!result.success) throw new Error(result.error || 'Erreur');
-      alert(result.message);
+      alert(result.message || "Compte utilisateur supprimé.");
       await loadUsers();
     } catch (error) {
       alert('Erreur : ' + error.message);
@@ -451,13 +470,17 @@ export default function UsersPage() {
   };
 
   const openAssignModal = (teacher) => {
-    setSelectedTeacher(teacher);
-    setSelectedClasses(teacher.assignedClasses || []);
+    const classes = Array.isArray(teacher.assignedClasses) && teacher.assignedClasses.length > 0
+      ? teacher.assignedClasses
+      : (teacher.assignedClass ? [teacher.assignedClass] : []);
+    setSelectedTeacher({ ...teacher, uid: teacher.uid || teacher.id });
+    setSelectedClasses(classes);
     setShowAssignModal(true);
   };
 
   const handleAssignClass = async (classes) => {
-    if (!selectedTeacher || !classes || classes.length === 0) {
+    const teacherUid = selectedTeacher?.uid || selectedTeacher?.id;
+    if (!teacherUid || !classes || classes.length === 0) {
       alert('Veuillez sélectionner au moins une classe.');
       return;
     }
@@ -466,12 +489,12 @@ export default function UsersPage() {
       const result = await apiFetch('/users/assign-teacher', {
         method: 'POST',
         body: JSON.stringify({
-          teacherUid: selectedTeacher.uid,
+          teacherUid,
           assignedClasses: classes
         }),
       });
       if (!result.success) throw new Error(result.error || 'Erreur');
-      alert(result.message);
+      alert(result.message || "Classes assignées avec succès.");
       setShowAssignModal(false);
       setSelectedTeacher(null);
       setSelectedClasses([]);
@@ -823,7 +846,9 @@ export default function UsersPage() {
                     </td>
                     <td>
                       {isTeacher ? (
-                        user.assignedClass ? (
+                        Array.isArray(user.assignedClasses) && user.assignedClasses.length > 0 ? (
+                          <span style={{ color: 'var(--ynov-cyan)', fontWeight: '500' }}>{user.assignedClasses.join(', ')}</span>
+                        ) : user.assignedClass ? (
                           <span style={{ color: 'var(--ynov-cyan)', fontWeight: '500' }}>{user.assignedClass}</span>
                         ) : (
                           <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Non assigné</span>
@@ -838,26 +863,26 @@ export default function UsersPage() {
                         {isDisabled ? 'Inactif' : 'Actif'}
                       </span>
                     </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                        <button className="table-action-btn" onClick={() => setViewingUser(user)} title="Voir les détails" style={{ cursor: 'pointer', padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }}>
+                    <td style={{ whiteSpace: 'nowrap', width: '1%' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <button className="table-action-btn" onClick={() => setViewingUser(user)} title="Voir les détails" style={{ cursor: 'pointer', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                           <IconEye className="action-icon" />
                         </button>
-                        <button className="table-action-btn" onClick={() => openEditModal(user)} title="Modifier les informations" style={{ cursor: 'pointer', padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }}>
+                        <button className="table-action-btn" onClick={() => openEditModal(user)} title="Modifier les informations" style={{ cursor: 'pointer', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                           ✏️
                         </button>
-                        <button className="table-action-btn" onClick={() => handleChangeRole(user)} title="Changer de rôle" style={{ cursor: 'pointer', padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }}>
+                        <button className="table-action-btn" onClick={() => handleChangeRole(user)} title="Changer de rôle" style={{ cursor: 'pointer', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                           <IconDots className="action-icon" />
                         </button>
                         {isTeacher && (
-                          <button className="table-action-btn" style={{ color: '#23b2a4', cursor: 'pointer', padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }} onClick={() => openAssignModal(user)} title="Assigner des classes">
+                          <button className="table-action-btn" style={{ color: '#23b2a4', cursor: 'pointer', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => openAssignModal(user)} title="Assigner des classes">
                             📚
                           </button>
                         )}
-                        <button className="table-action-btn" style={{ color: isDisabled ? '#10b981' : '#f59e0b', cursor: 'pointer', padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }} onClick={() => handleSuspendUser(user)} title={isDisabled ? "Réactiver le compte" : "Suspendre le compte"}>
+                        <button className="table-action-btn" style={{ color: isDisabled ? '#10b981' : '#f59e0b', cursor: 'pointer', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => handleSuspendUser(user)} title={isDisabled ? "Réactiver le compte" : "Suspendre le compte"}>
                           {isDisabled ? '🔓' : '🔒'}
                         </button>
-                        <button className="table-action-btn" style={{ color: '#ef4444', cursor: 'pointer', padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }} onClick={() => handleDeleteUser(user)} title="Supprimer définitivement">
+                        <button className="table-action-btn" style={{ color: '#ef4444', cursor: 'pointer', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => handleDeleteUser(user)} title="Supprimer définitivement">
                           🗑️
                         </button>
                       </div>
@@ -972,7 +997,7 @@ export default function UsersPage() {
               </div>
               <div className="modal-actions" style={{ marginTop: '16px' }}>
                 <button className="btn-secondary" onClick={() => setShowAssignModal(false)} disabled={isAssigning}>Annuler</button>
-                <button className="btn-primary" onClick={async () => { if (selectedClasses.length === 0) { alert('Veuillez sélectionner au moins une classe.'); return; } setIsAssigning(true); try { const result = await apiFetch('/users/assign-teacher', { method: 'POST', body: JSON.stringify({ teacherUid: selectedTeacher.uid, assignedClasses: selectedClasses }) }); if (!result.success) throw new Error(result.error || 'Erreur'); alert(result.message); setShowAssignModal(false); setSelectedTeacher(null); setSelectedClasses([]); await loadUsers(); } catch (error) { alert('Erreur : ' + error.message); } finally { setIsAssigning(false); } }} disabled={isAssigning || selectedClasses.length === 0}>
+                <button className="btn-primary" onClick={() => handleAssignClass(selectedClasses)} disabled={isAssigning || selectedClasses.length === 0}>
                   {isAssigning ? 'Assignation...' : `Assigner (${selectedClasses.length})`}
                 </button>
               </div>
@@ -989,7 +1014,7 @@ export default function UsersPage() {
               <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Modifier le compte</h3>
               <button className="modal-close" onClick={closeEditModal} disabled={isEditing} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#94a3b8' }}>×</button>
             </div>
-            <form onSubmit={async (e) => { e.preventDefault(); setIsEditing(true); try { const result = await apiFetch(`/users/${editingUser.uid}`, { method: 'PATCH', body: JSON.stringify(editFormData) }); if (!result.success) throw new Error(result.error || 'Erreur'); alert('Compte modifié avec succès.'); closeEditModal(); await loadUsers(); } catch (error) { alert('Erreur : ' + error.message); } finally { setIsEditing(false); } }}>
+            <form onSubmit={async (e) => { e.preventDefault(); setIsEditing(true); try { const uid = editingUser.uid || editingUser.id; const result = await apiFetch(`/users/${uid}`, { method: 'PATCH', body: JSON.stringify(editFormData) }); if (!result.success) throw new Error(result.error || 'Erreur'); alert('Compte modifié avec succès.'); closeEditModal(); await loadUsers(); } catch (error) { alert('Erreur : ' + error.message); } finally { setIsEditing(false); } }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="field-group"><label className="field-label">Nom complet</label><input className="field-input" type="text" value={editFormData.displayName || ''} onChange={(e) => setEditFormData({ ...editFormData, displayName: e.target.value })} /></div>
                 <div className="field-group"><label className="field-label">Email</label><input className="field-input" type="email" value={editFormData.email || ''} onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })} /></div>
