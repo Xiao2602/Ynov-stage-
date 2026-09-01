@@ -358,7 +358,7 @@ app.post(
     try {
       const { teacherUid, courses, academicYear } = req.body;
       if (!teacherUid || !courses || !Array.isArray(courses) || courses.length === 0) {
-        return res.status(400).json({ success: false, error: "Données invalides." });
+        return res.status(400).json({ success: false, error: "Données invalides : liste de cours requise." });
       }
 
       // Vérifier que le professeur existe
@@ -367,19 +367,51 @@ app.post(
         return res.status(404).json({ success: false, error: "Professeur introuvable." });
       }
 
-      // Sauvegarder le planning
+      const DAYS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+
+      // Normaliser et trier chronologiquement les cours
+      const normalizedCourses = courses
+        .map((c, index) => {
+          let courseDate = c.date ? String(c.date).trim() : '';
+          let courseDay = c.day ? String(c.day).trim() : '';
+
+          // Si la date est présente mais pas le jour, calculer le jour
+          if (courseDate && !courseDay) {
+            try {
+              const d = new Date(courseDate + 'T00:00:00');
+              if (!isNaN(d.getTime())) {
+                courseDay = DAYS_FR[d.getDay()] || 'Lundi';
+              }
+            } catch (_) {}
+          }
+
+          return {
+            id: c.id || Date.now() + index,
+            date: courseDate,
+            day: courseDay || 'Lundi',
+            start: c.start || '08:00',
+            duration: Number(c.duration) || 2,
+            title: String(c.title || '').trim(),
+            group: String(c.group || '').trim(),
+            room: String(c.room || '').trim()
+          };
+        })
+        .sort((a, b) => {
+          if (a.date && b.date) {
+            const comp = a.date.localeCompare(b.date);
+            if (comp !== 0) return comp;
+          }
+          return (a.start || '').localeCompare(b.start || '');
+        });
+
+      // Sauvegarder le planning complet de l'année
       const planningRef = adminDb.collection("plannings").doc(teacherUid);
       await planningRef.set({
         teacherUid,
-        courses: courses.map(c => ({
-          day: c.day,
-          start: c.start,
-          duration: c.duration || 2,
-          title: c.title,
-          group: c.group,
-          room: c.room || ''
-        })),
-        academicYear: academicYear || new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
+        courses: normalizedCourses,
+        academicYear: academicYear || (new Date().getFullYear() + '-' + (new Date().getFullYear() + 1)),
+        totalCourses: normalizedCourses.length,
+        totalHours: normalizedCourses.reduce((acc, c) => acc + (Number(c.duration) || 2), 0),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedBy: req.user.uid
       });
