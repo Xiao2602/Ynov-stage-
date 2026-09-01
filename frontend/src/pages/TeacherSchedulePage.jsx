@@ -519,6 +519,38 @@ export default function TeacherSchedulePage() {
 
   const safeCurDate = safeDate(currentDate);
 
+
+  // Vérifier si la période affichée correspond à la période actuelle
+  const isViewingCurrentPeriod = useMemo(() => {
+    const today = new Date();
+    const todayIso = formatDateIso(today);
+    if (viewMode === 'week') {
+      return weekDays.some((d) => d.isoDate === todayIso);
+    }
+    if (viewMode === 'month') {
+      const safeCur = safeDate(currentDate);
+      return safeCur.getFullYear() === today.getFullYear() && safeCur.getMonth() === today.getMonth();
+    }
+    if (viewMode === 'year') {
+      const safeCur = safeDate(currentDate);
+      return safeCur.getFullYear() === today.getFullYear();
+    }
+    return false;
+  }, [viewMode, weekDays, currentDate]);
+
+  const getResetButtonLabel = () => {
+    if (viewMode === 'week') {
+      return isViewingCurrentPeriod ? 'Cette semaine' : 'Revenir à cette semaine';
+    }
+    if (viewMode === 'month') {
+      return isViewingCurrentPeriod ? 'Ce mois-ci' : 'Revenir à ce mois';
+    }
+    if (viewMode === 'year') {
+      return isViewingCurrentPeriod ? 'Cette année' : 'Année en cours';
+    }
+    return "Aujourd'hui";
+  };
+
   return (
     <section className="teacher-page">
       {/* HEADER AVEC TITRE & BOUTONS DE VUES */}
@@ -595,13 +627,25 @@ export default function TeacherSchedulePage() {
       <div className="schedule-toolbar-card">
         <div className="toolbar-nav-row">
           <div className="nav-controls-group">
-            <button className="btn-nav" onClick={handlePrev} title="Précédent">
+            <button
+              className="btn-nav"
+              onClick={handlePrev}
+              title={viewMode === 'week' ? 'Semaine précédente' : viewMode === 'month' ? 'Mois précédent' : 'Année précédente'}
+            >
               <IconChevronLeft style={{ width: '16px', height: '16px' }} />
             </button>
-            <button className="btn-today" onClick={handleToday}>
-              Aujourd'hui
+            <button
+              className={`btn-today ${isViewingCurrentPeriod ? 'is-current-period' : ''}`}
+              onClick={handleToday}
+              title="Cliquer pour revenir à la période actuelle"
+            >
+              {getResetButtonLabel()}
             </button>
-            <button className="btn-nav" onClick={handleNext} title="Suivant">
+            <button
+              className="btn-nav"
+              onClick={handleNext}
+              title={viewMode === 'week' ? 'Semaine suivante' : viewMode === 'month' ? 'Mois suivant' : 'Année suivante'}
+            >
               <IconChevronRight style={{ width: '16px', height: '16px' }} />
             </button>
 
