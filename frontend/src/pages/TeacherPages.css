@@ -365,9 +365,9 @@
    ============================================================ */
 .teacher-week-grid {
   display: grid;
-  grid-template-columns: 75px repeat(5, minmax(150px, 1fr));
-  grid-template-rows: 50px repeat(4, 66px) 32px repeat(5, 66px);
-  min-width: 860px;
+  grid-template-columns: 80px repeat(5, minmax(170px, 1fr));
+  grid-template-rows: 52px repeat(4, 70px) 34px repeat(5, 70px);
+  min-width: 930px;
   position: relative;
   background: #ffffff;
 }
@@ -376,10 +376,10 @@
   display: grid;
   place-items: center;
   background: #f8fafc;
-  border-right: 1px solid #edf2f5;
-  border-bottom: 1px solid #edf2f5;
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
   color: #64748b;
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -390,35 +390,35 @@
   align-items: center;
   justify-content: center;
   background: #f8fafc;
-  border-right: 1px solid #edf2f5;
-  border-bottom: 1px solid #edf2f5;
-  padding: 6px;
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 8px 6px;
 }
 
 .week-header-day.today-col {
   background: #f0fdfa;
-  border-top: 2px solid #0d9488;
+  border-top: 3px solid #0d9488;
 }
 
 .day-name {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 700;
   color: #0f172a;
 }
 
 .day-date {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   color: #64748b;
-  margin-top: 1px;
+  margin-top: 2px;
 }
 
 .today-badge {
-  font-size: 0.6rem;
+  font-size: 0.62rem;
   font-weight: 700;
   color: #0d9488;
   background: #ccfbf1;
-  padding: 1px 4px;
-  border-radius: 3px;
+  padding: 1px 6px;
+  border-radius: 4px;
   margin-top: 2px;
 }
 
@@ -426,19 +426,19 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 8px;
+  padding-top: 10px;
   background: #f8fafc;
-  border-right: 1px solid #edf2f5;
-  border-bottom: 1px solid #edf2f5;
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid #f1f5f9;
   color: #64748b;
-  font-size: 0.7rem;
+  font-size: 0.74rem;
   font-weight: 700;
 }
 
 .week-grid-cell {
   background: #ffffff;
-  border-right: 1px solid #edf2f5;
-  border-bottom: 1px solid #edf2f5;
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid #f1f5f9;
   transition: background 0.1s ease;
 }
 
@@ -455,7 +455,7 @@
   border-bottom: 1.5px solid #cbd5e1;
   background: repeating-linear-gradient(-45deg, #f8fafc 0, #f8fafc 6px, #edf2f7 6px, #edf2f7 12px);
   color: #475569;
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
@@ -463,26 +463,27 @@
 
 .schedule-course-card {
   z-index: 2;
-  margin: 4px 6px;
-  padding: 6px 8px;
+  margin: 3px 5px;
+  padding: 7px 9px;
   background: #f0fdfa;
   border: 1px solid #99f6e4;
-  border-left: 3.5px solid #0d9488;
-  border-radius: 6px;
+  border-left: 4px solid #0d9488;
+  border-radius: 7px;
   cursor: pointer;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   box-sizing: border-box;
-  max-height: calc(100% - 8px);
+  max-height: calc(100% - 6px);
+  min-width: 130px;
   transition: all 0.15s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .schedule-course-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(13, 148, 136, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(13, 148, 136, 0.18);
   border-color: #0d9488;
 }
 
@@ -491,35 +492,35 @@
   justify-content: space-between;
   align-items: center;
   gap: 4px;
-  margin-bottom: 2px;
+  margin-bottom: 3px;
 }
 
 .course-time-tag {
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   font-weight: 700;
   color: #0f766e;
   background: #ffffff;
-  padding: 1px 4px;
-  border-radius: 3px;
+  padding: 1px 5px;
+  border-radius: 4px;
   border: 1px solid #ccfbf1;
   white-space: nowrap;
 }
 
 .course-class-tag {
-  font-size: 0.62rem;
+  font-size: 0.66rem;
   font-weight: 700;
   background: #ccfbf1;
   color: #115e59;
-  padding: 1px 4px;
-  border-radius: 3px;
+  padding: 1px 5px;
+  border-radius: 4px;
   white-space: nowrap;
 }
 
 .course-title-text {
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 700;
   color: #0f172a;
-  line-height: 1.2;
+  line-height: 1.25;
   margin: 2px 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -531,7 +532,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 .course-room-text {

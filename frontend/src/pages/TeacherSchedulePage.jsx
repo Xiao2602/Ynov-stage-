@@ -24,7 +24,7 @@ const MONTHS_FR = [
   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
 ];
 
-// Helper robuste pour garantir un objet Date valide sans jamais crasher
+// Helper pour garantir une Date valide
 function safeDate(val, fallback = new Date()) {
   if (!val) return fallback;
   if (val instanceof Date) {
@@ -52,7 +52,7 @@ function safeDate(val, fallback = new Date()) {
   return fallback;
 }
 
-// Helper pour formater en YYYY-MM-DD
+// Formate en YYYY-MM-DD
 function formatDateIso(d) {
   const safe = safeDate(d);
   const y = safe.getFullYear();
@@ -61,7 +61,7 @@ function formatDateIso(d) {
   return `${y}-${m}-${day}`;
 }
 
-// Helper pour trouver le lundi de la semaine
+// Calcule le lundi de la semaine
 function getMonday(d) {
   const safe = safeDate(d);
   const day = safe.getDay();
@@ -69,7 +69,7 @@ function getMonday(d) {
   return new Date(safe.getFullYear(), safe.getMonth(), diff);
 }
 
-// Helper pour formater une date en français lisible
+// Formate en français lisible (ex: "14 sept. 2026")
 function formatFrenchDateDisplay(val) {
   if (!val) return '';
   try {
@@ -85,7 +85,7 @@ function formatFrenchDateDisplay(val) {
   }
 }
 
-// Helper pour abréviation de classe (ex: "Bachelor 3 - Génie Logiciel" -> "B3 GL")
+// Abréviation de classe pour badge lisible
 function formatClassAbbrev(className = '') {
   if (!className) return '—';
   let str = String(className).trim();
@@ -114,10 +114,10 @@ export default function TeacherSchedulePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Mode d'affichage : 'week' | 'month' | 'year' | 'list'
+  // Mode de vue : 'week' | 'month' | 'year' | 'list'
   const [viewMode, setViewMode] = useState('week');
 
-  // Date de référence pour la navigation
+  // Date courante de navigation
   const [currentDate, setCurrentDate] = useState(new Date());
 
   // Filtre d'intervalle personnalisé
@@ -127,10 +127,10 @@ export default function TeacherSchedulePage() {
   const [classFilter, setClassFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Modal de détails d'une séance
+  // Modal de détails de cours
   const [selectedCourseModal, setSelectedCourseModal] = useState(null);
 
-  // 1. Charger le planning du professeur
+  // 1. Charger le planning depuis le backend
   useEffect(() => {
     const fetchPlanning = async () => {
       if (!user?.uid) return;
@@ -165,11 +165,14 @@ export default function TeacherSchedulePage() {
               courses: normalizedCourses
             });
 
-            // Caler la date initiale sur le premier cours si disponible
+            // Caler automatiquement la vue sur le premier cours si aujourd'hui est hors période
             const withDates = normalizedCourses.filter((c) => c.date);
             if (withDates.length > 0) {
               const firstDate = safeDate(withDates[0].date);
-              setCurrentDate(firstDate);
+              const now = new Date();
+              if (now < firstDate || now.getFullYear() < firstDate.getFullYear()) {
+                setCurrentDate(firstDate);
+              }
             }
           } else {
             setPlanning(null);
@@ -188,12 +191,12 @@ export default function TeacherSchedulePage() {
     fetchPlanning();
   }, [user]);
 
-  // Liste brute normalisée de tous les cours
+  // Liste de tous les cours normalisés
   const allCourses = useMemo(() => {
     return Array.isArray(planning?.courses) ? planning.courses : [];
   }, [planning]);
 
-  // Liste de toutes les classes distinctes enseignées
+  // Liste des classes distinctes
   const availableClasses = useMemo(() => {
     const set = new Set();
     allCourses.forEach((c) => {
@@ -202,7 +205,12 @@ export default function TeacherSchedulePage() {
     return Array.from(set).sort();
   }, [allCourses]);
 
-  // Filtrage global par intervalle, recherche et classe
+  // Vérifier si le planning contient des dates de calendrier explicites
+  const hasExplicitDates = useMemo(() => {
+    return allCourses.some((c) => c.date && c.date.trim() !== '');
+  }, [allCourses]);
+
+  // Filtrage global (classe, recherche textuelle, intervalle de dates)
   const filteredCourses = useMemo(() => {
     return allCourses.filter((c) => {
       // Filtre de classe
@@ -228,7 +236,7 @@ export default function TeacherSchedulePage() {
     });
   }, [allCourses, classFilter, searchTerm, isIntervalActive, customStartDate, customEndDate]);
 
-  // Statistiques de la période active
+  // Statistiques de la période sélectionnée
   const periodStats = useMemo(() => {
     const totalSessions = filteredCourses.length;
     const totalHours = filteredCourses.reduce((acc, c) => acc + (Number(c.duration) || 2), 0);
@@ -278,7 +286,7 @@ export default function TeacherSchedulePage() {
     setCurrentDate(new Date());
   };
 
-  // Presets d'intervalles rapides
+  // Presets d'intervalles
   const applyIntervalPreset = (preset) => {
     const safeCur = safeDate(currentDate);
     const curYear = safeCur.getFullYear();
@@ -316,7 +324,7 @@ export default function TeacherSchedulePage() {
   };
 
   // ==========================================================
-  // CALCULS POUR LA VUE SEMAINE
+  // CALCULS POUR LA VUE SEMAINE (ISOLATION STRICTE PAR DATE)
   // ==========================================================
   const weekDays = useMemo(() => {
     try {
@@ -341,18 +349,26 @@ export default function TeacherSchedulePage() {
     }
   }, [currentDate]);
 
-  // Cours de la semaine active
+  // Extraction des cours STRICTEMENT assignés à cette semaine
   const weekCourses = useMemo(() => {
     const weekIsoDates = new Set(weekDays.map((d) => d.isoDate));
-    return filteredCourses.filter((c) => {
-      if (c.date) {
-        return weekIsoDates.has(c.date);
-      }
-      return DAYS_NAME.includes(c.day);
-    });
-  }, [filteredCourses, weekDays]);
 
-  // Positionnement précis dans la grille hebdomadaire
+    if (hasExplicitDates) {
+      // Planning annuel avec dates : UNIQUEMENT les cours ayant exactement la date de cette semaine
+      return filteredCourses.filter((c) => c.date && weekIsoDates.has(c.date));
+    } else {
+      // Planning récurrent par jour : au maximum une séance par jour/créneau
+      const seen = new Set();
+      return filteredCourses.filter((c) => {
+        const key = `${c.day}-${c.start}-${c.title}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return DAYS_NAME.includes(c.day);
+      });
+    }
+  }, [filteredCourses, weekDays, hasExplicitDates]);
+
+  // Positionnement dans la grille hebdomadaire (sans dépassement pause déjeuner)
   const getCourseWeekPosition = (course) => {
     try {
       let dayIndex = 0;
@@ -371,11 +387,12 @@ export default function TeacherSchedulePage() {
       let maxAllowedSpan = 1;
 
       if (isMorning) {
-        const hourOffset = Math.max(0, Math.min(startHour - 8, 3));
+        const hourOffset = Math.max(0, Math.min(startHour - 8, 3)); // 8h->0, 9h->1, 10h->2, 11h->3
         startRow = 2 + hourOffset;
+        // Arrêt strict avant la ligne 6 (Pause Déjeuner)
         maxAllowedSpan = Math.max(1, 6 - startRow);
       } else {
-        const hourOffset = Math.max(0, Math.min(startHour - 13, 4));
+        const hourOffset = Math.max(0, Math.min(startHour - 13, 4)); // 13h->0, 14h->1, ..., 17h->4
         startRow = 7 + hourOffset;
         maxAllowedSpan = Math.max(1, 12 - startRow + 1);
       }
@@ -390,7 +407,7 @@ export default function TeacherSchedulePage() {
     }
   };
 
-  // Layout intelligent pour cours simultanés le même jour
+  // Layout propre avec pleine largeur lisible
   const weekCoursesWithLayout = useMemo(() => {
     try {
       const dayGroups = {};
@@ -406,6 +423,7 @@ export default function TeacherSchedulePage() {
         coursesInDay.sort((a, b) => (a.pos?.row || 0) - (b.pos?.row || 0));
 
         coursesInDay.forEach((c, idx) => {
+          // Détecter un éventuel chevauchement réel sur la même tranche horaire
           const overlapping = coursesInDay.filter((other, oIdx) => {
             if (idx === oIdx) return true;
             const aStart = c.pos?.row || 2;
@@ -416,22 +434,25 @@ export default function TeacherSchedulePage() {
           });
 
           if (overlapping.length > 1) {
+            // Conflit rare : limiter à 2 sous-colonnes propres pour garder une lisibilité parfaite
             const order = overlapping.findIndex((o) => (o.id || o.title) === (c.id || c.title));
-            const count = overlapping.length;
-            const widthPct = Math.floor(100 / count);
-            const leftPct = (order >= 0 ? order : 0) * widthPct;
+            const subCol = order % 2;
             result.push({
               ...c,
               customLayout: {
-                width: `calc(${widthPct}% - 8px)`,
-                marginLeft: `calc(${leftPct}% + 4px)`,
-                zIndex: 3 + (order >= 0 ? order : 0)
+                width: 'calc(50% - 6px)',
+                marginLeft: subCol === 0 ? '3px' : 'calc(50% + 3px)',
+                zIndex: 3 + order
               }
             });
           } else {
+            // Pleine largeur par défaut
             result.push({
               ...c,
-              customLayout: {}
+              customLayout: {
+                width: 'calc(100% - 8px)',
+                margin: '3px 4px'
+              }
             });
           }
         });
@@ -671,6 +692,8 @@ export default function TeacherSchedulePage() {
             />
 
             <div className="preset-buttons">
+              <button className="btn-preset" onClick={() => applyIntervalPreset('this_week')}>Cette semaine</button>
+              <button className="btn-preset" onClick={() => applyIntervalPreset('this_month')}>Ce mois</button>
               <button className="btn-preset" onClick={() => applyIntervalPreset('s1')}>Semestre 1</button>
               <button className="btn-preset" onClick={() => applyIntervalPreset('s2')}>Semestre 2</button>
               <button className="btn-preset" onClick={() => applyIntervalPreset('year')}>Année</button>
@@ -727,7 +750,7 @@ export default function TeacherSchedulePage() {
         </div>
       )}
 
-      {/* 1. VUE SEMAINE */}
+      {/* 1. VUE SEMAINE (WEEK VIEW) */}
       {!loading && !error && planning && viewMode === 'week' && (
         <div className="teacher-schedule-grid-wrap">
           <div className="teacher-week-grid">
@@ -778,7 +801,7 @@ export default function TeacherSchedulePage() {
               </React.Fragment>
             ))}
 
-            {/* Placement des cours */}
+            {/* Placement des cours de la semaine */}
             {weekCoursesWithLayout.map((course, idx) => {
               const pos = course.pos || getCourseWeekPosition(course);
               return (
@@ -803,7 +826,7 @@ export default function TeacherSchedulePage() {
                   <strong className="course-title-text">{course.title}</strong>
                   <div className="course-card-bottombar">
                     <span className="course-room-text">
-                      <IconMapPin style={{ width: '11px', height: '11px' }} /> {course.room || 'Salle non spécifiée'}
+                      <IconMapPin style={{ width: '11px', height: '11px' }} /> {course.room || 'Salle 402'}
                     </span>
                   </div>
                 </article>
@@ -813,7 +836,7 @@ export default function TeacherSchedulePage() {
 
           {weekCourses.length === 0 && (
             <div className="empty-week-notice">
-              <p>Aucun cours programmé pour cette semaine.</p>
+              <p>Aucune séance programmée pour la semaine du {weekDays[0]?.displayDate} au {weekDays[4]?.displayDate}.</p>
               <button className="btn-today" onClick={handleNext}>Semaine suivante ▶</button>
             </div>
           )}
@@ -845,7 +868,7 @@ export default function TeacherSchedulePage() {
                     </div>
 
                     <div className="month-day-courses">
-                      {day.courses.map((c, cIdx) => (
+                      {day.courses.slice(0, 3).map((c, cIdx) => (
                         <div
                           key={`mc-${c.id || cIdx}`}
                           className="month-course-pill"
@@ -857,6 +880,17 @@ export default function TeacherSchedulePage() {
                           <span className="pill-class">{formatClassAbbrev(c.group)}</span>
                         </div>
                       ))}
+                      {day.courses.length > 3 && (
+                        <div
+                          className="month-more-pill"
+                          onClick={() => {
+                            setCurrentDate(safeDate(day.isoDate));
+                            setViewMode('week');
+                          }}
+                        >
+                          + {day.courses.length - 3} autres...
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
