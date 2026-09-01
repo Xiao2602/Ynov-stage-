@@ -7,6 +7,15 @@ import '../components/Icons';
 const formatDate = (timestamp) => {
   if (!timestamp) return 'Date inconnue';
   try {
+    if (typeof timestamp === 'object' && timestamp._seconds !== undefined) {
+      return new Date(timestamp._seconds * 1000).toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
     if (typeof timestamp === 'object' && timestamp.seconds !== undefined) {
       return new Date(timestamp.seconds * 1000).toLocaleDateString('fr-FR', {
         day: '2-digit',
@@ -16,8 +25,8 @@ const formatDate = (timestamp) => {
         minute: '2-digit'
       });
     }
-    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
-      return new Date(timestamp).toLocaleDateString('fr-FR', {
+    if (timestamp?.toDate) {
+      return timestamp.toDate().toLocaleDateString('fr-FR', {
         day: '2-digit',
         month: 'short',
         year: 'numeric',
@@ -25,8 +34,8 @@ const formatDate = (timestamp) => {
         minute: '2-digit'
       });
     }
-    if (timestamp?.toDate) {
-      return timestamp.toDate().toLocaleDateString('fr-FR', {
+    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+      return new Date(timestamp).toLocaleDateString('fr-FR', {
         day: '2-digit',
         month: 'short',
         year: 'numeric',
@@ -51,10 +60,10 @@ export default function NotificationsDropdown() {
     setLoading(true);
     try {
       const data = await apiFetch('/notifications/my');
-      if (data.success) {
-        const sorted = data.notifications.sort((a, b) => {
-          const dateA = a.createdAt?.seconds || 0;
-          const dateB = b.createdAt?.seconds || 0;
+      if (data && data.success) {
+        const sorted = (data.notifications || []).sort((a, b) => {
+          const dateA = a.createdAt?._seconds || a.createdAt?.seconds || (a.createdAt ? new Date(a.createdAt).getTime() / 1000 : 0);
+          const dateB = b.createdAt?._seconds || b.createdAt?.seconds || (b.createdAt ? new Date(b.createdAt).getTime() / 1000 : 0);
           return dateB - dateA;
         });
         setNotifications(sorted);
@@ -71,7 +80,16 @@ export default function NotificationsDropdown() {
   useEffect(() => {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+
+    const handleSync = () => {
+      fetchNotifications();
+    };
+    window.addEventListener('notifications-updated', handleSync);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('notifications-updated', handleSync);
+    };
   }, []);
 
   const markAsRead = async (id) => {
@@ -79,13 +97,14 @@ export default function NotificationsDropdown() {
       const data = await apiFetch(`/notifications/${id}/read`, {
         method: 'PATCH',
       });
-      if (data.success) {
+      if (data && data.success) {
         setNotifications(prev =>
           prev.map(n =>
             n.id === id ? { ...n, read: true } : n
           )
         );
         setUnreadCount(prev => Math.max(0, prev - 1));
+        window.dispatchEvent(new Event('notifications-updated'));
       }
     } catch (error) {
       console.error('Erreur marquage lu:', error);
@@ -97,11 +116,12 @@ export default function NotificationsDropdown() {
       const data = await apiFetch('/notifications/read-all', {
         method: 'POST',
       });
-      if (data.success) {
+      if (data && data.success) {
         setNotifications(prev =>
           prev.map(n => ({ ...n, read: true }))
         );
         setUnreadCount(0);
+        window.dispatchEvent(new Event('notifications-updated'));
       }
     } catch (error) {
       console.error('Erreur marquage tout lu:', error);
@@ -114,11 +134,11 @@ export default function NotificationsDropdown() {
       const data = await apiFetch(`/notifications/${id}`, {
         method: 'DELETE',
       });
-      if (data.success) {
+      if (data && data.success) {
         setNotifications(prev => prev.filter(n => n.id !== id));
-        // Recalculer les non-lues
         const unread = notifications.filter(n => n.id !== id && !n.read).length;
         setUnreadCount(unread);
+        window.dispatchEvent(new Event('notifications-updated'));
       }
     } catch (error) {
       console.error('Erreur suppression notification:', error);
@@ -131,9 +151,9 @@ export default function NotificationsDropdown() {
       const data = await apiFetch('/notifications/read', {
         method: 'DELETE',
       });
-      if (data.success) {
+      if (data && data.success) {
         setNotifications(prev => prev.filter(n => !n.read));
-        // Les non-lues restent, donc le compteur ne change pas
+        window.dispatchEvent(new Event('notifications-updated'));
       }
     } catch (error) {
       console.error('Erreur suppression notifications lues:', error);

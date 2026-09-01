@@ -9,6 +9,51 @@ const fieldLabels = {
   phone: 'Téléphone'
 };
 
+const formatDate = (timestamp) => {
+  if (!timestamp) return 'Date inconnue';
+  try {
+    if (typeof timestamp === 'object' && timestamp._seconds !== undefined) {
+      return new Date(timestamp._seconds * 1000).toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    if (typeof timestamp === 'object' && timestamp.seconds !== undefined) {
+      return new Date(timestamp.seconds * 1000).toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    if (timestamp?.toDate) {
+      return timestamp.toDate().toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+      return new Date(timestamp).toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    return 'Date inconnue';
+  } catch {
+    return 'Date inconnue';
+  }
+};
+
 export default function ProfileRequestsPage() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -94,9 +139,7 @@ export default function ProfileRequestsPage() {
               {requests.map((req) => (
                 <tr key={req.id}>
                   <td>
-                    {req.createdAt ? new Date(req.createdAt._seconds * 1000).toLocaleDateString('fr-FR', {
-                      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                    }) : 'Date inconnue'}
+                    {formatDate(req.createdAt)}
                   </td>
                   <td>
                     <strong>{req.userName || 'Utilisateur inconnu'}</strong>

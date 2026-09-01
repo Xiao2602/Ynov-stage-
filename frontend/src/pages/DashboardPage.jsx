@@ -16,7 +16,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetchStats = async () => {
-      const allowedRoles = ['admin', 'rh', 'administrateur', 'personnel'];
+      const allowedRoles = ['admin', 'rh', 'administrateur', 'personnel', 'manager', 'employee'];
       if (!allowedRoles.includes(role)) {
         return;
       }
@@ -77,6 +77,7 @@ export default function DashboardPage() {
 
   const renderDashboardContent = () => {
     switch (role) {
+      case 'student':
       case 'etudiant':
         return (
           <>
@@ -159,10 +160,12 @@ export default function DashboardPage() {
           </>
         );
 
-      case 'personnel':
+      case 'admin':
       case 'rh':
       case 'administrateur':
-      case 'admin':
+      case 'manager':
+      case 'employee':
+      case 'personnel':
         if (loading) {
           return <div style={{ padding: '2rem', textAlign: 'center' }}>Chargement des statistiques...</div>;
         }
@@ -269,6 +272,8 @@ export default function DashboardPage() {
           </>
         );
 
+      case 'teacher':
+      case 'enseignant':
       case 'professeur':
         return (
           <>

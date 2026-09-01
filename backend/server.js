@@ -60,12 +60,14 @@ import {
 } from "./Auth/Users/userController.js";
 
 // ============================================================
-// IMPORTS ROLES
+// IMPORTS ROLES & PROFILE
 // ============================================================
 
 import {
   handleAssignRole
 } from "./Auth/Roles & Permissions/roleController.js";
+
+import profileRoutes from "./Auth/Profile/profileRoutes.js";
 
 // ============================================================
 // IMPORTS ABSENCES
@@ -262,6 +264,12 @@ app.post(
   authorizeRoles(ROLES.ADMIN),
   handleAssignRole
 );
+
+// ============================================================
+// PROFILE
+// ============================================================
+
+app.use("/api/profile", profileRoutes);
 
 // ============================================================
 // ABSENCES

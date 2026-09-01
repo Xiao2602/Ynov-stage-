@@ -1,19 +1,79 @@
 import admin from "firebase-admin";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync, readdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Chargement de la clé de compte de service Firebase Admin SDK
-const serviceAccountPath = join(__dirname, "../backend-91067-firebase-adminsdk-fbsvc-48572794b4.json");
-const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf8"));
+function findServiceAccount() {
+  // 1. Check environment variables
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH && existsSync(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)) {
+    return process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+  }
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS && existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
+    return process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  }
+
+  // 2. Direct paths to test
+  const candidatePaths = [
+    join(__dirname, "../firebase-service-account.json"),
+    join(__dirname, "./firebase-service-account.json"),
+    join(__dirname, "../../firebase-service-account.json"),
+    join(__dirname, "../backend-91067-firebase-adminsdk-fbsvc-48572794b4.json"),
+    join(__dirname, "./backend-91067-firebase-adminsdk-fbsvc-48572794b4.json"),
+    join(process.cwd(), "firebase-service-account.json"),
+    join(process.cwd(), "backend/firebase-service-account.json"),
+    join(process.cwd(), "backend-91067-firebase-adminsdk-fbsvc-48572794b4.json"),
+  ];
+
+  for (const candidate of candidatePaths) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  // 3. Scan directories for wildcard *-firebase-adminsdk-*.json
+  const dirsToScan = [
+    join(__dirname, ".."),
+    __dirname,
+    process.cwd()
+  ];
+
+  for (const dir of dirsToScan) {
+    try {
+      if (existsSync(dir)) {
+        const files = readdirSync(dir);
+        const match = files.find(f => f.includes("firebase-adminsdk") && f.endsWith(".json"));
+        if (match) {
+          return join(dir, match);
+        }
+      }
+    } catch {
+      // ignore read errors
+    }
+  }
+
+  return null;
+}
 
 if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
+  const serviceAccountPath = findServiceAccount();
+  if (serviceAccountPath) {
+    try {
+      const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf8"));
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+      console.log(`✅ [firebaseAdmin] Initialisé avec le compte de service : ${serviceAccountPath}`);
+    } catch (err) {
+      console.warn(`⚠️ [firebaseAdmin] Échec lecture ${serviceAccountPath}:`, err.message);
+      admin.initializeApp({ projectId: "backend-91067" });
+    }
+  } else {
+    console.warn("⚠️ [firebaseAdmin] Aucun fichier de service account trouvé. Initialisation fallback avec projectId.");
+    admin.initializeApp({ projectId: "backend-91067" });
+  }
 }
 
 export const adminAuth = admin.auth();
@@ -50,6 +110,7 @@ export async function createUserByAdmin({ email, password, displayName, role = '
       displayName,
       role,
       department,
+      dataTermsAccepted: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });

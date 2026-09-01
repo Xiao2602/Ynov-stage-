@@ -7,7 +7,7 @@ import {
 } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import admin from "firebase-admin";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, readdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -29,43 +29,77 @@ export const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-// Dans backend/Shared/Firebase config/firebase.js
-export const adminDb = admin.firestore();
-export const adminAuth = admin.auth();
 
 // Admin SDK Initialization
-// Chercher le fichier de service account à plusieurs endroits possibles
-const possiblePaths = [
-  // À la racine du projet parent (là où se trouve le fichier)
-  join(__dirname, "../../../backend-91067-firebase-adminsdk-fbsvc-48572794b4.json"),
-  // Dans le dossier courant
-  join(__dirname, "backend-91067-firebase-adminsdk-fbsvc-48572794b4.json"),
-  // Dans le dossier backend ameliorer (si copié)
-  join(__dirname, "../../backend-91067-firebase-adminsdk-fbsvc-48572794b4.json"),
-];
-
-let serviceAccountPath = null;
-for (const p of possiblePaths) {
-  if (existsSync(p)) {
-    serviceAccountPath = p;
-    break;
+function findServiceAccount() {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH && existsSync(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)) {
+    return process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
   }
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS && existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
+    return process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  }
+
+  const candidatePaths = [
+    join(__dirname, "../../../firebase-service-account.json"),
+    join(__dirname, "../../firebase-service-account.json"),
+    join(__dirname, "../firebase-service-account.json"),
+    join(__dirname, "./firebase-service-account.json"),
+    join(__dirname, "../../../backend-91067-firebase-adminsdk-fbsvc-48572794b4.json"),
+    join(__dirname, "../../backend-91067-firebase-adminsdk-fbsvc-48572794b4.json"),
+    join(process.cwd(), "firebase-service-account.json"),
+    join(process.cwd(), "backend/firebase-service-account.json"),
+    join(process.cwd(), "backend-91067-firebase-adminsdk-fbsvc-48572794b4.json"),
+  ];
+
+  for (const candidate of candidatePaths) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  const dirsToScan = [
+    join(__dirname, "../../.."),
+    join(__dirname, "../.."),
+    process.cwd()
+  ];
+
+  for (const dir of dirsToScan) {
+    try {
+      if (existsSync(dir)) {
+        const files = readdirSync(dir);
+        const match = files.find(f => f.includes("firebase-adminsdk") && f.endsWith(".json"));
+        if (match) {
+          return join(dir, match);
+        }
+      }
+    } catch {
+      // ignore read errors
+    }
+  }
+
+  return null;
 }
 
-if (serviceAccountPath) {
-  console.log(`✅ Fichier de service account trouvé : ${serviceAccountPath}`);
-  const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf8"));
-  if (!admin.apps.length) {
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
-    });
-  }
-} else {
-  console.warn("⚠️ Aucun fichier de service account trouvé. Tentative avec les credentials par défaut (peut échouer en local).");
-  if (!admin.apps.length) {
+if (!admin.apps.length) {
+  const serviceAccountPath = findServiceAccount();
+  if (serviceAccountPath) {
+    try {
+      console.log(`✅ [firebase] Fichier de service account trouvé : ${serviceAccountPath}`);
+      const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf8"));
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+    } catch (err) {
+      console.warn("⚠️ [firebase] Erreur initialisation cert:", err.message);
+      admin.initializeApp({ projectId: firebaseConfig.projectId });
+    }
+  } else {
+    console.warn("⚠️ [firebase] Aucun fichier de service account trouvé. Initialisation fallback avec projectId.");
     admin.initializeApp({
       projectId: firebaseConfig.projectId
     });
   }
 }
 
+export const adminDb = admin.firestore();
+export const adminAuth = admin.auth();

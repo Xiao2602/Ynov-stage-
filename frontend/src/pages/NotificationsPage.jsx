@@ -1,70 +1,148 @@
-import React, { useState } from 'react';
-import { IconBell, IconCheckCircle, IconAlertTriangle, IconInbox, IconClock } from '../components/Icons';
+import React, { useState, useEffect, useCallback } from 'react';
+import { apiFetch } from '../api/api';
+import { IconBell, IconCheckCircle, IconAlertTriangle, IconInbox, IconClock, IconRefreshCw, IconTrash } from '../components/Icons';
 
-const MOCK_NOTIFICATIONS = [
-  {
-    id: 1,
-    type: 'info',
-    title: 'Nouvelle absence enregistrée',
-    message: 'Votre absence du 18/08/2026 a bien été enregistrée et transmise au service pédagogique.',
-    date: 'Il y a 2 heures',
-    read: false,
-  },
-  {
-    id: 2,
-    type: 'success',
-    title: 'Demande approuvée',
-    message: 'Votre justificatif pour l\'absence du 12/08 a été validé par l\'administration.',
-    date: 'Il y a 5 heures',
-    read: false,
-  },
-  {
-    id: 3,
-    type: 'warning',
-    title: 'Document en attente',
-    message: 'Un document nécessite votre signature avant le 25/08/2026.',
-    date: 'Hier',
-    read: true,
-  },
-  {
-    id: 4,
-    type: 'info',
-    title: 'Mise à jour du planning',
-    message: 'Le planning de la semaine du 25/08 a été mis à jour. Consultez vos nouveaux horaires.',
-    date: 'Il y a 2 jours',
-    read: true,
-  },
-  {
-    id: 5,
-    type: 'success',
-    title: 'Profil mis à jour',
-    message: 'Vos informations personnelles ont été mises à jour avec succès.',
-    date: 'Il y a 3 jours',
-    read: true,
-  },
-];
+const formatNotificationDate = (timestamp) => {
+  if (!timestamp) return 'Date inconnue';
+  try {
+    if (typeof timestamp === 'object' && timestamp._seconds !== undefined) {
+      return new Date(timestamp._seconds * 1000).toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    if (typeof timestamp === 'object' && timestamp.seconds !== undefined) {
+      return new Date(timestamp.seconds * 1000).toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    if (timestamp?.toDate) {
+      return timestamp.toDate().toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+      return new Date(timestamp).toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    return 'Date inconnue';
+  } catch {
+    return 'Date inconnue';
+  }
+};
 
 const typeConfig = {
   info: { color: 'var(--ynov-teal)', bg: 'rgba(0, 180, 216, 0.1)', Icon: IconBell },
   success: { color: '#059669', bg: 'rgba(5, 150, 105, 0.1)', Icon: IconCheckCircle },
   warning: { color: '#d97706', bg: 'rgba(217, 119, 6, 0.1)', Icon: IconAlertTriangle },
+  danger: { color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)', Icon: IconAlertTriangle },
 };
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all'); // 'all' | 'unread'
 
-  const markAsRead = (id) => {
-    setNotifications(prev =>
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await apiFetch('/notifications/my');
+      if (data && data.success) {
+        const sorted = (data.notifications || []).sort((a, b) => {
+          const dateA = a.createdAt?._seconds || a.createdAt?.seconds || (a.createdAt ? new Date(a.createdAt).getTime() / 1000 : 0);
+          const dateB = b.createdAt?._seconds || b.createdAt?.seconds || (b.createdAt ? new Date(b.createdAt).getTime() / 1000 : 0);
+          return dateB - dateA;
+        });
+        setNotifications(sorted);
+      } else {
+        setNotifications([]);
+      }
+    } catch (err) {
+      console.error('Erreur chargement notifications:', err);
+      setError(err.message || 'Impossible de récupérer les notifications.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+
+    const handleSync = () => {
+      fetchNotifications();
+    };
+
+    window.addEventListener('notifications-updated', handleSync);
+    return () => {
+      window.removeEventListener('notifications-updated', handleSync);
+    };
+  }, [fetchNotifications]);
+
+  const markAsRead = async (id) => {
+    try {
+      const data = await apiFetch(`/notifications/${id}/read`, {
+        method: 'PATCH',
+      });
+      if (data && data.success) {
+        setNotifications(prev =>
+          prev.map(n => n.id === id ? { ...n, read: true } : n)
+        );
+        window.dispatchEvent(new Event('notifications-updated'));
+      }
+    } catch (err) {
+      console.error('Erreur marquage lu:', err);
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  const markAllAsRead = async () => {
+    try {
+      const data = await apiFetch('/notifications/read-all', {
+        method: 'POST',
+      });
+      if (data && data.success) {
+        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+        window.dispatchEvent(new Event('notifications-updated'));
+      }
+    } catch (err) {
+      console.error('Erreur marquage tout lu:', err);
+    }
+  };
+
+  const deleteNotification = async (id, e) => {
+    if (e) e.stopPropagation();
+    try {
+      const data = await apiFetch(`/notifications/${id}`, {
+        method: 'DELETE',
+      });
+      if (data && data.success) {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+        window.dispatchEvent(new Event('notifications-updated'));
+      }
+    } catch (err) {
+      console.error('Erreur suppression notification:', err);
+    }
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
+  const readCount = notifications.filter(n => n.read).length;
   const displayed = filter === 'unread'
     ? notifications.filter(n => !n.read)
     : notifications;
@@ -72,24 +150,49 @@ export default function NotificationsPage() {
   return (
     <div className="dashboard-scroll-area" style={{ height: '100%', overflowY: 'auto' }}>
       {/* Header */}
-      <div className="overview-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <div className="overview-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h2 className="overview-title">Notifications</h2>
           <p className="overview-subtitle">
-            Restez informé des mises à jour et actions importantes.
+            Restez informé des mises à jour et actions importantes en temps réel.
           </p>
         </div>
-        {unreadCount > 0 && (
+        <div style={{ display: 'flex', gap: '10px' }}>
           <button
             className="btn-outline"
-            onClick={markAllAsRead}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            onClick={fetchNotifications}
+            title="Actualiser"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            <div style={{ width: '16px', height: '16px' }}><IconCheckCircle /></div>
-            Tout marquer comme lu
+            <div style={{ width: '16px', height: '16px' }}><IconRefreshCw /></div>
+            Actualiser
           </button>
-        )}
+          {unreadCount > 0 && (
+            <button
+              className="btn-primary"
+              onClick={markAllAsRead}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <div style={{ width: '16px', height: '16px' }}><IconCheckCircle /></div>
+              Tout marquer comme lu
+            </button>
+          )}
+        </div>
       </div>
+
+      {error && (
+        <div style={{
+          padding: '12px 16px',
+          background: '#fef2f2',
+          border: '1px solid #fca5a5',
+          borderRadius: '8px',
+          color: '#ef4444',
+          marginBottom: '20px',
+          fontSize: '0.9rem'
+        }}>
+          {error}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
@@ -104,7 +207,7 @@ export default function NotificationsPage() {
             <span className="stat-value">{notifications.length}</span>
           </div>
           <div className="stat-subtitle" style={{ color: 'var(--ynov-text-muted)', fontWeight: '400' }}>
-            Notifications
+            Notifications reçues
           </div>
         </div>
 
@@ -119,7 +222,7 @@ export default function NotificationsPage() {
             <span className="stat-value">{unreadCount}</span>
           </div>
           <div className="stat-subtitle" style={{ color: unreadCount > 0 ? 'var(--status-pending)' : 'var(--ynov-text-muted)', fontWeight: '400' }}>
-            {unreadCount > 0 ? 'À consulter' : 'Aucune'}
+            {unreadCount > 0 ? 'À consulter' : 'Toutes lues'}
           </div>
         </div>
 
@@ -131,7 +234,7 @@ export default function NotificationsPage() {
             </div>
           </div>
           <div className="stat-value-container">
-            <span className="stat-value">{notifications.filter(n => n.read).length}</span>
+            <span className="stat-value">{readCount}</span>
           </div>
           <div className="stat-subtitle" style={{ color: 'var(--status-approved)', fontWeight: '400' }}>
             Consultées
@@ -184,12 +287,16 @@ export default function NotificationsPage() {
 
         {/* Notifications list */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {displayed.length === 0 ? (
+          {loading && notifications.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--ynov-text-muted)' }}>
+              Chargement de vos notifications...
+            </div>
+          ) : displayed.length === 0 ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--ynov-text-muted)' }}>
               <div style={{ width: '40px', height: '40px', margin: '0 auto 12px', opacity: 0.4 }}><IconBell /></div>
               <div style={{ fontWeight: '500' }}>Aucune notification</div>
               <p style={{ fontSize: '0.82rem', marginTop: '4px' }}>
-                {filter === 'unread' ? 'Toutes vos notifications ont été lues.' : 'Vous n\'avez aucune notification.'}
+                {filter === 'unread' ? 'Toutes vos notifications ont été lues.' : 'Vous n\'avez aucune notification pour le moment.'}
               </p>
             </div>
           ) : (
@@ -199,14 +306,14 @@ export default function NotificationsPage() {
               return (
                 <div
                   key={notif.id}
-                  onClick={() => markAsRead(notif.id)}
+                  onClick={() => !notif.read && markAsRead(notif.id)}
                   style={{
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: '14px',
                     padding: '16px 20px',
                     borderBottom: '1px solid var(--border-color)',
-                    cursor: 'pointer',
+                    cursor: notif.read ? 'default' : 'pointer',
                     background: notif.read ? 'transparent' : 'var(--bg-card-hover)',
                     transition: 'background 0.15s ease',
                   }}
@@ -241,7 +348,7 @@ export default function NotificationsPage() {
                         {notif.title}
                       </span>
                       <span style={{ fontSize: '0.72rem', color: 'var(--ynov-text-muted)', whiteSpace: 'nowrap' }}>
-                        {notif.date}
+                        {formatNotificationDate(notif.createdAt)}
                       </span>
                     </div>
                     <p style={{
@@ -254,17 +361,55 @@ export default function NotificationsPage() {
                     </p>
                   </div>
 
-                  {/* Unread dot */}
-                  {!notif.read && (
-                    <div style={{
-                      width: '8px',
-                      height: '8px',
-                      minWidth: '8px',
-                      borderRadius: '50%',
-                      background: 'var(--ynov-teal)',
-                      marginTop: '8px',
-                    }} />
-                  )}
+                  {/* Actions & Unread dot */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {!notif.read && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          markAsRead(notif.id);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'var(--ynov-teal)',
+                          padding: '4px',
+                          borderRadius: '4px',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                        title="Marquer comme lu"
+                      >
+                        <div style={{ width: '16px', height: '16px' }}><IconCheckCircle /></div>
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => deleteNotification(notif.id, e)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--ynov-text-muted)',
+                        padding: '4px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                      title="Supprimer"
+                    >
+                      <div style={{ width: '16px', height: '16px' }}><IconTrash /></div>
+                    </button>
+                    {!notif.read && (
+                      <div style={{
+                        width: '8px',
+                        height: '8px',
+                        minWidth: '8px',
+                        borderRadius: '50%',
+                        background: 'var(--ynov-teal)',
+                      }} />
+                    )}
+                  </div>
                 </div>
               );
             })
