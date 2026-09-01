@@ -286,37 +286,6 @@ export default function TeacherSchedulePage() {
     setCurrentDate(new Date());
   };
 
-  // Presets d'intervalles
-  const applyIntervalPreset = (preset) => {
-    const safeCur = safeDate(currentDate);
-    const curYear = safeCur.getFullYear();
-    setIsIntervalActive(true);
-
-    if (preset === 's1') {
-      setCustomStartDate(`${curYear}-09-01`);
-      setCustomEndDate(`${curYear + 1}-01-31`);
-    } else if (preset === 's2') {
-      setCustomStartDate(`${curYear + 1}-02-01`);
-      setCustomEndDate(`${curYear + 1}-06-30`);
-    } else if (preset === 'year') {
-      setCustomStartDate(`${curYear}-09-01`);
-      setCustomEndDate(`${curYear + 1}-06-30`);
-    } else if (preset === 'this_month') {
-      const y = safeCur.getFullYear();
-      const m = safeCur.getMonth();
-      const first = new Date(y, m, 1);
-      const last = new Date(y, m + 1, 0);
-      setCustomStartDate(formatDateIso(first));
-      setCustomEndDate(formatDateIso(last));
-    } else if (preset === 'this_week') {
-      const mon = getMonday(safeCur);
-      const fri = new Date(mon);
-      fri.setDate(mon.getDate() + 4);
-      setCustomStartDate(formatDateIso(mon));
-      setCustomEndDate(formatDateIso(fri));
-    }
-  };
-
   const clearCustomInterval = () => {
     setIsIntervalActive(false);
     setCustomStartDate('');
@@ -701,18 +670,11 @@ export default function TeacherSchedulePage() {
               }}
             />
 
-            <div className="preset-buttons">
-              <button className="btn-preset" onClick={() => applyIntervalPreset('this_week')}>Cette semaine</button>
-              <button className="btn-preset" onClick={() => applyIntervalPreset('this_month')}>Ce mois</button>
-              <button className="btn-preset" onClick={() => applyIntervalPreset('s1')}>Semestre 1</button>
-              <button className="btn-preset" onClick={() => applyIntervalPreset('s2')}>Semestre 2</button>
-              <button className="btn-preset" onClick={() => applyIntervalPreset('year')}>Année</button>
-              {isIntervalActive && (
-                <button className="btn-clear-preset" onClick={clearCustomInterval} title="Réinitialiser l'intervalle">
-                  <IconX style={{ width: '12px', height: '12px' }} /> Effacer
-                </button>
-              )}
-            </div>
+            {(customStartDate || customEndDate) && (
+              <button className="btn-clear-preset" onClick={clearCustomInterval} title="Réinitialiser l'intervalle">
+                <IconX style={{ width: '12px', height: '12px' }} /> Effacer
+              </button>
+            )}
           </div>
 
           <div className="class-search-wrap">
