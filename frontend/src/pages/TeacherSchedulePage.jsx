@@ -297,7 +297,7 @@ export default function TeacherSchedulePage() {
     });
   }, [filteredCourses, weekDays]);
 
-  // Positionnement dans la grille hebdomadaire
+  // Positionnement précis dans la grille hebdomadaire sans chevauchement sur la pause déjeuner
   const getCourseWeekPosition = (course) => {
     let dayIndex = 0;
     if (course.date) {
@@ -307,13 +307,28 @@ export default function TeacherSchedulePage() {
     }
     if (dayIndex === -1) dayIndex = 0;
 
-    const startHour = parseInt((course.start || '09:00').split(':')[0]);
+    const startHour = parseInt((course.start || '09:00').split(':')[0], 10);
     const isMorning = startHour < 12;
-    const hourIndex = isMorning ? Math.max(0, startHour - 8) : Math.max(0, startHour - 13);
-    const row = isMorning ? hourIndex + 2 : hourIndex + 7;
+
+    let startRow = 2;
+    let maxAllowedSpan = 1;
+
+    if (isMorning) {
+      const hourOffset = Math.max(0, Math.min(startHour - 8, 3)); // 8h->0, 9h->1, 10h->2, 11h->3
+      startRow = 2 + hourOffset;
+      // La ligne 6 étant la pause déjeuner (12h-13h), la séance du matin s'arrête strictement à la ligne 5
+      maxAllowedSpan = Math.max(1, 6 - startRow);
+    } else {
+      const hourOffset = Math.max(0, Math.min(startHour - 13, 4)); // 13h->0, 14h->1, ..., 17h->4
+      startRow = 7 + hourOffset;
+      maxAllowedSpan = Math.max(1, 12 - startRow + 1);
+    }
+
+    const requestedDuration = Number(course.duration) || 2;
+    const span = Math.min(requestedDuration, maxAllowedSpan);
     const col = dayIndex + 2;
 
-    return { row, col };
+    return { row: startRow, span, col };
   };
 
   // ==========================================================
@@ -382,6 +397,56 @@ export default function TeacherSchedulePage() {
     }
     return months;
   }, [currentDate, filteredCourses]);
+
+
+  // Calcul du positionnement et gestion des cours simultanés / superposés le même jour
+  const weekCoursesWithLayout = useMemo(() => {
+    const dayGroups = {};
+    weekCourses.forEach((c) => {
+      const pos = getCourseWeekPosition(c);
+      const key = pos.col;
+      if (!dayGroups[key]) dayGroups[key] = [];
+      dayGroups[key].push({ ...c, pos });
+    });
+
+    const result = [];
+    Object.values(dayGroups).forEach((coursesInDay) => {
+      coursesInDay.sort((a, b) => a.pos.row - b.pos.row);
+
+      coursesInDay.forEach((c, idx) => {
+        const overlapping = coursesInDay.filter((other, oIdx) => {
+          if (idx === oIdx) return true;
+          const aStart = c.pos.row;
+          const aEnd = c.pos.row + c.pos.span;
+          const bStart = other.pos.row;
+          const bEnd = other.pos.row + other.pos.span;
+          return aStart < bEnd && aEnd > bStart;
+        });
+
+        if (overlapping.length > 1) {
+          const order = overlapping.findIndex((o) => (o.id || o.title) === (c.id || c.title));
+          const count = overlapping.length;
+          const widthPct = Math.floor(100 / count);
+          const leftPct = (order >= 0 ? order : 0) * widthPct;
+          result.push({
+            ...c,
+            customLayout: {
+              width: `calc(${widthPct}% - 8px)`,
+              marginLeft: `calc(${leftPct}% + 4px)`,
+              zIndex: 3 + (order >= 0 ? order : 0)
+            }
+          });
+        } else {
+          result.push({
+            ...c,
+            customLayout: {}
+          });
+        }
+      });
+    });
+
+    return result;
+  }, [weekCourses, weekDays]);
 
   return (
     <section className="teacher-page">
@@ -643,16 +708,16 @@ export default function TeacherSchedulePage() {
             ))}
 
             {/* Placement des cours de la semaine */}
-            {weekCourses.map((course, idx) => {
-              const pos = getCourseWeekPosition(course);
-              const duration = Number(course.duration) || 2;
+            {weekCoursesWithLayout.map((course, idx) => {
+              const pos = course.pos || getCourseWeekPosition(course);
               return (
                 <article
                   key={`wc-${course.id || idx}`}
                   className="schedule-course-card"
                   style={{
                     gridColumn: pos.col,
-                    gridRow: `${pos.row} / span ${duration}`
+                    gridRow: `${pos.row} / span ${pos.span}`,
+                    ...(course.customLayout || {})
                   }}
                   onClick={() => setSelectedCourseModal(course)}
                 >
