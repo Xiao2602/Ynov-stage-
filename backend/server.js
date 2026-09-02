@@ -515,6 +515,23 @@ app.get(
         }
       }
 
+      // Récupérer les absences confirmées des enseignants
+      const absencesSnapshot = await adminDb.collection("absences")
+        .where("status", "==", "approved")
+        .get();
+
+      const approvedTeacherAbsences = [];
+      absencesSnapshot.forEach((aDoc) => {
+        const aData = aDoc.data();
+        if (aData.userId && (aData.role === 'teacher' || teacherUids.includes(aData.userId))) {
+          approvedTeacherAbsences.push({
+            teacherUid: aData.userId,
+            startIso: String(aData.startDate || '').slice(0, 10),
+            endIso: String(aData.endDate || aData.startDate || '').slice(0, 10)
+          });
+        }
+      });
+
       const matchedCourses = [];
       const studentClassNorm = studentClass.toLowerCase().replace(/\s+/g, ' ');
 
@@ -531,10 +548,17 @@ app.get(
             (studentClassNorm && groupNorm.includes(studentClassNorm));
 
           if (isMatch) {
+            const isCancelled = approvedTeacherAbsences.some((abs) => {
+              if (abs.teacherUid !== pDoc.id) return false;
+              const cDate = String(c.date || '').slice(0, 10);
+              return cDate >= abs.startIso && cDate <= abs.endIso;
+            });
+
             matchedCourses.push({
               ...c,
               teacherUid: pDoc.id,
-              teacherName
+              teacherName,
+              isCancelled
             });
           }
         });
