@@ -1,49 +1,48 @@
-# Release Notes & New Features (Post-Planning Update)
+# Release Notes & New Features (Teacher "Absences du jour" Update)
 
 > **Branch:** `mokhta-develop`  
-> **Scope:** Additions, fixes, and architectural enhancements implemented after the initial planning module release.
+> **Scope:** Complete overhaul of the teacher absences interface (`/pedagogie/absences`), introducing the "Absences du jour" dashboard, date navigator toolbar, class filtering, grouped cards view, detail modal, and backend date-range matching enhancements.
 
 ---
 
 ## 1. New Features & Fixes
 
-### 1.1. Automatic Student Notifications on Confirmed Teacher Absence
-* **Admin-Approval Trigger (`PATCH /api/absences/:id/review`)**:
-  * Automatically activates **only** when an administrator or HR approves a teacher's absence request (`status === 'approved'` and `role === 'teacher'`).
-  * If the request is pending or rejected, no notifications are triggered.
-* **Targeted Course Identification**:
-  * Queries `plannings/{teacherUid}` to find all sessions scheduled within the absence window (`startDate <= course.date <= endDate`).
-* **Automated Multi-Recipient Delivery**:
-  * For each cancelled session, identifies all students enrolled in the corresponding class (`course.group`).
-  * Dispatches In-App warning notifications (`type: "warning"`) to every affected student:
-    * **Title**: `⚠️ Cours annulé : [Nom du cours]`
-    * **Message**: `Le cours "[Nom du cours]" prévu le [Date] à [Heure] (Salle [X]) est annulé en raison de l'absence confirmée de [Nom du professeur].`
-  * Automatically alerts linked parents (`parentUids`) if applicable.
-* **Timetable Visual Cancellation Badges (`isCancelled: true`)**:
-  * Both student schedule (`GET /api/plannings/student/my`) and teacher schedule (`GET /api/plannings/:teacherUid`) cross-reference approved teacher absences in real-time.
-  * Sessions falling within an approved absence display a **`⚠️ Annulé`** badge across Week, Month, and List views.
-  * Opening the session modal displays an alert banner explaining the cancellation.
+### 1.1. Redesign of Teacher Daily Absences ("Absences du jour")
+* **Full Interface Replacement**:
+  * Replaced the static flat table in `/pedagogie/absences` ([TeacherAbsencesList.jsx](file:///c:/Users/mokht/OneDrive/Desktop/Stage%202026/frontend/src/pages/TeacherAbsencesList.jsx)) with the modern **"Absences du jour"** layout matching the campus design specifications.
+  * Brand typography and header hierarchy with eyebrow tag `ESPACE PÉDAGOGIQUE`, prominent title `Absences du jour`, and contextual subtitle.
+* **Segmented Date Navigation Toolbar**:
+  * Interactive composite date control with previous (`<`) and next (`>`) day navigation buttons.
+  * `DATE SÉLECTIONNÉE` label with formatted date (`DD / MM / YYYY`) and a calendar icon button linked to a date picker for direct date jumping.
+  * Quick-action **`Aujourd'hui`** button with soft cyan badge styling to immediately reset the view to the current date.
+* **Class Filter Dropdown**:
+  * Dropdown selector with label `CLASSE`, defaulting to `Toutes mes classes` and dynamically populated with classes assigned to the teacher (`GET /api/users/my-students`).
+* **Live Absence Indicator & Counter**:
+  * Displays section kicker `ABSENCES ENREGISTRÉES` with full localized date in French (e.g. `mardi 1 septembre 2026`).
+  * Dynamic attendance counter with group icon (`👥 X élève(s) absent(s)`).
+* **Pixel-Faithful Empty State**:
+  * When no absences exist for the selected date and filters, displays a centered card with a cyan calendar icon, heading `Aucun élève absent`, and subtitle `Il n'y a pas d'absence enregistrée pour cette date.`.
+* **Class-Grouped Absence Cards**:
+  * Absences are structured into distinct sections grouped by class (`className` / `department`) with class indicator dots and total absence counters.
+  * Responsive student absence cards featuring:
+    * Initials avatar with brand cyan background.
+    * Student full name and email.
+    * Course title and absence type pill (`Absence` vs `Retard`).
+    * Color-coded status badges: `À justifier` (red), `En attente` (amber), `Validée` (green), and `Rejetée` (red).
+    * Hover animations and subtle shadow elevation.
+* **Student Absence Detail Modal**:
+  * Clicking on any student card opens a detailed modal showing absence specifics: declaring teacher, date/period, reason/motif, proof document link (with direct download/view), deadline warning, and administrative review remarks.
 
 ---
 
-### 1.2. Complete Overhaul of the PDF & Excel Export Engine
-* **Resolved the 0 MB Empty PDF Bug**:
-  * Wrapped PDFKit stream generation into an asynchronous `Promise` that awaits the stream `end` event before buffer concatenation, preventing empty 0-byte file generation.
-  * Added `Content-Length` response header in `absenceController.js`.
-* **Inclusion & Accurate Status Mapping for Treated Absences**:
-  * Accurately displays treated requests (**Validée** and **Rejetée**) instead of mislabeling them as "En attente".
-  * Color-coded status badges:
-    * **Validée** (Green `#16a34a`) for approved requests.
-    * **Rejetée** (Red `#dc2626`) for rejected and non-justified requests (`to_justify`).
-    * **En attente** (Amber `#d97706`) for pending requests.
-  * Includes the reviewer name (*"Traité par"*) and admin review notes.
-* **Fixed Date Filter State Collision in `RequestsPage.jsx`**:
-  * Resolved variable collision where export was reading `startDate` / `endDate` (creation modal state defaulted to today) instead of the table filter variables (`startDateFilter` / `endDateFilter`).
-* **Direct Table Synchronization (`POST` + `GET`)**:
-  * `RequestsPage.jsx` transmits the currently filtered table rows (`filteredRequests`) via `POST /api/absences/export/pdf` and `/excel` to ensure 100% fidelity between on-screen data and the exported file.
-  * Standalone `GET` queries with URL parameters are also fully supported.
-* **Executive Multi-Page Layout**:
-  * A4 Landscape format (780 pt printable width), dark brand header banner (`#0f172a`), zebra striping, and repeating table headers across all pages.
+### 1.2. Backend Date-Range & Student Matching Optimization
+* **Single-Date Overlap & Range Matching (`GET /api/absences/by-course`)**:
+  * Added support for `date` query parameter (`YYYY-MM-DD`).
+  * Evaluates date span overlap: `startDate <= targetDate <= endDate`, ensuring both single-day and multi-day absences are accurately detected on any active date.
+* **Safe Teacher Student Association**:
+  * Dynamically maps students belonging to the teacher's assigned classes without hitting Firestore's 30-item array `in` query limitation.
+* **Enriched Payload**:
+  * Extends each returned absence record with the student's `className`, `displayName`, and `userEmail` to ensure seamless client-side grouping.
 
 ---
 
@@ -51,12 +50,10 @@
 
 | File Path | Component | Summary of Changes |
 |---|---|---|
-| `backend/Absence/Services/absenceService.js` | Backend Service | • Asynchronous Promise-wrapped PDF buffer resolution.<br>• Accurate status mapping for treated absences.<br>• Implementation of `notifyStudentsOfTeacherAbsence` on admin confirmation.<br>• Support for custom dataset payload (`POST`). |
-| `backend/Absence/Controllers/absenceController.js` | Backend Controller | • Added `Content-Length` header for binary PDF responses.<br>• Forwarded `req.body.absences` to PDF and Excel services. |
-| `backend/server.js` | Backend Routing | • Enabled `app.all` on export routes (`GET` + `POST`).<br>• Dynamically flagged courses occurring during confirmed teacher absences with `isCancelled: true` in student and teacher planning endpoints. |
-| `frontend/src/pages/RequestsPage.jsx` | Frontend Page | • Fixed `startDateFilter` / `endDateFilter` variable collision.<br>• Export handler now sends active `filteredRequests` via `POST`. |
-| `frontend/src/pages/StudentSchedulePage.jsx` | Frontend Page | • Added `⚠️ Annulé` badges on course cards (Week, Month, List views).<br>• Added prominent cancellation alert banner in course detail modal. |
-| `frontend/src/pages/TeacherSchedulePage.jsx` | Frontend Page | • Added `⚠️ Annulé` badges on course cards and cancellation warning in modal. |
+| `backend/Absence/Controllers/absenceController.js` | Backend Controller | • Enhanced `handleGetAbsencesByCourse` with `date` parameter support.<br>• Implemented robust date span overlap matching (`startDate <= targetDate <= endDate`).<br>• Enriched absence payload with student `className`, `displayName`, and `userEmail`.<br>• Prevented Firestore 30-item array query limitation. |
+| `frontend/src/pages/TeacherAbsencesList.jsx` | Frontend Page | • Complete replacement with "Absences du jour" layout.<br>• Implemented segmented date navigator (`<`, date label, `DD / MM / YYYY`, `📅`, `>`).<br>• Added soft-cyan `Aujourd'hui` quick-reset button.<br>• Added `CLASSE` dropdown selector with `Toutes mes classes`.<br>• Added empty state matching design specifications.<br>• Implemented class-grouped cards and student absence detail modal. |
+| `frontend/src/pages/TeacherPages.css` | Frontend Styles | • Added scoped CSS rules for `.teacher-absences-page`, `.teacher-date-segmented-control`, `.teacher-btn-today`, `.teacher-class-select-box`, `.teacher-absences-empty-card`, `.teacher-absence-group-card`, and modal dialog. |
+| `FEATURES_AND_MODIFICATIONS.md` | Documentation | • Documented all features, file changes, and endpoints added in this iteration. |
 
 ---
 
@@ -64,8 +61,4 @@
 
 | Method | Endpoint | Access | Description |
 |---|---|---|---|
-| `ALL` | `/api/absences/export/pdf` | Admin / RH | Generates formatted PDF report. Supports `GET` with query filters and `POST` with exact client table dataset. |
-| `ALL` | `/api/absences/export/excel` | Admin / RH | Generates formatted Excel workbook. Supports `GET` with query filters and `POST` with exact client table dataset. |
-| `PATCH` | `/api/absences/:id/review` | Admin / RH | Reviews absence; triggers automatic student/parent cancellation notifications if approved for a teacher. |
-| `GET` | `/api/plannings/student/my` | Authenticated Student | Returns student schedule with `isCancelled: true` flags on sessions matching approved teacher absences. |
-| `GET` | `/api/plannings/:teacherUid` | Authenticated Teacher / Admin | Returns teacher schedule with `isCancelled: true` flags on sessions matching approved teacher absences. |
+| `GET` | `/api/absences/by-course` | Authenticated Teacher | Retrieves absences of students belonging to teacher's classes for a target date (`date`) or date range (`startDate`/`endDate`), with optional `className` and `courseName` filters. |
