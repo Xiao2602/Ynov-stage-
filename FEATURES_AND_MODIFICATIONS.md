@@ -1,111 +1,71 @@
-# 🚀 Features & Modifications Changelog
-**Branch:** `mokhta-develop`  
-**Target Comparison:** Changes and new features present on `mokhta-develop` that are **not** in `moise-dev`.
+# Release Notes & New Features (Post-Planning Update)
+
+> **Branch:** `mokhta-develop`  
+> **Scope:** Additions, fixes, and architectural enhancements implemented after the initial planning module release.
 
 ---
 
-## 📌 Executive Summary
-This branch introduces a complete overhaul of the **Planning & Schedule system** across all three roles (**Admin, Teacher, and Student**), incorporates full **calendar date intelligence** (day/month/year), builds an **anti-conflict validation engine** (3h minimum interval), provides an enterprise **multi-view timetable** (Week, Month, Year, List), and fixes all user management class assignment flows.
+## 1. New Features & Fixes
+
+### 1.1. Automatic Student Notifications on Confirmed Teacher Absence
+* **Admin-Approval Trigger (`PATCH /api/absences/:id/review`)**:
+  * Automatically activates **only** when an administrator or HR approves a teacher's absence request (`status === 'approved'` and `role === 'teacher'`).
+  * If the request is pending or rejected, no notifications are triggered.
+* **Targeted Course Identification**:
+  * Queries `plannings/{teacherUid}` to find all sessions scheduled within the absence window (`startDate <= course.date <= endDate`).
+* **Automated Multi-Recipient Delivery**:
+  * For each cancelled session, identifies all students enrolled in the corresponding class (`course.group`).
+  * Dispatches In-App warning notifications (`type: "warning"`) to every affected student:
+    * **Title**: `⚠️ Cours annulé : [Nom du cours]`
+    * **Message**: `Le cours "[Nom du cours]" prévu le [Date] à [Heure] (Salle [X]) est annulé en raison de l'absence confirmée de [Nom du professeur].`
+  * Automatically alerts linked parents (`parentUids`) if applicable.
+* **Timetable Visual Cancellation Badges (`isCancelled: true`)**:
+  * Both student schedule (`GET /api/plannings/student/my`) and teacher schedule (`GET /api/plannings/:teacherUid`) cross-reference approved teacher absences in real-time.
+  * Sessions falling within an approved absence display a **`⚠️ Annulé`** badge across Week, Month, and List views.
+  * Opening the session modal displays an alert banner explaining the cancellation.
 
 ---
 
-## 🌟 1. New Features (Not present on `moise-dev`)
-
-### 1.1. 📅 Enterprise Planning & Timetable Engine (Admin, Teacher, Student)
-* **Full Calendar Dates Support (Day / Month / Year)**:
-  * Replaced legacy static day-of-week slots with exact calendar date awareness (`YYYY-MM-DD`).
-  * Automatic synchronization of French day names (*Lundi, Mardi...*).
-  * **Batch Recurring Session Generator**: Generate 12 to 40 weekly dated sessions in 1 click.
-  * **Quick `+7j` Duplicate Action**: Duplicate any course to the following week instantly.
-  * **Year-Long Excel Importer & Exporter (SheetJS)**: Robust multi-format parser supporting ISO dates, French dates (`DD/MM/YYYY`), and Excel numerical serials.
-  * **Pre-built 2026-2027 Excel Template** (`88` sessions) downloadable with 1 click.
-
-### 1.2. 👨‍🏫 Upgraded Professor Schedule View (`TeacherSchedulePage.jsx`)
-* **4 Synchronized View Modes**:
-  1. **📅 Vue Semaine (Weekly Timetable)**: 5-day grid (`08:00–18:00`) with an elevated **Pause Déjeuner (`12h00–13h00`)** separator that prevents card overflow.
-  2. **🗓️ Vue Mois (Monthly Calendar)**: 7-column calendar matrix with day session chips and day counters.
-  3. **📆 Vue Année (Annual Matrix)**: 10-month academic overview (Sep -> Jun) with hours breakdown and quick drill-down buttons.
-  4. **📋 Vue Liste (Chronological Feed)**: Searchable table with direct **"Émarger"** action buttons.
-* **Smart Vertical Cluster Stacking**:
-  * Concurrent/overlapping courses on the same slot stack vertically at **100% full column width** instead of squishing into unreadable horizontal strips.
-* **Strict Date Isolation**:
-  * Weekly views strictly display courses belonging to the active week, preventing semester mixing.
-* **Dynamic Context-Aware Navigation**:
-  * Navigation reset button dynamically displays `Cette semaine`, `Ce mois-ci`, or `Cette année` based on the active view.
-* **Adjustable Date Interval Filter**:
-  * Custom `Date début` à `Date fin` range filter with 1-click `Effacer` reset.
-* **Live Period KPI Strip**:
-  * Real-time counters for Scheduled Sessions, Total Teaching Volume, Distinct Classes, and Next Upcoming Course countdown.
-* **Interactive Session Modal**:
-  * Click any session card to inspect complete details and launch the attendance call sheet (`/pedagogie/appel`).
-
-### 1.3. 🎓 Dedicated Student Schedule View (`StudentSchedulePage.jsx`)
-* **100% Feature Parity with Teacher View**:
-  * Provides the exact same 4 view modes (Week, Month, Year, List), KPI strip, date interval filter, search, and dynamic navigation.
-* **Zero Clutter**:
-  * Removed class filter dropdown since students are automatically bound to their own enrolled promotion (*e.g., Bachelor 3 - Génie Logiciel*).
-* **Professor Name Attribution**:
-  * Each card and modal displays the designated instructor (`👨‍🏫 Nom du professeur`).
-* **Dedicated Backend Aggregation (`GET /api/plannings/student/my`)**:
-  * Dynamically aggregates courses across all instructors for the student's assigned class and delivers a chronologically sorted timetable.
-
-### 1.4. 🛑 3-Hour Minimum Interval & Conflict Rejection Engine
-* **Backend Validation Rule** (`backend/server.js` & `backend/Services/planningService.js`):
-  * Strictly rejects creating/assigning overlapping courses for the same professor with less than a 3-hour separation.
-  * Responds with descriptive `HTTP 400 Bad Request` alerts indicating the exact conflicting courses, date, and time.
-* **Client-Side Pre-Validation** (`AssignPlanningPage.jsx`):
-  * Alerts administrators immediately upon Excel import or before saving.
-
-### 1.5. 👥 Users Management & Role Modal Decoupling (`UsersPage.jsx`)
-* **Decoupled Student & Teacher Modals**:
-  * Clicking the folder action on a **Teacher** opens the multi-checkbox assignment modal (`POST /api/users/assign-teacher`).
-  * Clicking the folder action on a **Student** opens the dedicated single-class swap dropdown modal (`PATCH /api/users/:uid`).
-* **Optimized Table Layout & Badges**:
-  * Compact 2-per-line structured class badges with automatic acronyms (*B3 GL, M1 Cyber, B3 IA*).
-  * Ergonomic 28px action buttons grid with dedicated 14% table column allocation.
-  * Direct Excel export of users list.
+### 1.2. Complete Overhaul of the PDF & Excel Export Engine
+* **Resolved the 0 MB Empty PDF Bug**:
+  * Wrapped PDFKit stream generation into an asynchronous `Promise` that awaits the stream `end` event before buffer concatenation, preventing empty 0-byte file generation.
+  * Added `Content-Length` response header in `absenceController.js`.
+* **Inclusion & Accurate Status Mapping for Treated Absences**:
+  * Accurately displays treated requests (**Validée** and **Rejetée**) instead of mislabeling them as "En attente".
+  * Color-coded status badges:
+    * **Validée** (Green `#16a34a`) for approved requests.
+    * **Rejetée** (Red `#dc2626`) for rejected and non-justified requests (`to_justify`).
+    * **En attente** (Amber `#d97706`) for pending requests.
+  * Includes the reviewer name (*"Traité par"*) and admin review notes.
+* **Fixed Date Filter State Collision in `RequestsPage.jsx`**:
+  * Resolved variable collision where export was reading `startDate` / `endDate` (creation modal state defaulted to today) instead of the table filter variables (`startDateFilter` / `endDateFilter`).
+* **Direct Table Synchronization (`POST` + `GET`)**:
+  * `RequestsPage.jsx` transmits the currently filtered table rows (`filteredRequests`) via `POST /api/absences/export/pdf` and `/excel` to ensure 100% fidelity between on-screen data and the exported file.
+  * Standalone `GET` queries with URL parameters are also fully supported.
+* **Executive Multi-Page Layout**:
+  * A4 Landscape format (780 pt printable width), dark brand header banner (`#0f172a`), zebra striping, and repeating table headers across all pages.
 
 ---
 
-## 📂 2. List of Modified & Added Files
+## 2. Summary of Modified Files
 
-### 🖥️ Frontend Files
-| File Path | Status | Summary of Modifications |
+| File Path | Component | Summary of Changes |
 |---|---|---|
-| `frontend/src/pages/StudentSchedulePage.jsx` | **NEW** | Dedicated Student Schedule Page with 4 view modes, period filter, search, and modal. |
-| `frontend/src/pages/StudentPages.css` | **NEW** | Dedicated CSS design system for the student schedule interface. |
-| `frontend/src/pages/TeacherSchedulePage.jsx` | **MODIFIED** | Complete multi-view rewrite (Week/Month/Year/List), date interval filter, anti-squish vertical clustering, safe date normalization. |
-| `frontend/src/pages/TeacherPages.css` | **MODIFIED** | Upgraded timetable grid, KPI bar, toolbar, elevated lunch break, and course card styles. |
-| `frontend/src/pages/AssignPlanningPage.jsx` | **MODIFIED** | Full calendar date picker, batch recurring generator, 88-session Excel template generator & importer, 3h conflict checker. |
-| `frontend/src/pages/AssignPlanningPage.css` | **MODIFIED** | Table & grid view toggle styles, batch recurring modal, and planning KPI summary strip. |
-| `frontend/src/pages/TeacherAttendancePage.jsx` | **MODIFIED** | Safeguarded planning parser against undefined courses / data structure variations. |
-| `frontend/src/pages/UsersPage.jsx` | **MODIFIED** | Decoupled student class swap modal from teacher modal, 28px buttons, balanced badges. |
-| `frontend/src/components/DashboardLayout.jsx` | **MODIFIED** | Added "Mon planning" navigation link for student & parent roles in sidebar. |
-| `frontend/src/components/Icons.jsx` | **MODIFIED** | Added `IconChevronLeft`, `IconChevronRight`, `IconMapPin`, and cleaned icon exports. |
-| `frontend/src/App.jsx` | **MODIFIED** | Registered `/planning` and `/etudiant/planning` student schedule routes. |
-| `frontend/public/template_planning_annuel_2026_2027.xlsx` | **NEW** | Static 88-session 2026-2027 annual planning template for in-app download. |
-
-### ⚙️ Backend Files
-| File Path | Status | Summary of Modifications |
-|---|---|---|
-| `backend/server.js` | **MODIFIED** | Added `GET /api/plannings/student/my` endpoint, 3h conflict validation on `POST /api/plannings/assign`, chronological sorting. |
-| `backend/Services/planningService.js` | **MODIFIED** | Integrated `validatePlanningConflicts` (3h minimum separation check) and date normalization. |
-| `backend/Auth/Users/userController.js` | **MODIFIED** | Enabled `className` update in allowed fields for student single-swap class endpoint. |
-| `backend/Auth/Users/userService.js` | **MODIFIED** | Properly saved student `className` on user creation. |
-
-### 📦 Root Files
-| File Path | Status | Summary of Modifications |
-|---|---|---|
-| `planning_annuel_2026_2027.xlsx` | **NEW** | Ready-to-use 88-session Excel schedule template file. |
-| `FEATURES_AND_MODIFICATIONS.md` | **NEW** | Comprehensive changelog and release notes document. |
+| `backend/Absence/Services/absenceService.js` | Backend Service | • Asynchronous Promise-wrapped PDF buffer resolution.<br>• Accurate status mapping for treated absences.<br>• Implementation of `notifyStudentsOfTeacherAbsence` on admin confirmation.<br>• Support for custom dataset payload (`POST`). |
+| `backend/Absence/Controllers/absenceController.js` | Backend Controller | • Added `Content-Length` header for binary PDF responses.<br>• Forwarded `req.body.absences` to PDF and Excel services. |
+| `backend/server.js` | Backend Routing | • Enabled `app.all` on export routes (`GET` + `POST`).<br>• Dynamically flagged courses occurring during confirmed teacher absences with `isCancelled: true` in student and teacher planning endpoints. |
+| `frontend/src/pages/RequestsPage.jsx` | Frontend Page | • Fixed `startDateFilter` / `endDateFilter` variable collision.<br>• Export handler now sends active `filteredRequests` via `POST`. |
+| `frontend/src/pages/StudentSchedulePage.jsx` | Frontend Page | • Added `⚠️ Annulé` badges on course cards (Week, Month, List views).<br>• Added prominent cancellation alert banner in course detail modal. |
+| `frontend/src/pages/TeacherSchedulePage.jsx` | Frontend Page | • Added `⚠️ Annulé` badges on course cards and cancellation warning in modal. |
 
 ---
 
-## 📡 3. New & Updated API Endpoints
+## 3. Updated API Endpoints
 
 | Method | Endpoint | Access | Description |
 |---|---|---|---|
-| `GET` | `/api/plannings/student/my` | Authenticated Student | Aggregates all scheduled classes for the logged-in student's promotion with instructor names. |
-| `GET` | `/api/plannings/:teacherUid` | Authenticated / Admin | Retrieves normalized annual planning for a specific teacher. |
-| `POST` | `/api/plannings/assign` | Admin / Employee | Assigns annual planning with strict date normalization and 3h conflict validation. |
-| `PATCH` | `/api/users/:uid` | Admin / Employee | Updates user fields including single student `className` re-assignment. |
+| `ALL` | `/api/absences/export/pdf` | Admin / RH | Generates formatted PDF report. Supports `GET` with query filters and `POST` with exact client table dataset. |
+| `ALL` | `/api/absences/export/excel` | Admin / RH | Generates formatted Excel workbook. Supports `GET` with query filters and `POST` with exact client table dataset. |
+| `PATCH` | `/api/absences/:id/review` | Admin / RH | Reviews absence; triggers automatic student/parent cancellation notifications if approved for a teacher. |
+| `GET` | `/api/plannings/student/my` | Authenticated Student | Returns student schedule with `isCancelled: true` flags on sessions matching approved teacher absences. |
+| `GET` | `/api/plannings/:teacherUid` | Authenticated Teacher / Admin | Returns teacher schedule with `isCancelled: true` flags on sessions matching approved teacher absences. |
