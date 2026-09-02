@@ -797,9 +797,14 @@ export default function StudentSchedulePage() {
                       onClick={() => setSelectedCourseModal(course)}
                     >
                       <div className="student-course-card-topbar">
-                        <span className="student-course-time-tag">
+                        <span className="student-course-time-tag" style={course.isCancelled ? { background: '#fee2e2', color: '#b91c1c' } : {}}>
                           {course.start} ({course.duration}h)
                         </span>
+                        {course.isCancelled && (
+                          <span style={{ background: '#ef4444', color: '#fff', fontSize: '0.62rem', fontWeight: 700, padding: '1px 5px', borderRadius: '4px' }}>
+                            Annulé
+                          </span>
+                        )}
                         {course.teacherName && (
                           <span className="student-course-prof-tag" title={course.teacherName}>
                             👨‍🏫 {course.teacherName.split(' ')[0]}

@@ -208,6 +208,112 @@ export async function getAllAbsencesService(filters = {}) {
  * @param {Object} reviewerUser - Utilisateur modérateur (Admin / RH / Manager)
  * @param {Object} reviewData - { status, reviewNotes }
  */
+
+/**
+ * Notifie automatiquement les étudiants (et parents) des cours impactés
+ * par l'absence confirmée d'un professeur.
+ *
+ * @param {Object} absence - Données de l'absence confirmée
+ * @param {string} absenceId - ID du document d'absence
+ */
+export async function notifyStudentsOfTeacherAbsence(absence, absenceId) {
+  try {
+    const teacherUid = absence.userId;
+    if (!teacherUid) return;
+
+    // 1. Vérifier si l'utilisateur est bien un enseignant
+    let isTeacher = absence.role === 'teacher';
+    if (!isTeacher) {
+      const userDoc = await adminDb.collection("users").doc(teacherUid).get();
+      if (userDoc.exists && userDoc.data()?.role === 'teacher') {
+        isTeacher = true;
+      }
+    }
+    if (!isTeacher) return;
+
+    // 2. Récupérer le planning de ce professeur
+    const planningDoc = await adminDb.collection("plannings").doc(teacherUid).get();
+    if (!planningDoc.exists) return;
+
+    const teacherPlanning = planningDoc.data();
+    const courses = Array.isArray(teacherPlanning.courses) ? teacherPlanning.courses : [];
+    if (courses.length === 0) return;
+
+    // 3. Normaliser les dates de début et fin de l'absence (format YYYY-MM-DD)
+    const startIso = String(absence.startDate || '').slice(0, 10);
+    const endIso = String(absence.endDate || startIso).slice(0, 10);
+    if (!startIso) return;
+
+    // 4. Identifier tous les cours du professeur tombant dans l'intervalle [startIso, endIso]
+    const cancelledCourses = courses.filter(c => {
+      if (!c.date) return false;
+      const cd = String(c.date).slice(0, 10);
+      return cd >= startIso && cd <= endIso;
+    });
+
+    if (cancelledCourses.length === 0) {
+      console.log(`ℹ️ Aucun cours prévu pour le professeur ${teacherUid} entre le ${startIso} et le ${endIso}.`);
+      return;
+    }
+
+    console.log(`📢 ${cancelledCourses.length} cours impacté(s) par l'absence confirmée du professeur ${absence.displayName || teacherUid}. Notification des étudiants...`);
+
+    // 5. Récupérer tous les étudiants actifs
+    const studentsSnap = await adminDb.collection("users").where("role", "==", "student").get();
+    const teacherName = absence.displayName || "Votre professeur";
+
+    // Pour chaque cours annulé, trouver les étudiants de la classe correspondante
+    for (const course of cancelledCourses) {
+      const groupNorm = String(course.group || '').toLowerCase().trim();
+      if (!groupNorm) continue;
+
+      const courseTitle = course.title || "Séance de cours";
+      const courseDate = course.date;
+      const courseTime = course.start || "horaire habituel";
+      const courseRoom = course.room ? ` (Salle ${course.room})` : "";
+
+      const notifTitle = `⚠️ Cours annulé : ${courseTitle}`;
+      const notifMessage = `Le cours "${courseTitle}" prévu le ${courseDate} à ${courseTime}${courseRoom} est annulé en raison de l'absence confirmée de ${teacherName}.`;
+
+      for (const sDoc of studentsSnap.docs) {
+        const sData = sDoc.data();
+        const sClass = String(sData.className || sData.department || '').toLowerCase().trim();
+        
+        const isMatch = groupNorm === sClass ||
+          (groupNorm && sClass.includes(groupNorm)) ||
+          (sClass && groupNorm.includes(sClass));
+
+        if (isMatch) {
+          // A. Notification In-App pour l'étudiant
+          createNotificationService({
+            userId: sDoc.id,
+            title: notifTitle,
+            message: notifMessage,
+            type: "warning",
+            relatedId: absenceId
+          }).catch(err => console.warn(`Erreur notification étudiant ${sDoc.id}:`, err.message));
+
+          // B. Notification In-App pour les parents liés
+          if (Array.isArray(sData.parentUids) && sData.parentUids.length > 0) {
+            for (const parentId of sData.parentUids) {
+              createNotificationService({
+                userId: parentId,
+                title: `⚠️ Cours annulé pour ${sData.displayName || 'votre enfant'}`,
+                message: `Le cours "${courseTitle}" prévu le ${courseDate} à ${courseTime} est annulé suite à l'absence de ${teacherName}.`,
+                type: "warning",
+                relatedId: absenceId
+              }).catch(err => console.warn(`Erreur notification parent ${parentId}:`, err.message));
+            }
+          }
+        }
+      }
+    }
+    console.log(`✅ Notifications des cours annulés envoyées avec succès aux étudiants concernés.`);
+  } catch (error) {
+    console.error("❌ Erreur notifyStudentsOfTeacherAbsence:", error);
+  }
+}
+
 export async function reviewAbsenceService(absenceId, reviewerUser, { status, reviewNotes = "" }) {
   try {
     const docRef = adminDb.collection(COLLECTION_NAME).doc(absenceId);
@@ -228,6 +334,13 @@ export async function reviewAbsenceService(absenceId, reviewerUser, { status, re
     };
 
     await docRef.update(updateData);
+
+    // Si la demande est approuvée et concerne un professeur, notifier automatiquement les étudiants des cours impactés
+    if (status === "approved") {
+      notifyStudentsOfTeacherAbsence({ ...currentAbsence, ...updateData }, absenceId).catch(err => {
+        console.warn("Avertissement : Erreur notification étudiants absence prof:", err.message);
+      });
+    }
 
     // 1. Déclenchement de l'email de décision à l'étudiant / employé (asynchrone)
     if (currentAbsence.userEmail) {

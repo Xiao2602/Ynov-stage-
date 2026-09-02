@@ -836,9 +836,14 @@ export default function TeacherSchedulePage() {
                       onClick={() => setSelectedCourseModal(course)}
                     >
                       <div className="course-card-topbar">
-                        <span className="course-time-tag">
+                        <span className="course-time-tag" style={course.isCancelled ? { background: '#fee2e2', color: '#b91c1c' } : {}}>
                           {course.start} ({course.duration}h)
                         </span>
+                        {course.isCancelled && (
+                          <span style={{ background: '#ef4444', color: '#fff', fontSize: '0.62rem', fontWeight: 700, padding: '1px 5px', borderRadius: '4px' }}>
+                            Annulé
+                          </span>
+                        )}
                         <span className="course-class-tag" title={course.group}>
                           {formatClassAbbrev(course.group)}
                         </span>
