@@ -349,83 +349,135 @@ import PDFDocument from "pdfkit";
  * Exporter les absences en Excel (.xlsx)
  * @param {Object} filters - { status, department, type, startDate, endDate }
  */
+/**
+ * Helper commun pour agréger toutes les absences (actives et archivées/traitées)
+ */
+async function fetchAllAbsencesUnified(filters = {}) {
+  const activeSnap = await adminDb.collection("absences").get();
+  const archivedSnap = await adminDb.collection("archived_absences").get();
+
+  const allMap = new Map();
+  activeSnap.forEach(doc => {
+    allMap.set(doc.id, { id: doc.id, isArchived: false, ...doc.data() });
+  });
+  archivedSnap.forEach(doc => {
+    if (!allMap.has(doc.id)) {
+      allMap.set(doc.id, { id: doc.id, isArchived: true, ...doc.data() });
+    }
+  });
+
+  let absences = Array.from(allMap.values());
+
+  // Filtrage par statut
+  if (filters.status && filters.status !== 'all') {
+    const s = filters.status.toLowerCase();
+    if (s === 'approved' || s === 'validé' || s === 'valide') {
+      absences = absences.filter(a => a.status === 'approved');
+    } else if (s === 'rejected' || s === 'rejeté' || s === 'rejete') {
+      absences = absences.filter(a => a.status === 'rejected' || a.status === 'to_justify');
+    } else if (s === 'pending' || s === 'en attente' || s === 'en cours') {
+      absences = absences.filter(a => a.status === 'pending');
+    } else {
+      absences = absences.filter(a => String(a.status || '').toLowerCase() === s);
+    }
+  }
+
+  // Filtrage par classe / département
+  if (filters.department && filters.department !== 'all') {
+    const dep = filters.department.toLowerCase();
+    absences = absences.filter(a => 
+      String(a.department || '').toLowerCase().includes(dep) ||
+      String(a.className || '').toLowerCase().includes(dep)
+    );
+  }
+
+  // Filtrage par type
+  if (filters.type && filters.type !== 'all') {
+    const t = filters.type.toLowerCase();
+    absences = absences.filter(a => String(a.type || '').toLowerCase().includes(t));
+  }
+
+  // Filtrage par date de début
+  if (filters.startDate) {
+    const start = new Date(filters.startDate);
+    absences = absences.filter(a => {
+      const d = a.startDate ? new Date(a.startDate) : (a.createdAt?.toDate ? a.createdAt.toDate() : null);
+      return d ? d >= start : true;
+    });
+  }
+
+  // Filtrage par date de fin
+  if (filters.endDate) {
+    const end = new Date(filters.endDate);
+    end.setHours(23, 59, 59, 999);
+    absences = absences.filter(a => {
+      const d = a.endDate ? new Date(a.endDate) : (a.createdAt?.toDate ? a.createdAt.toDate() : null);
+      return d ? d <= end : true;
+    });
+  }
+
+  // Tri chronologique antéchronologique (plus récent en premier)
+  absences.sort((a, b) => {
+    const dateA = a.startDate || (a.createdAt?.toDate ? a.createdAt.toDate().toISOString() : '') || '';
+    const dateB = b.startDate || (b.createdAt?.toDate ? b.createdAt.toDate().toISOString() : '') || '';
+    return dateB.localeCompare(dateA);
+  });
+
+  return absences;
+}
+
+/**
+ * Exporter les absences en Excel (incluant les demandes traitées et en cours)
+ * @param {Object} filters - { status, department, type, startDate, endDate }
+ */
 export async function exportAbsencesToExcelService(filters = {}) {
   try {
-    let query = adminDb.collection("absences");
-    
-    if (filters.status) query = query.where("status", "==", filters.status);
-    if (filters.department) query = query.where("department", "==", filters.department);
-    if (filters.type) query = query.where("type", "==", filters.type);
+    const filtered = await fetchAllAbsencesUnified(filters);
 
-    const snapshot = await query.get();
-    const absences = [];
-    snapshot.forEach(doc => absences.push(doc.data()));
+    const rows = filtered.map(a => {
+      let statusLabel = 'En attente';
+      if (a.status === 'approved') statusLabel = 'Validée';
+      else if (a.status === 'rejected' || a.status === 'to_justify') statusLabel = 'Rejetée';
+      else if (a.status === 'justified') statusLabel = 'Justifiée';
 
-    // Filtrer par dates si fournies (client-side pour plus de flexibilité)
-    let filtered = absences;
-    if (filters.startDate) {
-      const start = new Date(filters.startDate);
-      filtered = filtered.filter(a => new Date(a.startDate) >= start);
-    }
-    if (filters.endDate) {
-      const end = new Date(filters.endDate);
-      filtered = filtered.filter(a => new Date(a.endDate) <= end);
-    }
+      const typeLabel = a.type === 'late' ? 'Retard' : a.type === 'unjustified' ? 'Injustifiée' : a.type === 'medical' ? 'Médical' : a.type || 'Absence';
 
-    // Formater les données pour Excel
-    const rows = filtered.map(a => ({
-      "ID": a.id || "",
-      "Utilisateur": a.displayName || "",
-      "Email": a.userEmail || "",
-      "Département": a.department || "",
-      "Type": a.type || "",
-      "Date début": a.startDate || "",
-      "Date fin": a.endDate || "",
-      "Motif": a.reason || "",
-      "Statut": a.status || "",
-      "Validé par": a.reviewerName || "",
-      "Remarques": a.reviewNotes || "",
-      "Date création": a.createdAt?.toDate?.().toLocaleDateString() || ""
-    }));
+      return {
+        "ID": a.id || "",
+        "Étudiant": a.displayName || a.studentName || "",
+        "Email": a.userEmail || "",
+        "Classe / Département": a.className || a.department || "",
+        "Type": typeLabel,
+        "Objet / Motif": a.reason || a.courseName || "",
+        "Date Début": a.startDate || "",
+        "Date Fin": a.endDate || "",
+        "Statut": statusLabel,
+        "Traité par": a.reviewerName || "",
+        "Remarques": a.reviewNotes || "",
+        "Date de création": a.createdAt?.toDate ? a.createdAt.toDate().toLocaleDateString('fr-FR') : (a.startDate || "")
+      };
+    });
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, "Absences");
     const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
-    return { success: true, buffer, filename: `absences_${new Date().toISOString().slice(0,10)}.xlsx` };
+    return { success: true, buffer, filename: `absences_${new Date().toISOString().slice(0, 10)}.xlsx` };
   } catch (error) {
+    console.error("❌ Erreur exportAbsencesToExcelService:", error);
     return { success: false, error: "Erreur lors de l'export Excel : " + error.message };
   }
 }
 
 /**
- * Exporter les absences en PDF
+ * Exporter les absences en PDF (incluant les demandes traitées et en cours)
  * @param {Object} filters - { status, department, type, startDate, endDate }
  */
 export async function exportAbsencesToPdfService(filters = {}) {
   try {
-    let query = adminDb.collection("absences");
-    
-    if (filters.status) query = query.where("status", "==", filters.status);
-    if (filters.department) query = query.where("department", "==", filters.department);
-    if (filters.type) query = query.where("type", "==", filters.type);
+    const filtered = await fetchAllAbsencesUnified(filters);
 
-    const snapshot = await query.get();
-    const absences = [];
-    snapshot.forEach(doc => absences.push({ id: doc.id, ...doc.data() }));
-
-    let filtered = absences;
-    if (filters.startDate) {
-      const start = new Date(filters.startDate);
-      filtered = filtered.filter(a => new Date(a.startDate) >= start);
-    }
-    if (filters.endDate) {
-      const end = new Date(filters.endDate);
-      filtered = filtered.filter(a => new Date(a.endDate) <= end);
-    }
-
-    // Générer le PDF avec pdfkit de manière asynchrone via Promise
     const buffer = await new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 30, size: "A4", layout: "landscape" });
       const buffers = [];
@@ -434,17 +486,23 @@ export async function exportAbsencesToPdfService(filters = {}) {
       doc.on('end', () => resolve(Buffer.concat(buffers)));
       doc.on('error', err => reject(err));
 
-      // 1. En-tête officiel Ynov
-      doc.rect(0, 0, 842, 60).fill('#0f172a');
-      doc.fillColor('#ffffff').fontSize(16).font('Helvetica-Bold')
-         .text("YNOV CAMPUS — RAPPORT OFFICIEL DES ABSENCES", 35, 18);
-      
-      doc.fontSize(9).font('Helvetica')
-         .text(`Généré le ${new Date().toLocaleString('fr-FR')} • Total : ${filtered.length} demande(s)`, 35, 38);
+      const treatedCount = filtered.filter(a => ['approved', 'rejected', 'to_justify', 'justified'].includes(a.status)).length;
+      const pendingCount = filtered.filter(a => a.status === 'pending').length;
 
-      // 2. Configuration des colonnes (Largeur totale = 780 pt)
-      const startY = 80;
-      const rowHeight = 22;
+      // Header fonction
+      const drawPageHeader = () => {
+        doc.rect(0, 0, 842, 60).fill('#0f172a');
+        doc.fillColor('#ffffff').fontSize(16).font('Helvetica-Bold')
+           .text("YNOV CAMPUS — RAPPORT GLOBAL DES ABSENCES", 35, 16);
+        
+        doc.fontSize(8.5).font('Helvetica')
+           .text(`Généré le ${new Date().toLocaleString('fr-FR')} • Total : ${filtered.length} demande(s) (${treatedCount} traitée(s), ${pendingCount} en attente)`, 35, 38);
+      };
+
+      drawPageHeader();
+
+      const startY = 75;
+      const rowHeight = 20;
       const cols = [
         { header: "#", width: 25, align: 'center' },
         { header: "Étudiant", width: 115, align: 'left' },
@@ -454,18 +512,17 @@ export async function exportAbsencesToPdfService(filters = {}) {
         { header: "Date Début", width: 75, align: 'center' },
         { header: "Date Fin", width: 75, align: 'center' },
         { header: "Statut", width: 65, align: 'center' },
-        { header: "Décision par", width: 70, align: 'left' }
+        { header: "Traité par", width: 70, align: 'left' }
       ];
 
       let currentY = startY;
 
-      // 3. En-tête du tableau
       const drawTableHeader = (yPos) => {
         doc.rect(30, yPos, 780, rowHeight).fill('#1e293b');
         let xOffset = 30;
-        doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
+        doc.fillColor('#ffffff').fontSize(7.5).font('Helvetica-Bold');
         cols.forEach(col => {
-          doc.text(col.header, xOffset + 3, yPos + 7, { width: col.width - 6, align: col.align });
+          doc.text(col.header, xOffset + 3, yPos + 6, { width: col.width - 6, align: col.align });
           xOffset += col.width;
         });
       };
@@ -473,32 +530,45 @@ export async function exportAbsencesToPdfService(filters = {}) {
       drawTableHeader(currentY);
       currentY += rowHeight;
 
-      // 4. Lignes du tableau
       filtered.forEach((a, idx) => {
-        if (currentY > 530) {
+        if (currentY > 540) {
           doc.addPage();
-          currentY = 40;
+          drawPageHeader();
+          currentY = 75;
           drawTableHeader(currentY);
           currentY += rowHeight;
         }
 
-        // Alternance de couleur (Zebra striping)
+        // Alternance de couleur (Zebra)
         if (idx % 2 === 0) {
           doc.rect(30, currentY, 780, rowHeight).fill('#f8fafc');
         } else {
           doc.rect(30, currentY, 780, rowHeight).fill('#ffffff');
         }
 
-        // Bordure de ligne
+        // Bordure fine
         doc.rect(30, currentY, 780, rowHeight).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
 
-        const typeLabel = a.type === 'late' ? 'Retard' : a.type === 'unjustified' ? 'Injustifiée' : a.type || 'Absence';
-        const statusLabel = a.status === 'approved' ? 'Validée' : a.status === 'rejected' ? 'Rejetée' : 'En attente';
+        const typeLabel = a.type === 'late' ? 'Retard' : a.type === 'unjustified' ? 'Injustifiée' : a.type === 'medical' ? 'Médical' : a.type || 'Absence';
+        
+        let statusLabel = 'En attente';
+        let statusColor = '#d97706'; // Amber
+
+        if (a.status === 'approved') {
+          statusLabel = 'Validée';
+          statusColor = '#16a34a'; // Green
+        } else if (a.status === 'rejected' || a.status === 'to_justify') {
+          statusLabel = 'Rejetée';
+          statusColor = '#dc2626'; // Red
+        } else if (a.status === 'justified') {
+          statusLabel = 'Justifiée';
+          statusColor = '#0284c7'; // Blue
+        }
 
         const rowValues = [
           String(idx + 1),
           a.displayName || a.studentName || '—',
-          a.userEmail || a.department || '—',
+          a.userEmail || a.department || a.className || '—',
           typeLabel,
           a.reason || a.courseName || '—',
           a.startDate ? String(a.startDate).slice(0, 10) : '—',
@@ -511,14 +581,11 @@ export async function exportAbsencesToPdfService(filters = {}) {
         rowValues.forEach((val, cIdx) => {
           const col = cols[cIdx];
           if (cIdx === 7) {
-            if (a.status === 'approved') doc.fillColor('#16a34a');
-            else if (a.status === 'rejected') doc.fillColor('#dc2626');
-            else doc.fillColor('#d97706');
-            doc.font('Helvetica-Bold');
+            doc.fillColor(statusColor).font('Helvetica-Bold');
           } else {
             doc.fillColor('#1e293b').font('Helvetica');
           }
-          doc.fontSize(7.5).text(val, colX + 3, currentY + 6, {
+          doc.fontSize(7).text(val, colX + 3, currentY + 5.5, {
             width: col.width - 6,
             align: col.align,
             lineBreak: false,
