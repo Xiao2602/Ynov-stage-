@@ -413,7 +413,7 @@ export async function exportAbsencesToPdfService(filters = {}) {
 
     const snapshot = await query.get();
     const absences = [];
-    snapshot.forEach(doc => absences.push(doc.data()));
+    snapshot.forEach(doc => absences.push({ id: doc.id, ...doc.data() }));
 
     let filtered = absences;
     if (filters.startDate) {
@@ -425,66 +425,121 @@ export async function exportAbsencesToPdfService(filters = {}) {
       filtered = filtered.filter(a => new Date(a.endDate) <= end);
     }
 
-    // Générer le PDF avec pdfkit
-    const doc = new PDFDocument({ margin: 30, size: "A4", layout: "landscape" });
-    const buffers = [];
-    doc.on('data', buffers.push.bind(buffers));
-    doc.on('end', () => {});
+    // Générer le PDF avec pdfkit de manière asynchrone via Promise
+    const buffer = await new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 30, size: "A4", layout: "landscape" });
+      const buffers = [];
 
-    doc.fontSize(18).text("Rapport des Absences", { align: "center" });
-    doc.moveDown();
-    doc.fontSize(10).text(`Généré le : ${new Date().toLocaleDateString()}`, { align: "center" });
-    doc.moveDown();
+      doc.on('data', chunk => buffers.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+      doc.on('error', err => reject(err));
 
-    // En-têtes du tableau
-    const headers = ["#", "Nom", "Email", "Type", "Début", "Fin", "Statut", "Validé par"];
-    const rows = filtered.map((a, i) => [
-      i+1,
-      a.displayName || "",
-      a.userEmail || "",
-      a.type || "",
-      a.startDate || "",
-      a.endDate || "",
-      a.status || "",
-      a.reviewerName || ""
-    ]);
+      // 1. En-tête officiel Ynov
+      doc.rect(0, 0, 842, 60).fill('#0f172a');
+      doc.fillColor('#ffffff').fontSize(16).font('Helvetica-Bold')
+         .text("YNOV CAMPUS — RAPPORT OFFICIEL DES ABSENCES", 35, 18);
+      
+      doc.fontSize(9).font('Helvetica')
+         .text(`Généré le ${new Date().toLocaleString('fr-FR')} • Total : ${filtered.length} demande(s)`, 35, 38);
 
-    // Dessiner le tableau
-    const tableTop = 120;
-    const rowHeight = 20;
-    const colWidths = [30, 80, 100, 70, 70, 70, 70, 80];
-    let y = tableTop;
+      // 2. Configuration des colonnes (Largeur totale = 780 pt)
+      const startY = 80;
+      const rowHeight = 22;
+      const cols = [
+        { header: "#", width: 25, align: 'center' },
+        { header: "Étudiant", width: 115, align: 'left' },
+        { header: "Email / Classe", width: 135, align: 'left' },
+        { header: "Type", width: 65, align: 'center' },
+        { header: "Objet / Motif", width: 155, align: 'left' },
+        { header: "Date Début", width: 75, align: 'center' },
+        { header: "Date Fin", width: 75, align: 'center' },
+        { header: "Statut", width: 65, align: 'center' },
+        { header: "Décision par", width: 70, align: 'left' }
+      ];
 
-    // Dessiner les en-têtes
-    let x = 30;
-    doc.fontSize(8).font("Helvetica-Bold");
-    headers.forEach((h, i) => {
-      doc.text(h, x, y, { width: colWidths[i], align: "left" });
-      x += colWidths[i];
-    });
+      let currentY = startY;
 
-    y += rowHeight;
-    doc.font("Helvetica");
+      // 3. En-tête du tableau
+      const drawTableHeader = (yPos) => {
+        doc.rect(30, yPos, 780, rowHeight).fill('#1e293b');
+        let xOffset = 30;
+        doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
+        cols.forEach(col => {
+          doc.text(col.header, xOffset + 3, yPos + 7, { width: col.width - 6, align: col.align });
+          xOffset += col.width;
+        });
+      };
 
-    // Dessiner les lignes
-    rows.forEach((row, idx) => {
-      x = 30;
-      if (y > 550) {
-        doc.addPage();
-        y = 30;
-      }
-      row.forEach((cell, i) => {
-        doc.text(String(cell), x, y, { width: colWidths[i], align: "left" });
-        x += colWidths[i];
+      drawTableHeader(currentY);
+      currentY += rowHeight;
+
+      // 4. Lignes du tableau
+      filtered.forEach((a, idx) => {
+        if (currentY > 530) {
+          doc.addPage();
+          currentY = 40;
+          drawTableHeader(currentY);
+          currentY += rowHeight;
+        }
+
+        // Alternance de couleur (Zebra striping)
+        if (idx % 2 === 0) {
+          doc.rect(30, currentY, 780, rowHeight).fill('#f8fafc');
+        } else {
+          doc.rect(30, currentY, 780, rowHeight).fill('#ffffff');
+        }
+
+        // Bordure de ligne
+        doc.rect(30, currentY, 780, rowHeight).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
+
+        const typeLabel = a.type === 'late' ? 'Retard' : a.type === 'unjustified' ? 'Injustifiée' : a.type || 'Absence';
+        const statusLabel = a.status === 'approved' ? 'Validée' : a.status === 'rejected' ? 'Rejetée' : 'En attente';
+
+        const rowValues = [
+          String(idx + 1),
+          a.displayName || a.studentName || '—',
+          a.userEmail || a.department || '—',
+          typeLabel,
+          a.reason || a.courseName || '—',
+          a.startDate ? String(a.startDate).slice(0, 10) : '—',
+          a.endDate ? String(a.endDate).slice(0, 10) : '—',
+          statusLabel,
+          a.reviewerName || '—'
+        ];
+
+        let colX = 30;
+        rowValues.forEach((val, cIdx) => {
+          const col = cols[cIdx];
+          if (cIdx === 7) {
+            if (a.status === 'approved') doc.fillColor('#16a34a');
+            else if (a.status === 'rejected') doc.fillColor('#dc2626');
+            else doc.fillColor('#d97706');
+            doc.font('Helvetica-Bold');
+          } else {
+            doc.fillColor('#1e293b').font('Helvetica');
+          }
+          doc.fontSize(7.5).text(val, colX + 3, currentY + 6, {
+            width: col.width - 6,
+            align: col.align,
+            lineBreak: false,
+            ellipsis: true
+          });
+          colX += col.width;
+        });
+
+        currentY += rowHeight;
       });
-      y += rowHeight;
+
+      doc.end();
     });
 
-    doc.end();
-    const buffer = Buffer.concat(buffers);
-
-    return { success: true, buffer, filename: `absences_${new Date().toISOString().slice(0,10)}.pdf` };
+    return {
+      success: true,
+      buffer,
+      filename: `absences_${new Date().toISOString().slice(0, 10)}.pdf`
+    };
   } catch (error) {
+    console.error("❌ Erreur exportAbsencesToPdfService:", error);
     return { success: false, error: "Erreur lors de l'export PDF : " + error.message };
   }
 }

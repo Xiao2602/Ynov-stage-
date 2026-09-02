@@ -129,18 +129,29 @@ export default function RequestsPage() {
       return;
     }
     try {
-      const blob = await apiFetchBlob(`/absences/export/${format}`);
+      const queryParams = new URLSearchParams();
+      if (statusFilter && statusFilter !== 'all') {
+        const mappedStatus = statusFilter === 'Validé' ? 'approved' : statusFilter === 'Rejeté' ? 'rejected' : statusFilter === 'En cours' ? 'pending' : statusFilter;
+        queryParams.set('status', mappedStatus);
+      }
+      if (typeFilter && typeFilter !== 'all') queryParams.set('type', typeFilter);
+      if (startDate) queryParams.set('startDate', startDate);
+      if (endDate) queryParams.set('endDate', endDate);
+
+      const qs = queryParams.toString();
+      const endpoint = `/absences/export/${format}${qs ? `?${qs}` : ''}`;
+      const blob = await apiFetchBlob(endpoint);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `absences.${format === 'excel' ? 'xlsx' : 'pdf'}`);
+      link.setAttribute('download', `absences_${new Date().toISOString().slice(0, 10)}.${format === 'excel' ? 'xlsx' : 'pdf'}`);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Export error:', error);
-      alert('Erreur lors de l\'export. Vérifiez vos permissions.');
+      alert('Erreur lors de l\'export : ' + (error.message || 'Vérifiez vos permissions.'));
     }
   };
 
