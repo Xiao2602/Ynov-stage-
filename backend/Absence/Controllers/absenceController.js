@@ -275,7 +275,8 @@ export async function handleTransformLates(req, res) {
 
 export async function handleGetAbsencesByCourse(req, res) {
   try {
-    const { className, courseName, startDate, endDate } = req.query;
+    const { className, courseName, startDate, endDate, date } = req.query;
+    const targetDate = date ? String(date).slice(0, 10) : (startDate && startDate === endDate ? String(startDate).slice(0, 10) : null);
     const teacherUid = req.user.uid;
     const teacherDoc = await adminDb.collection("users").doc(teacherUid).get();
     if (!teacherDoc.exists) {
@@ -284,42 +285,85 @@ export async function handleGetAbsencesByCourse(req, res) {
     const teacherData = teacherDoc.data();
     const assignedClasses = teacherData.assignedClasses || [];
 
-    let studentsSnapshot;
-    if (className) {
-      studentsSnapshot = await adminDb.collection("users").where("role", "==", "student").where("className", "==", className).get();
-    } else {
-      studentsSnapshot = await adminDb.collection("users").where("role", "==", "student").get();
-    }
+    // Récupérer les étudiants
+    const studentsSnapshot = await adminDb.collection("users").where("role", "==", "student").get();
 
-    const studentUids = [];
+    const studentMap = {};
+    const studentUids = new Set();
+
     studentsSnapshot.forEach(doc => {
       const studentData = doc.data();
-      const studentClass = studentData.className || studentData.department || "";
-      if (assignedClasses.length === 0 || assignedClasses.some(cls => studentClass.includes(cls))) {
-        studentUids.push(doc.id);
+      const studentClass = String(studentData.className || studentData.department || "").trim();
+
+      const classMatch = assignedClasses.length === 0 || assignedClasses.some(cls => {
+        const cNorm = String(cls).toLowerCase().trim();
+        const sNorm = studentClass.toLowerCase().trim();
+        return sNorm.includes(cNorm) || cNorm.includes(sNorm);
+      });
+
+      if (classMatch) {
+        if (!className || className === 'all' || studentClass.toLowerCase() === className.toLowerCase() || studentClass.toLowerCase().includes(className.toLowerCase())) {
+          studentUids.add(doc.id);
+          studentMap[doc.id] = {
+            displayName: studentData.displayName || "Étudiant",
+            email: studentData.email || "",
+            className: studentClass || "Classe non définie"
+          };
+        }
       }
     });
 
-    if (studentUids.length === 0) {
-      return res.status(200).json({ success: true, absences: [] });
+    if (studentUids.size === 0) {
+      return res.status(200).json({ success: true, count: 0, absences: [] });
     }
 
-    let query = adminDb.collection("absences").where("userId", "in", studentUids);
-    if (courseName) query = query.where("courseName", "==", courseName);
-    if (startDate) {
-      const start = new Date(startDate);
-      query = query.where("startDate", ">=", start.toISOString().split('T')[0]);
-    }
-    if (endDate) {
-      const end = new Date(endDate);
-      query = query.where("endDate", "<=", end.toISOString().split('T')[0]);
-    }
+    const absencesSnapshot = await adminDb.collection("absences").get();
+    const matchedAbsences = [];
 
-    const snapshot = await query.get();
-    const absences = [];
-    snapshot.forEach(doc => absences.push({ id: doc.id, ...doc.data() }));
+    absencesSnapshot.forEach(doc => {
+      const a = doc.data();
+      const absId = doc.id;
+      const uid = a.userId;
 
-    return res.status(200).json({ success: true, count: absences.length, absences });
+      if (!studentUids.has(uid) && a.declaredBy !== teacherUid) {
+        return;
+      }
+
+      if (courseName && a.courseName && a.courseName !== courseName) {
+        return;
+      }
+
+      const aStart = String(a.startDate || '').slice(0, 10);
+      const aEnd = String(a.endDate || aStart).slice(0, 10);
+
+      if (targetDate) {
+        if (aStart && targetDate < aStart) return;
+        if (aEnd && targetDate > aEnd) return;
+        if (!aStart && !aEnd) return;
+      } else {
+        if (startDate) {
+          const s = String(startDate).slice(0, 10);
+          if (aEnd && aEnd < s) return;
+        }
+        if (endDate) {
+          const e = String(endDate).slice(0, 10);
+          if (aStart && aStart > e) return;
+        }
+      }
+
+      const sInfo = studentMap[uid] || {};
+      matchedAbsences.push({
+        id: absId,
+        ...a,
+        displayName: a.displayName || sInfo.displayName || "Étudiant",
+        userEmail: a.userEmail || sInfo.email || "",
+        className: a.className || a.department || sInfo.className || "Classe non définie"
+      });
+    });
+
+    matchedAbsences.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+
+    return res.status(200).json({ success: true, count: matchedAbsences.length, absences: matchedAbsences });
   } catch (error) {
     console.error("Erreur handleGetAbsencesByCourse:", error);
     return res.status(500).json({ success: false, error: error.message });
