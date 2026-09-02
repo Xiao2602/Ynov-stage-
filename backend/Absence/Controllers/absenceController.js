@@ -156,7 +156,8 @@ export async function handleGetStatistics(req, res) {
 
 export async function handleExportExcel(req, res) {
   try {
-    const result = await exportAbsencesToExcelService(req.query);
+    const customAbsences = req.body?.absences || null;
+    const result = await exportAbsencesToExcelService(req.query, customAbsences);
     if (!result.success) {
       return res.status(500).json({ success: false, error: result.error });
     }
@@ -171,7 +172,8 @@ export async function handleExportExcel(req, res) {
 
 export async function handleExportPdf(req, res) {
   try {
-    const result = await exportAbsencesToPdfService(req.query);
+    const customAbsences = req.body?.absences || null;
+    const result = await exportAbsencesToPdfService(req.query, customAbsences);
     if (!result.success) {
       return res.status(500).json({ success: false, error: result.error });
     }
