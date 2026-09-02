@@ -135,12 +135,20 @@ export default function RequestsPage() {
         queryParams.set('status', mappedStatus);
       }
       if (typeFilter && typeFilter !== 'all') queryParams.set('type', typeFilter);
-      if (startDate) queryParams.set('startDate', startDate);
-      if (endDate) queryParams.set('endDate', endDate);
+      if (classFilter && classFilter !== 'all') queryParams.set('department', classFilter);
+      if (startDateFilter) queryParams.set('startDate', startDateFilter);
+      if (endDateFilter) queryParams.set('endDate', endDateFilter);
 
       const qs = queryParams.toString();
       const endpoint = `/absences/export/${format}${qs ? `?${qs}` : ''}`;
-      const blob = await apiFetchBlob(endpoint);
+
+      // Envoyer les données actuellement filtrées sur la page
+      const blob = await apiFetchBlob(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ absences: filteredRequests })
+      });
+
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

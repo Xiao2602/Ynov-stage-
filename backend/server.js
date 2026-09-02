@@ -599,15 +599,13 @@ app.get(
 // EXPORTS
 // ============================================================
 
-app.get(
-  "/api/absences/export/excel",
+app.all("/api/absences/export/excel",
   authenticateToken,
   authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleExportExcel
 );
 
-app.get(
-  "/api/absences/export/pdf",
+app.all("/api/absences/export/pdf",
   authenticateToken,
   authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleExportPdf
