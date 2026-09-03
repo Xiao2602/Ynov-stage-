@@ -193,6 +193,28 @@ export async function handleGetMe(req, res) {
 
     const userDoc = await adminDb.collection("users").doc(user.uid).get();
     const userData = userDoc.exists ? userDoc.data() : {};
+    const effectiveRole = user.role || userData.role || "employee";
+
+    let children = [];
+    if (effectiveRole === "parent" && Array.isArray(userData.childrenUids) && userData.childrenUids.length > 0) {
+      for (const childUid of userData.childrenUids) {
+        try {
+          const cDoc = await adminDb.collection("users").doc(childUid).get();
+          if (cDoc.exists) {
+            const cData = cDoc.data();
+            children.push({
+              uid: childUid,
+              displayName: cData.displayName || "Étudiant",
+              email: cData.email || "",
+              className: cData.className || cData.department || "Classe non définie",
+              department: cData.department || ""
+            });
+          }
+        } catch (cErr) {
+          console.warn(`Erreur récupération enfant ${childUid}:`, cErr.message);
+        }
+      }
+    }
 
     return res.status(200).json({
       success: true,
@@ -200,11 +222,12 @@ export async function handleGetMe(req, res) {
         uid: user.uid,
         email: user.email,
         displayName: user.displayName || userData.displayName,
-        role: user.role || userData.role || "employee",
+        role: effectiveRole,
         department: user.department || userData.department || "",
         mustChangePassword: userData.mustChangePassword || false,
         twoFactorEnabled: userData.twoFactorEnabled || false,
-        ...userData
+        ...userData,
+        children
       }
     });
   } catch (error) {

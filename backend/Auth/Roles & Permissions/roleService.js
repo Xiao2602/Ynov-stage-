@@ -3,7 +3,6 @@ import { adminAuth, adminDb } from "../../Shared/Firebase config/firebase.js";
 const ALLOWED_ROLES = [
   "admin",
   "rh",
-  "manager",
   "employee",
   "student",
   "teacher",

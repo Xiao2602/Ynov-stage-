@@ -48,14 +48,13 @@ export default function DashboardLayout() {
   const roleLabels = {
     admin: 'Administrateur',
     rh: 'Ressources humaines',
-    manager: 'Manager',
     employee: 'Personnel',
     student: 'Étudiant',
     teacher: 'Professeur',
     parent: 'Parent',
   };
 
-  const staffRoles = ['admin', 'rh', 'manager', 'employee'];
+  const staffRoles = ['admin', 'rh', 'employee'];
   const absenceRoles = {
     dashboard: ['admin', 'student', 'teacher', 'parent', ...staffRoles],
     myAbsences: ['admin', 'student', 'teacher', 'parent'],
@@ -79,7 +78,9 @@ export default function DashboardLayout() {
     return allowedRoles.includes(role);
   }
 
-  const childCount = Array.isArray(backendUser?.children) ? backendUser.children.length : 0;
+  const childCount = Array.isArray(backendUser?.children) && backendUser.children.length > 0
+    ? backendUser.children.length
+    : (Array.isArray(backendUser?.childrenUids) ? backendUser.childrenUids.length : 0);
   const parentAbsenceLabel = childCount === 1 ? 'Absence de mon enfant' : 'Absences de mes enfants';
   const parentDocumentsLabel = childCount === 1 ? 'Documents de mon enfant' : 'Documents de mes enfants';
 

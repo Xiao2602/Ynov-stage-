@@ -25,13 +25,6 @@ async function seedInitialAccounts() {
       department: "Ressources Humaines"
     },
     {
-      email: "manager@ynov.com",
-      password: "ManagerPassword123!",
-      displayName: "Karim Manager",
-      role: ROLES.MANAGER,
-      department: "Pédagogie"
-    },
-    {
       email: "enseignant@ynov.com",
       password: "TeacherPassword123!",
       displayName: "Prof. Youssef Enseignant",
@@ -86,11 +79,10 @@ async function seedInitialAccounts() {
   console.log("==================================================");
   console.log("1. ADMIN    : amine.fatih@ynov.com   | AdminPassword123!");
   console.log("2. RH       : rh@ynov.com            | RhPassword123!");
-  console.log("3. MANAGER  : manager@ynov.com       | ManagerPassword123!");
-  console.log("4. TEACHER  : enseignant@ynov.com    | TeacherPassword123!");
-  console.log("5. EMPLOYEE : employe@ynov.com       | EmployeePassword123!");
-  console.log("6. STUDENT  : etudiant@ynov.com      | StudentPassword123!");
-  console.log("7. PARENT   : parent@ynov.com        | ParentPassword123!");
+  console.log("3. TEACHER  : enseignant@ynov.com    | TeacherPassword123!");
+  console.log("4. EMPLOYEE : employe@ynov.com       | EmployeePassword123!");
+  console.log("5. STUDENT  : etudiant@ynov.com      | StudentPassword123!");
+  console.log("6. PARENT   : parent@ynov.com        | ParentPassword123!");
   console.log("==================================================\n");
 
   process.exit(0);

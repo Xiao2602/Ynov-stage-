@@ -256,3 +256,104 @@ export async function sendAbsenceStatusEmail(userEmail, displayName, status, rev
     return { success: false, error: error.message };
   }
 }
+
+/**
+ * Template HTML pour Alerte Annulation de Cours (Absence Professeur)
+ */
+function getCourseCancellationEmailTemplate({ recipientName, studentName, isParent, courseTitle, courseDate, courseTime, courseRoom, teacherName }) {
+  return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Alerte : Cours annulé</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333333;">
+  <table border="0" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td align="center" style="padding: 40px 0;">
+        <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.08);">
+          <tr>
+            <td align="center" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 30px; border-bottom: 4px solid #f59e0b;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 22px;">MAROC YNOV CAMPUS</h1>
+              <p style="color: #fef3c7; margin: 4px 0 0 0; font-size: 14px; font-weight: bold;">⚠️ AVIS D'ANNULATION DE COURS</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Bonjour ${recipientName},</h2>
+              <p style="font-size: 15px; color: #475569; line-height: 1.6;">
+                ${isParent 
+                  ? `Nous vous informons qu'un cours concernant votre enfant <strong>${studentName}</strong> est annulé en raison de l'absence confirmée de son professeur.`
+                  : `Nous vous informons qu'un cours de votre emploi du temps est annulé en raison de l'absence confirmée de votre professeur.`
+                }
+              </p>
+              <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 20px; border-radius: 6px; margin: 20px 0;">
+                <p style="margin: 0 0 8px 0; font-size: 15px; color: #92400e;"><strong>Matière :</strong> ${courseTitle}</p>
+                <p style="margin: 0 0 8px 0; font-size: 14px; color: #92400e;"><strong>Professeur absent :</strong> ${teacherName}</p>
+                <p style="margin: 0 0 8px 0; font-size: 14px; color: #92400e;"><strong>Date :</strong> ${courseDate}</p>
+                <p style="margin: 0; font-size: 14px; color: #92400e;"><strong>Horaire :</strong> ${courseTime}${courseRoom ? ` (${courseRoom})` : ''}</p>
+              </div>
+              <p style="font-size: 14px; color: #64748b; margin-bottom: 0;">
+                Consultez votre espace personnel sur la plateforme pour retrouver votre emploi du temps mis à jour en temps réel.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="background-color: #f8fafc; padding: 15px; font-size: 12px; color: #94a3b8;">
+              © 2026 Maroc YNOV Campus. Tous droits réservés.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+/**
+ * Service 4 : Envoi de la notification d'annulation de cours par email aux étudiants et parents
+ */
+export async function sendCourseCancellationEmail({
+  toEmail,
+  recipientName,
+  isParent = false,
+  studentName = "",
+  courseTitle,
+  courseDate,
+  courseTime,
+  courseRoom = "",
+  teacherName
+}) {
+  try {
+    if (!toEmail) return { success: false, error: "Adresse email manquante" };
+    const transporter = createTransporter();
+    if (!transporter) return { success: false, error: "SMTP non configuré dans .env" };
+
+    const subject = isParent
+      ? `[Maroc YNOV Campus] Cours annulé pour ${studentName || 'votre enfant'} : ${courseTitle}`
+      : `[Maroc YNOV Campus] Cours annulé : ${courseTitle}`;
+
+    await transporter.sendMail({
+      from: `"Maroc YNOV Campus" <${process.env.SMTP_USER}>`,
+      to: toEmail,
+      subject,
+      html: getCourseCancellationEmailTemplate({
+        recipientName,
+        studentName,
+        isParent,
+        courseTitle,
+        courseDate,
+        courseTime,
+        courseRoom,
+        teacherName
+      })
+    });
+
+    return { success: true, message: "Email d'annulation envoyé avec succès." };
+  } catch (error) {
+    console.error("Erreur d'envoi email annulation cours :", error.message);
+    return { success: false, error: error.message };
+  }
+}

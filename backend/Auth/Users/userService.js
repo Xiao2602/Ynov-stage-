@@ -36,6 +36,12 @@ export async function createUserService({
       return { success: false, error: "Le mot de passe doit contenir au moins 6 caractères." };
     }
 
+    const ALLOWED_ROLES = ["admin", "rh", "employee", "student", "teacher", "parent"];
+    const normalizedRole = typeof role === "string" ? role.trim().toLowerCase() : "employee";
+    if (!ALLOWED_ROLES.includes(normalizedRole)) {
+      return { success: false, error: `Rôle invalide : ${role}. Rôles autorisés : ${ALLOWED_ROLES.join(", ")}` };
+    }
+
     // Création Firebase Auth
     const userRecord = await adminAuth.createUser({
       email: cleanEmail,
@@ -45,7 +51,7 @@ export async function createUserService({
     });
 
     // Attribution du rôle
-    await adminAuth.setCustomUserClaims(userRecord.uid, { role });
+    await adminAuth.setCustomUserClaims(userRecord.uid, { role: normalizedRole });
 
     let finalAssignedClasses = Array.isArray(assignedClasses) ? [...assignedClasses] : [];
     if (assignedClass && !finalAssignedClasses.includes(assignedClass)) {
@@ -57,7 +63,7 @@ export async function createUserService({
       uid: userRecord.uid,
       email: cleanEmail,
       displayName: cleanDisplayName,
-      role,
+      role: normalizedRole,
       phone: phone || "",
       department: department || "",
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -65,7 +71,10 @@ export async function createUserService({
     };
 
     // Ajouter les champs spécifiques selon le rôle
-    if (role === 'student' && className) {
+    if (normalizedRole === 'parent') {
+      userData.childrenUids = [];
+    }
+    if (normalizedRole === 'student' && className) {
       userData.className = className;
       userData.department = className; // pour compatibilité
     }

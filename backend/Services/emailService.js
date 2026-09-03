@@ -24,7 +24,6 @@ export async function sendWelcomeEmail({ email, displayName, password, role, log
   const roleLabels = {
     admin: 'Administrateur',
     rh: 'Ressources humaines',
-    manager: 'Manager',
     employee: 'Personnel',
     student: 'Étudiant',
     teacher: 'Professeur',

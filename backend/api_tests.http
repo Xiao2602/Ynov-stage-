@@ -131,14 +131,17 @@ Content-Type: application/json
   "role": "rh"
 }
 
-### 3.5 Link Parent Account to Student Account (Auth: Admin / RH)
+### 3.5 Link Parent Account to Student Account(s) (Auth: Admin / RH)
 POST {{baseUrl}}/api/users/link-parent-student
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
   "parentUid": "{{parentUid}}",
-  "studentUid": "{{studentUid}}"
+  "studentUids": [
+    "{{studentUid1}}",
+    "{{studentUid2}}"
+  ]
 }
 
 ### 3.6 Get Linked Children Profiles (Auth: Parent / Admin / RH)

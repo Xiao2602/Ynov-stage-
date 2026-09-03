@@ -1,7 +1,7 @@
 import admin from "firebase-admin";
 import { adminDb } from "../../firebaseAdmin.js";
 import { ABSENCE_STATUS } from "../Validators/absenceValidator.js";
-import { sendNewAbsenceAlertToHR, sendAbsenceStatusEmail } from "../../Auth/Authentication/customEmailService.js";
+import { sendNewAbsenceAlertToHR, sendAbsenceStatusEmail, sendCourseCancellationEmail } from "../../Auth/Authentication/customEmailService.js";
 import { createNotificationService } from "../../Notifications/Services/notificationService.js";
 
 const COLLECTION_NAME = "absences";
@@ -256,11 +256,31 @@ export async function notifyStudentsOfTeacherAbsence(absence, absenceId) {
       return;
     }
 
-    console.log(`📢 ${cancelledCourses.length} cours impacté(s) par l'absence confirmée du professeur ${absence.displayName || teacherUid}. Notification des étudiants...`);
+    console.log(`📢 ${cancelledCourses.length} cours impacté(s) par l'absence confirmée du professeur ${absence.displayName || teacherUid}. Notification des étudiants et des parents...`);
 
-    // 5. Récupérer tous les étudiants actifs
-    const studentsSnap = await adminDb.collection("users").where("role", "==", "student").get();
+    // 5. Récupérer tous les étudiants actifs et tous les comptes parents
+    const [studentsSnap, parentsSnap] = await Promise.all([
+      adminDb.collection("users").where("role", "==", "student").get(),
+      adminDb.collection("users").where("role", "==", "parent").get()
+    ]);
+
+    // Indexation bidirectionnelle des parents : studentId -> Map<parentUid, parentData>
+    const studentToParentsMap = new Map();
+    const parentDocsById = new Map();
+
+    parentsSnap.docs.forEach(pDoc => {
+      const pData = pDoc.data();
+      const pUid = pDoc.id;
+      parentDocsById.set(pUid, { uid: pUid, ...pData });
+      const childrenUids = Array.isArray(pData.childrenUids) ? pData.childrenUids : [];
+      childrenUids.forEach(childUid => {
+        if (!studentToParentsMap.has(childUid)) studentToParentsMap.set(childUid, new Map());
+        studentToParentsMap.get(childUid).set(pUid, { uid: pUid, ...pData });
+      });
+    });
+
     const teacherName = absence.displayName || "Votre professeur";
+    const sentAlertKeys = new Set();
 
     // Pour chaque cours annulé, trouver les étudiants de la classe correspondante
     for (const course of cancelledCourses) {
@@ -272,43 +292,96 @@ export async function notifyStudentsOfTeacherAbsence(absence, absenceId) {
       const courseTime = course.start || "horaire habituel";
       const courseRoom = course.room ? ` (Salle ${course.room})` : "";
 
-      const notifTitle = `⚠️ Cours annulé : ${courseTitle}`;
-      const notifMessage = `Le cours "${courseTitle}" prévu le ${courseDate} à ${courseTime}${courseRoom} est annulé en raison de l'absence confirmée de ${teacherName}.`;
+      const notifStudentTitle = `⚠️ Cours annulé : ${courseTitle}`;
+      const notifStudentMessage = `Le cours "${courseTitle}" prévu le ${courseDate} à ${courseTime}${courseRoom} est annulé en raison de l'absence confirmée de ${teacherName}.`;
 
       for (const sDoc of studentsSnap.docs) {
         const sData = sDoc.data();
+        const sId = sDoc.id;
         const sClass = String(sData.className || sData.department || '').toLowerCase().trim();
         
         const isMatch = groupNorm === sClass ||
           (groupNorm && sClass.includes(groupNorm)) ||
           (sClass && groupNorm.includes(sClass));
 
-        if (isMatch) {
-          // A. Notification In-App pour l'étudiant
+        if (!isMatch) continue;
+
+        const studentName = sData.displayName || "Étudiant";
+        const studentEmail = sData.email || "";
+
+        // A. Notification In-App pour l'étudiant (dé-doublonnée)
+        const studentAlertKey = `student_${sId}_${courseTitle}_${courseDate}_${courseTime}`;
+        if (!sentAlertKeys.has(studentAlertKey)) {
+          sentAlertKeys.add(studentAlertKey);
+
           createNotificationService({
-            userId: sDoc.id,
-            title: notifTitle,
-            message: notifMessage,
+            userId: sId,
+            title: notifStudentTitle,
+            message: notifStudentMessage,
             type: "warning",
             relatedId: absenceId
-          }).catch(err => console.warn(`Erreur notification étudiant ${sDoc.id}:`, err.message));
+          }).catch(err => console.warn(`Erreur notification étudiant ${sId}:`, err.message));
 
-          // B. Notification In-App pour les parents liés
-          if (Array.isArray(sData.parentUids) && sData.parentUids.length > 0) {
-            for (const parentId of sData.parentUids) {
-              createNotificationService({
-                userId: parentId,
-                title: `⚠️ Cours annulé pour ${sData.displayName || 'votre enfant'}`,
-                message: `Le cours "${courseTitle}" prévu le ${courseDate} à ${courseTime} est annulé suite à l'absence de ${teacherName}.`,
-                type: "warning",
-                relatedId: absenceId
-              }).catch(err => console.warn(`Erreur notification parent ${parentId}:`, err.message));
+          if (studentEmail) {
+            sendCourseCancellationEmail({
+              toEmail: studentEmail,
+              recipientName: studentName,
+              isParent: false,
+              studentName,
+              courseTitle,
+              courseDate,
+              courseTime,
+              courseRoom,
+              teacherName
+            }).catch(err => console.warn(`Erreur email étudiant ${sId}:`, err.message));
+          }
+        }
+
+        // B. Notification In-App et Email pour tous les parents liés (bidirectionnel)
+        const linkedParentsMap = studentToParentsMap.get(sId) || new Map();
+
+        // Intégrer également sData.parentUids s'il est renseigné sur le profil étudiant
+        if (Array.isArray(sData.parentUids)) {
+          sData.parentUids.forEach(pUid => {
+            if (!linkedParentsMap.has(pUid) && parentDocsById.has(pUid)) {
+              linkedParentsMap.set(pUid, parentDocsById.get(pUid));
             }
+          });
+        }
+
+        for (const [parentUid, parentData] of linkedParentsMap.entries()) {
+          const parentAlertKey = `parent_${parentUid}_${sId}_${courseTitle}_${courseDate}_${courseTime}`;
+          if (sentAlertKeys.has(parentAlertKey)) continue;
+          sentAlertKeys.add(parentAlertKey);
+
+          const parentTitle = `⚠️ Cours annulé : ${courseTitle} (${studentName})`;
+          const parentMessage = `Le cours "${courseTitle}" prévu le ${courseDate} à ${courseTime}${courseRoom} pour votre enfant ${studentName} (${sData.className || 'classe'}) est annulé en raison de l'absence confirmée de ${teacherName}.`;
+
+          createNotificationService({
+            userId: parentUid,
+            title: parentTitle,
+            message: parentMessage,
+            type: "warning",
+            relatedId: absenceId
+          }).catch(err => console.warn(`Erreur notification parent ${parentUid}:`, err.message));
+
+          if (parentData?.email) {
+            sendCourseCancellationEmail({
+              toEmail: parentData.email,
+              recipientName: parentData.displayName || "Parent d'élève",
+              isParent: true,
+              studentName,
+              courseTitle,
+              courseDate,
+              courseTime,
+              courseRoom,
+              teacherName
+            }).catch(err => console.warn(`Erreur email parent ${parentUid}:`, err.message));
           }
         }
       }
     }
-    console.log(`✅ Notifications des cours annulés envoyées avec succès aux étudiants concernés.`);
+    console.log(`✅ Notifications des cours annulés envoyées avec succès aux étudiants et parents concernés.`);
   } catch (error) {
     console.error("❌ Erreur notifyStudentsOfTeacherAbsence:", error);
   }

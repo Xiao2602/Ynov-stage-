@@ -99,7 +99,7 @@ export function formatClassAbbrev(className) {
 const roleOptions = [
   { key: 'admin', label: 'Administrateur', description: 'Administration complète' },
   { key: 'rh', label: 'Ressources humaines', description: 'Gestion du personnel' },
-  { key: 'manager', label: 'Manager', description: 'Gestion équipe' },
+  { key: 'parent', label: 'Parent', description: 'Accès famille / suivi étudiant' },
   { key: 'employee', label: 'Personnel', description: 'Accès utilisateur standard' },
   { key: 'student', label: 'Étudiant', description: 'Accès étudiant' },
   { key: 'teacher', label: 'Professeur', description: 'Enseignement' },
@@ -242,6 +242,75 @@ export default function UsersPage() {
   const [importPreview, setImportPreview] = useState([]);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState(null);
+
+  // ----------------------------------------------------------
+  // 🔥 LIAISON PARENT - MULTIPLES ÉTUDIANTS
+  // ----------------------------------------------------------
+  const [showLinkParentModal, setShowLinkParentModal] = useState(false);
+  const [parentToLink, setParentToLink] = useState(null);
+  const [selectedStudentUids, setSelectedStudentUids] = useState([]);
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [isLinking, setIsLinking] = useState(false);
+  const [linkingError, setLinkingError] = useState('');
+  const [linkingSuccess, setLinkingSuccess] = useState('');
+
+  const openLinkParentModal = (user) => {
+    setParentToLink(user);
+    setSelectedStudentUids(Array.isArray(user.childrenUids) ? [...user.childrenUids] : []);
+    setStudentSearchTerm('');
+    setLinkingError('');
+    setLinkingSuccess('');
+    setShowLinkParentModal(true);
+  };
+
+  const toggleStudentSelection = (uid) => {
+    setSelectedStudentUids((prev) =>
+      prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
+    );
+  };
+
+  const handleLinkStudentToParent = async (e) => {
+    e.preventDefault();
+    if (!parentToLink) return;
+
+    setIsLinking(true);
+    setLinkingError('');
+    setLinkingSuccess('');
+    try {
+      const result = await apiFetch('/users/link-parent-student', {
+        method: 'POST',
+        body: JSON.stringify({
+          parentUid: parentToLink.uid || parentToLink.id,
+          studentUids: selectedStudentUids
+        })
+      });
+      if (!result.success) throw new Error(result.error || 'Erreur lors de la liaison.');
+      setLinkingSuccess(result.message || `${selectedStudentUids.length} enfant(s) affecté(s) avec succès !`);
+      await loadUsers();
+      setTimeout(() => {
+        setShowLinkParentModal(false);
+        setParentToLink(null);
+        setSelectedStudentUids([]);
+        setLinkingSuccess('');
+      }, 1200);
+    } catch (err) {
+      setLinkingError(err.message);
+    } finally {
+      setIsLinking(false);
+    }
+  };
+
+  const filteredStudentsForLinking = useMemo(() => {
+    const studentList = users.filter((u) => u.role === 'student');
+    const term = studentSearchTerm.trim().toLowerCase();
+    if (!term) return studentList;
+    return studentList.filter((st) => {
+      const name = (st.displayName || '').toLowerCase();
+      const email = (st.email || '').toLowerCase();
+      const cls = (st.className || st.department || '').toLowerCase();
+      return name.includes(term) || email.includes(term) || cls.includes(term);
+    });
+  }, [users, studentSearchTerm]);
 
   // ----------------------------------------------------------
   // 🔥 EXPORTATION EXCEL (.XLSX)
@@ -986,15 +1055,15 @@ export default function UsersPage() {
                           borderRadius: '4px',
                           fontSize: '0.72rem',
                           fontWeight: '600',
-                          background: user.role === 'admin' ? '#fee2e2' : user.role === 'rh' ? '#fef3c7' : user.role === 'manager' ? '#dbeafe' : '#f1f5f9',
-                          color: user.role === 'admin' ? '#991b1b' : user.role === 'rh' ? '#92400e' : user.role === 'manager' ? '#1d4ed8' : '#475569',
+                          background: user.role === 'admin' ? '#fee2e2' : user.role === 'rh' ? '#fef3c7' : user.role === 'parent' ? '#e0f2fe' : '#f1f5f9',
+                          color: user.role === 'admin' ? '#991b1b' : user.role === 'rh' ? '#92400e' : user.role === 'parent' ? '#0369a1' : '#475569',
                           whiteSpace: 'nowrap'
                         }}>
                           {getRoleLabel(user.role)}
                         </span>
                       </td>
 
-                      {/* 4. Classe Étudiant */}
+                      {/* 4. Classe Étudiant ou Enfants (Parent) */}
                       <td style={{ padding: '8px 6px', borderRight: '1px solid #e2e8f0' }}>
                         {isStudent && (user.className || user.department) ? (
                           <span
@@ -1013,6 +1082,25 @@ export default function UsersPage() {
                             }}
                           >
                             {formatClassAbbrev(user.className || user.department)}
+                          </span>
+                        ) : user.role === 'parent' ? (
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '0.70rem',
+                              fontWeight: '700',
+                              background: '#f0f9ff',
+                              color: '#0284c7',
+                              border: '1px solid #bae6fd',
+                              cursor: 'default',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {Array.isArray(user.childrenUids) && user.childrenUids.length > 0
+                              ? `${user.childrenUids.length} enfant(s)`
+                              : '0 enfant'}
                           </span>
                         ) : (
                           <span style={{ color: '#94a3b8' }}>—</span>
@@ -1188,6 +1276,27 @@ export default function UsersPage() {
                             >
                               <IconFolder style={{ width: '14px', height: '14px' }} />
                             </button>
+                          ) : user.role === 'parent' ? (
+                            <button
+                              className="table-action-btn"
+                              onClick={() => openLinkParentModal(user)}
+                              title="Affecter des enfants"
+                              style={{
+                                cursor: 'pointer',
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '6px',
+                                border: '1px solid #bae6fd',
+                                background: '#f0f9ff',
+                                color: '#0284c7',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: 0
+                              }}
+                            >
+                              <IconUsers style={{ width: '14px', height: '14px' }} />
+                            </button>
                           ) : (
                             <div style={{ width: '28px', height: '28px' }} />
                           )}
@@ -1316,10 +1425,10 @@ export default function UsersPage() {
                     </select>
                   </div>
                 )}
-                {(selectedRole === 'admin' || selectedRole === 'manager' || selectedRole === 'employee') && (
+                {(selectedRole === 'admin' || selectedRole === 'employee' || selectedRole === 'parent') && (
                   <div className="field-group full-width">
-                    <label className="field-label">Département (optionnel)</label>
-                    <input className="field-input" type="text" name="department" value={formData.department} onChange={handleFieldChange} placeholder="Ex : Informatique" disabled={isSubmitting} />
+                    <label className="field-label">Département {selectedRole === 'parent' ? '(ex: Famille)' : '(optionnel)'}</label>
+                    <input className="field-input" type="text" name="department" value={formData.department} onChange={handleFieldChange} placeholder={selectedRole === 'parent' ? "Ex : Famille" : "Ex : Informatique"} disabled={isSubmitting} />
                   </div>
                 )}
               </div>
@@ -1509,6 +1618,181 @@ export default function UsersPage() {
                 {importLoading ? 'Importation...' : 'Importer'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL LIAISON PARENT - MULTIPLES ÉTUDIANTS */}
+      {showLinkParentModal && parentToLink && (
+        <div className="modal-overlay" onClick={() => setShowLinkParentModal(false)}>
+          <div className="modal-content" style={{ maxWidth: '620px', width: '92%', padding: '24px', background: 'white', borderRadius: '16px', boxShadow: '0 25px 65px rgba(0,0,0,0.25)' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px', marginBottom: '18px' }}>
+              <div>
+                <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Accès Famille</p>
+                <h3 style={{ margin: '2px 0 0', fontSize: '1.25rem', fontWeight: 700, color: '#0f172a' }}>Affecter des enfants au compte parent</h3>
+                <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.80rem' }}>Cochez les étudiants à rattacher ou détacher de ce parent.</p>
+              </div>
+              <button className="modal-close" onClick={() => setShowLinkParentModal(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+            </div>
+
+            <form onSubmit={handleLinkStudentToParent}>
+              {/* Carte Parent sélectionné */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 16px' }}>
+                <div>
+                  <span style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Parent sélectionné</span>
+                  <strong style={{ fontSize: '0.95rem', color: '#0f172a' }}>{parentToLink.displayName || parentToLink.email}</strong>
+                  <small style={{ display: 'block', color: '#64748b', fontSize: '0.78rem' }}>{parentToLink.email}</small>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{
+                    display: 'inline-block',
+                    background: selectedStudentUids.length > 0 ? '#e0f2fe' : '#f1f5f9',
+                    color: selectedStudentUids.length > 0 ? '#0284c7' : '#64748b',
+                    padding: '4px 12px',
+                    borderRadius: '9999px',
+                    fontWeight: 700,
+                    fontSize: '0.78rem',
+                    border: `1px solid ${selectedStudentUids.length > 0 ? '#bae6fd' : '#e2e8f0'}`
+                  }}>
+                    {selectedStudentUids.length} enfant{selectedStudentUids.length > 1 ? 's' : ''} affecté{selectedStudentUids.length > 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+
+              {linkingError && (
+                <div style={{ padding: '10px 14px', background: '#fee2e2', color: '#991b1b', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '16px', border: '1px solid #fecaca' }}>
+                  {linkingError}
+                </div>
+              )}
+              {linkingSuccess && (
+                <div style={{ padding: '10px 14px', background: '#dcfce7', color: '#166534', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '16px', border: '1px solid #bbf7d0' }}>
+                  {linkingSuccess}
+                </div>
+              )}
+
+              {/* Barre de recherche et actions rapides */}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+                  <IconSearch style={{ position: 'absolute', left: '10px', width: '15px', height: '15px', color: '#94a3b8' }} />
+                  <input
+                    type="text"
+                    placeholder="Rechercher par nom, email, classe..."
+                    value={studentSearchTerm}
+                    onChange={(e) => setStudentSearchTerm(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px 8px 32px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '0.85rem',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+                {selectedStudentUids.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStudentUids([])}
+                    style={{
+                      padding: '7px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #fed7aa',
+                      background: '#fff7ed',
+                      color: '#c2410c',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    Tout décocher
+                  </button>
+                )}
+              </div>
+
+              {/* Liste d'étudiants avec cases à cocher */}
+              <div style={{
+                maxHeight: '290px',
+                overflowY: 'auto',
+                border: '1px solid #e2e8f0',
+                borderRadius: '10px',
+                padding: '8px',
+                background: '#fafafa',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px'
+              }}>
+                {filteredStudentsForLinking.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '30px 16px', color: '#94a3b8', fontSize: '0.85rem' }}>
+                    Aucun étudiant trouvé correspondant à votre recherche.
+                  </div>
+                ) : (
+                  filteredStudentsForLinking.map(st => {
+                    const sId = st.uid || st.id;
+                    const isSelected = selectedStudentUids.includes(sId);
+                    return (
+                      <div
+                        key={sId}
+                        onClick={() => toggleStudentSelection(sId)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          borderRadius: '8px',
+                          background: isSelected ? '#f0f9ff' : '#ffffff',
+                          border: `1px solid ${isSelected ? '#7dd3fc' : '#e2e8f0'}`,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}} // géré par le conteneur onClick
+                            style={{ width: '16px', height: '16px', accentColor: '#0284c7', cursor: 'pointer' }}
+                          />
+                          <div>
+                            <strong style={{ fontSize: '0.88rem', color: '#0f172a', display: 'block' }}>
+                              {st.displayName || 'Étudiant'}
+                            </strong>
+                            <small style={{ color: '#64748b', fontSize: '0.75rem' }}>{st.email}</small>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            background: isSelected ? '#bae6fd' : '#f1f5f9',
+                            color: isSelected ? '#0369a1' : '#475569'
+                          }}>
+                            {formatClassAbbrev(st.className || st.department) || 'Sans classe'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Pied du modal avec actions */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '18px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                <span style={{ fontSize: '0.80rem', color: '#64748b' }}>
+                  Sélection : <strong>{selectedStudentUids.length}</strong> élève(s)
+                </span>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button type="button" className="btn-secondary" onClick={() => setShowLinkParentModal(false)} disabled={isLinking}>
+                    Annuler
+                  </button>
+                  <button type="submit" className="btn-primary" disabled={isLinking}>
+                    {isLinking ? 'Enregistrement...' : `Enregistrer (${selectedStudentUids.length})`}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}

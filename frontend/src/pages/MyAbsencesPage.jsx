@@ -104,11 +104,12 @@ const getStatusInfo = (status, deadline) => {
 };
 
 export default function MyAbsencesPage() {
-  const { role } = useAuth();
+  const { role, backendUser } = useAuth();
   const [absences, setAbsences] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedChildId, setSelectedChildId] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAbsence, setSelectedAbsence] = useState(null);
@@ -120,14 +121,15 @@ export default function MyAbsencesPage() {
   const fetchAbsences = async () => {
     setLoading(true);
     try {
-      const data = await apiFetch('/absences/my');
-      console.log('🔍 Données reçues de /absences/my :', data);
+      const endpoint = role === 'parent' ? '/absences/children' : '/absences/my';
+      const data = await apiFetch(endpoint);
+      console.log(`🔍 Données reçues de ${endpoint} :`, data);
       if (data && data.success) {
         const absencesData = data.absences || [];
         console.log(`📦 Nombre d'absences chargées : ${absencesData.length}`);
         setAbsences(absencesData);
       } else {
-        setError(data?.error || 'Impossible de charger vos absences.');
+        setError(data?.error || 'Impossible de charger les absences.');
       }
     } catch (err) {
       console.error('Erreur chargement absences:', err);
@@ -139,7 +141,7 @@ export default function MyAbsencesPage() {
 
   useEffect(() => {
     fetchAbsences();
-  }, []);
+  }, [role]);
 
   const handleJustifySubmit = async (e) => {
     e.preventDefault();
@@ -229,12 +231,16 @@ export default function MyAbsencesPage() {
   console.log('unJustifiedLateGroups:', unJustifiedLateGroups);
   console.log('unJustifiedCount:', unJustifiedCount);
 
+  const childrenList = Array.isArray(backendUser?.children) ? backendUser.children : [];
+
   const filteredAbsences = absences.filter(a => {
+    const matchChild = role !== 'parent' || selectedChildId === 'all' || a.userId === selectedChildId;
     const matchStatus = statusFilter === 'all' || a.status === statusFilter;
     const matchSearch = (a.reason || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                         (a.courseName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        (a.displayName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                         formatDate(a.startDate).includes(searchQuery);
-    return matchStatus && matchSearch;
+    return matchChild && matchStatus && matchSearch;
   });
 
   // ============================================================
@@ -246,8 +252,14 @@ export default function MyAbsencesPage() {
       {/* HEADER */}
       <div className="overview-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <h2 className="overview-title">Mes Absences</h2>
-          <p className="overview-subtitle">Consultez votre historique et déposez vos justificatifs.</p>
+          <h2 className="overview-title">
+            {role === 'parent' ? (childrenList.length > 1 ? 'Absences de mes enfants' : 'Absence de mon enfant') : 'Mes Absences'}
+          </h2>
+          <p className="overview-subtitle">
+            {role === 'parent'
+              ? "Consultez l'historique d'assiduité de vos enfants et transmettez des justificatifs."
+              : 'Consultez votre historique et déposez vos justificatifs.'}
+          </p>
         </div>
       </div>
 
@@ -319,13 +331,25 @@ export default function MyAbsencesPage() {
       <div className="panel" style={{ marginTop: '24px' }}>
         <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <h3 className="panel-title">Historique</h3>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {role === 'parent' && childrenList.length > 1 && (
+              <select
+                value={selectedChildId}
+                onChange={(e) => setSelectedChildId(e.target.value)}
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #bae6fd', background: '#f0f9ff', color: '#0369a1', fontSize: '0.85rem', fontWeight: '700', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="all">Tous mes enfants ({childrenList.length})</option>
+                {childrenList.map((c) => (
+                  <option key={c.uid} value={c.uid}>{c.displayName} ({c.className})</option>
+                ))}
+              </select>
+            )}
             <div className="search-bar">
               <IconSearch className="search-icon" />
               <input type="text" placeholder="Rechercher..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="status-filter" style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', color: '#334155', fontSize: '0.85rem', fontWeight: '500', outline: 'none', cursor: 'pointer' }}>
-              <option value="all">Tous</option>
+              <option value="all">Tous les statuts</option>
               <option value="to_justify">À justifier</option>
               <option value="approved">Validées</option>
               <option value="pending">En attente</option>
@@ -346,6 +370,7 @@ export default function MyAbsencesPage() {
           <table className="data-table" style={{ width: '100%' }}>
             <thead>
               <tr>
+                {role === 'parent' && <th>Élève</th>}
                 <th>Période</th>
                 <th>Motif</th>
                 <th>Type</th>
@@ -372,6 +397,12 @@ export default function MyAbsencesPage() {
                 
                 return (
                   <tr key={item.id}>
+                    {role === 'parent' && (
+                      <td>
+                        <strong style={{ display: 'block', color: '#0f172a', fontSize: '0.85rem' }}>{item.displayName || 'Étudiant'}</strong>
+                        {item.className && <span style={{ color: '#0284c7', fontSize: '0.72rem', fontWeight: 600 }}>{item.className}</span>}
+                      </td>
+                    )}
                     <td>{formatDate(item.startDate)} → {formatDate(item.endDate)}</td>
                     <td>{item.reason || 'Non précisé'}</td>
                     <td>
