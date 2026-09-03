@@ -43,28 +43,87 @@ export async function handleGetAllUsers(req, res) {
 
 export async function handleLinkParentStudent(req, res) {
   try {
-    const { parentUid, studentUid } = req.body;
-    if (!parentUid || !studentUid) {
-      return res.status(400).json({ success: false, error: "Veuillez fournir parentUid et studentUid." });
+    const { parentUid, studentUid, studentUids } = req.body;
+    if (!parentUid) {
+      return res.status(400).json({ success: false, error: "Veuillez fournir parentUid." });
     }
-    const studentDoc = await adminDb.collection("users").doc(studentUid).get();
-    if (!studentDoc.exists) return res.status(404).json({ success: false, error: "Étudiant introuvable." });
-    const studentData = studentDoc.data();
-    if (studentData.role !== "student") return res.status(400).json({ success: false, error: "L'utilisateur n'est pas un étudiant." });
+
     const parentDoc = await adminDb.collection("users").doc(parentUid).get();
     if (!parentDoc.exists) return res.status(404).json({ success: false, error: "Parent introuvable." });
     const parentData = parentDoc.data();
     if (parentData.role !== "parent") return res.status(400).json({ success: false, error: "L'utilisateur n'est pas un parent." });
-    const childrenUids = parentData.childrenUids || [];
+
+    const currentChildrenUids = Array.isArray(parentData.childrenUids) ? parentData.childrenUids : [];
+
+    // Mode multi-enfants (synchronisation complète)
+    if (Array.isArray(studentUids)) {
+      const validStudentUids = [];
+      for (const sUid of studentUids) {
+        if (!sUid || typeof sUid !== 'string') continue;
+        const sDoc = await adminDb.collection("users").doc(sUid).get();
+        if (sDoc.exists && sDoc.data().role === "student") {
+          validStudentUids.push(sUid);
+        }
+      }
+
+      // 1. Ajouter parentUid aux nouveaux étudiants rattachés
+      for (const sUid of validStudentUids) {
+        if (!currentChildrenUids.includes(sUid)) {
+          const sDoc = await adminDb.collection("users").doc(sUid).get();
+          const sData = sDoc.data();
+          const parentUids = Array.isArray(sData.parentUids) ? sData.parentUids : [];
+          if (!parentUids.includes(parentUid)) {
+            parentUids.push(parentUid);
+            await adminDb.collection("users").doc(sUid).update({ parentUids });
+          }
+        }
+      }
+
+      // 2. Retirer parentUid des étudiants détachés
+      for (const oldUid of currentChildrenUids) {
+        if (!validStudentUids.includes(oldUid)) {
+          const sDoc = await adminDb.collection("users").doc(oldUid).get();
+          if (sDoc.exists) {
+            const sData = sDoc.data();
+            const parentUids = (Array.isArray(sData.parentUids) ? sData.parentUids : []).filter(p => p !== parentUid);
+            await adminDb.collection("users").doc(oldUid).update({ parentUids });
+          }
+        }
+      }
+
+      // 3. Mettre à jour la liste des enfants du parent
+      await adminDb.collection("users").doc(parentUid).update({ childrenUids: validStudentUids });
+      await logActivity(req.user.uid, 'link_parent_student', { parentUid, studentUids: validStudentUids }, req);
+
+      return res.status(200).json({
+        success: true,
+        message: `${validStudentUids.length} enfant(s) rattaché(s) au parent avec succès.`,
+        childrenUids: validStudentUids
+      });
+    }
+
+    // Mode rétro-compatible : un seul étudiant
+    if (!studentUid) {
+      return res.status(400).json({ success: false, error: "Veuillez fournir studentUid ou studentUids." });
+    }
+
+    const studentDoc = await adminDb.collection("users").doc(studentUid).get();
+    if (!studentDoc.exists) return res.status(404).json({ success: false, error: "Étudiant introuvable." });
+    const studentData = studentDoc.data();
+    if (studentData.role !== "student") return res.status(400).json({ success: false, error: "L'utilisateur n'est pas un étudiant." });
+
+    const childrenUids = [...currentChildrenUids];
     if (!childrenUids.includes(studentUid)) {
       childrenUids.push(studentUid);
       await adminDb.collection("users").doc(parentUid).update({ childrenUids });
     }
-    const parentUids = studentData.parentUids || [];
+
+    const parentUids = Array.isArray(studentData.parentUids) ? studentData.parentUids : [];
     if (!parentUids.includes(parentUid)) {
       parentUids.push(parentUid);
       await adminDb.collection("users").doc(studentUid).update({ parentUids });
     }
+
     await logActivity(req.user.uid, 'link_parent_student', { parentUid, studentUid }, req);
     return res.status(200).json({ success: true, message: "Parent et étudiant liés avec succès." });
   } catch (error) {

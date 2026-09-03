@@ -288,19 +288,19 @@ app.get(
 app.get(
   "/api/absences/pending",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.MANAGER),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleGetPendingAbsences
 );
 app.get(
   "/api/absences",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.MANAGER, ROLES.TEACHER),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.TEACHER),
   handleGetAllAbsences
 );
 app.patch(
   "/api/absences/:id/review",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.MANAGER),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleReviewAbsence
 );
 app.delete("/api/absences/:id", authenticateToken, handleDeleteAbsence);
@@ -477,20 +477,48 @@ app.get(
   async (req, res) => {
     console.log("📥 [GET] /api/plannings/student/my for user:", req.user.uid);
     try {
-      // 1. Récupérer le document de l'étudiant
-      const studentDoc = await adminDb.collection("users").doc(req.user.uid).get();
-      if (!studentDoc.exists) {
+      // 1. Déterminer l'étudiant ciblé (l'étudiant lui-même ou l'enfant d'un compte parent)
+      const userDoc = await adminDb.collection("users").doc(req.user.uid).get();
+      if (!userDoc.exists) {
         return res.status(404).json({ success: false, error: "Profil utilisateur introuvable." });
       }
-      const studentData = studentDoc.data();
-      const studentClass = String(studentData.className || studentData.department || '').trim();
+      const userData = userDoc.data();
+
+      let targetStudentDoc = userDoc;
+      let targetStudentData = userData;
+
+      if (userData.role === 'parent') {
+        const childrenUids = Array.isArray(userData.childrenUids) ? userData.childrenUids : [];
+        if (childrenUids.length === 0) {
+          return res.status(200).json({
+            success: true,
+            studentClass: '',
+            courses: [],
+            message: "Aucun enfant associé à ce compte parent."
+          });
+        }
+        const requestedStudentUid = req.query.studentUid;
+        let selectedChildUid = childrenUids[0];
+        if (requestedStudentUid && childrenUids.includes(requestedStudentUid)) {
+          selectedChildUid = requestedStudentUid;
+        }
+        targetStudentDoc = await adminDb.collection("users").doc(selectedChildUid).get();
+        if (!targetStudentDoc.exists) {
+          return res.status(404).json({ success: false, error: "Profil de l'enfant introuvable." });
+        }
+        targetStudentData = targetStudentDoc.data();
+      }
+
+      const studentClass = String(targetStudentData.className || targetStudentData.department || '').trim();
 
       if (!studentClass) {
         return res.status(200).json({
           success: true,
           studentClass: '',
+          studentName: targetStudentData.displayName || 'Étudiant',
+          studentUid: targetStudentDoc.id,
           courses: [],
-          message: "Aucune classe assignée à votre profil étudiant."
+          message: "Aucune classe assignée à ce profil étudiant."
         });
       }
 
@@ -576,6 +604,8 @@ app.get(
       return res.status(200).json({
         success: true,
         studentClass,
+        studentName: targetStudentData.displayName || 'Étudiant',
+        studentUid: targetStudentDoc.id,
         courses: matchedCourses,
         totalCourses: matchedCourses.length,
         totalHours: matchedCourses.reduce((acc, c) => acc + (Number(c.duration) || 2), 0)

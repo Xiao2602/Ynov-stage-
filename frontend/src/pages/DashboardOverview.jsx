@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/api';
 import { useAuth } from '../auth/AuthContext';
 import '../components/DashboardLayout.css';
 
 export default function DashboardOverview() {
-  const { role } = useAuth();
+  const { role, backendUser } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [childrenAbsences, setChildrenAbsences] = useState([]);
+  const [childrenLoading, setChildrenLoading] = useState(false);
 
   const studentRoles = ['student', 'etudiant'];
   const teacherRoles = ['teacher', 'professeur', 'enseignant'];
-  const adminRoles = ['admin', 'rh', 'administrateur', 'personnel', 'manager', 'employee'];
+  const adminRoles = ['admin', 'rh', 'administrateur', 'personnel', 'employee'];
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -36,6 +39,20 @@ export default function DashboardOverview() {
     };
 
     fetchStats();
+  }, [role]);
+
+  useEffect(() => {
+    if (role === 'parent') {
+      setChildrenLoading(true);
+      apiFetch('/absences/children')
+        .then(res => {
+          if (res?.success) {
+            setChildrenAbsences(res.absences || []);
+          }
+        })
+        .catch(err => console.error('Erreur chargement absences enfants:', err))
+        .finally(() => setChildrenLoading(false));
+    }
   }, [role]);
 
   // ============================================================
@@ -73,23 +90,97 @@ export default function DashboardOverview() {
 
   // --- Rôle Parent ---
   if (role === 'parent') {
+    const childrenList = Array.isArray(backendUser?.children) ? backendUser.children : [];
+    const totalAbsencesCount = childrenAbsences.filter(a => a.type !== 'late' && !a.isLate).length;
+    const totalLatesCount = childrenAbsences.filter(a => a.type === 'late' || a.isLate).length;
+    const toJustifyCount = childrenAbsences.filter(a => a.status === 'to_justify').length;
+
     return (
       <div className="dashboard-page-content">
         <div className="stats-grid">
           <div className="stat-card">
-            <h4>Statut du Dossier</h4>
-            <div className="stat-value">Validé</div>
-            <span className="stat-badge success">Scolarité active</span>
+            <h4>Enfants rattachés</h4>
+            <div className="stat-value">{childrenList.length}</div>
+            <span className="stat-badge success">Dossier famille actif</span>
           </div>
           <div className="stat-card">
-            <h4>Absences du Trimestre</h4>
-            <div className="stat-value">8h</div>
-            <span className="stat-badge info">Justifiées : 6h / Non justifiées : 2h</span>
+            <h4>Absences cumulées</h4>
+            <div className="stat-value">{totalAbsencesCount}</div>
+            <span className={`stat-badge ${toJustifyCount > 0 ? 'warning' : 'info'}`}>
+              {toJustifyCount > 0 ? `${toJustifyCount} à justifier` : 'Toutes traitées'}
+            </span>
+          </div>
+          <div className="stat-card">
+            <h4>Retards signalés</h4>
+            <div className="stat-value">{totalLatesCount}</div>
+            <span className="stat-badge info">Année en cours</span>
           </div>
         </div>
-        <div className="dashboard-section">
-          <h3>Bulletins et relevés académiques</h3>
-          <p>Accès aux bilans périodiques.</p>
+
+        <div className="dashboard-section" style={{ marginTop: '24px' }}>
+          <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <h3 style={{ margin: '0 0 4px', color: '#0f172a' }}>Suivi académique de vos enfants</h3>
+              <p style={{ margin: 0, color: '#64748b', fontSize: '0.88rem' }}>Consultez la situation d'assiduité et l'emploi du temps de chacun de vos enfants.</p>
+            </div>
+            <Link to="/absences/mes-absences" className="ynov-btn-outline" style={{ textDecoration: 'none', padding: '7px 14px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 700, color: '#0284c7', border: '1px solid #bae6fd', background: '#f0f9ff' }}>
+              Consulter l'historique complet
+            </Link>
+          </div>
+
+          {childrenLoading ? (
+            <div style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>Chargement des données familiales...</div>
+          ) : childrenList.length === 0 ? (
+            <div style={{ background: '#fff', border: '1px dashed #cbd5e1', borderRadius: '14px', padding: '40px 24px', textAlign: 'center', color: '#64748b' }}>
+              <p style={{ margin: '0 0 6px', fontWeight: 800, color: '#0f172a', fontSize: '1.05rem' }}>Aucun enfant n'est actuellement rattaché à votre compte</p>
+              <p style={{ margin: 0, fontSize: '0.88rem' }}>Veuillez contacter l'administration de l'établissement pour associer votre profil à vos enfants.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+              {childrenList.map((child, idx) => {
+                const childAbsences = childrenAbsences.filter(a => a.userId === child.uid);
+                const childLates = childAbsences.filter(a => a.type === 'late' || a.isLate).length;
+                const childAbs = childAbsences.filter(a => a.type !== 'late' && !a.isLate).length;
+                const childToJustify = childAbsences.filter(a => a.status === 'to_justify').length;
+
+                return (
+                  <div key={child.uid || idx} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+                      <div>
+                        <h4 style={{ margin: '0 0 6px', fontSize: '1.05rem', color: '#0f172a', fontWeight: 800 }}>{child.displayName || 'Étudiant'}</h4>
+                        <span style={{ fontSize: '0.75rem', color: '#0284c7', background: '#f0f9ff', border: '1px solid #bae6fd', padding: '3px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                          {child.className || 'Classe non assignée'}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.72rem', color: '#64748b' }}>{child.email}</span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: '#f8fafc', padding: '12px 14px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                      <div>
+                        <span style={{ display: 'block', fontSize: '0.62rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em' }}>Absences</span>
+                        <strong style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: 800 }}>
+                          {childAbs} {childToJustify > 0 && <span style={{ color: '#dc2626', fontSize: '0.72rem', fontWeight: 700 }}>({childToJustify} à justifier)</span>}
+                        </strong>
+                      </div>
+                      <div>
+                        <span style={{ display: 'block', fontSize: '0.62rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em' }}>Retards</span>
+                        <strong style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: 800 }}>{childLates}</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px', marginTop: 'auto' }}>
+                      <Link to={`/planning?studentUid=${child.uid}`} style={{ flex: 1, textDecoration: 'none', background: '#e0f2fe', color: '#0284c7', padding: '8px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700, textAlign: 'center', transition: 'background 0.15s ease' }}>
+                        📅 Emploi du temps
+                      </Link>
+                      <Link to="/absences/mes-absences" style={{ flex: 1, textDecoration: 'none', background: '#f1f5f9', color: '#334155', padding: '8px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700, textAlign: 'center', transition: 'background 0.15s ease' }}>
+                        📋 Justificatifs
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     );

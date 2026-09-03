@@ -16,7 +16,6 @@ const PROFILE_IMAGE_KEY = 'ynov-profile-photo';
 const roleLabels = {
   admin: 'Administrateur',
   rh: 'Ressources humaines',
-  manager: 'Manager',
   employee: 'Personnel',
   student: 'Étudiant',
   teacher: 'Professeur',
@@ -92,7 +91,7 @@ export default function ProfilePage() {
 
   const handleSave = async () => {
     try {
-      const isAdminOrStaff = ['admin', 'rh', 'employee', 'manager'].includes(role);
+      const isAdminOrStaff = ['admin', 'rh', 'employee'].includes(role);
 
       if (isAdminOrStaff) {
         const result = await apiFetch(`/users/${user?.uid}`, {
@@ -326,9 +325,10 @@ export default function ProfilePage() {
               {children.length > 0 ? (
                 <ul>
                   {children.map((child, index) => (
-                    <li key={`${child.name}-${index}`}>
-                      {child.name || 'Enfant sans nom'}
-                      {(child.level || child.field) && <small>{[child.level, child.field].filter(Boolean).join(' · ')}</small>}
+                    <li key={`${child.uid || child.email || index}`}>
+                      <strong>{child.displayName || child.name || 'Étudiant'}</strong>
+                      {child.className && <span style={{ marginLeft: '8px', color: '#0284c7', fontSize: '0.8rem', fontWeight: 600 }}>({child.className})</span>}
+                      {child.email && <small style={{ display: 'block', color: '#64748b' }}>{child.email}</small>}
                     </li>
                   ))}
                 </ul>

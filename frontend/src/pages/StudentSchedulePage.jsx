@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   IconCalendar,
   IconSearch,
@@ -106,7 +107,13 @@ function formatClassAbbrev(className = '') {
 }
 
 export default function StudentSchedulePage() {
-  const { user } = useAuth();
+  const { user, role, backendUser } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const childrenList = Array.isArray(backendUser?.children) ? backendUser.children : [];
+  const initialChildUid = searchParams.get('studentUid') || (childrenList[0]?.uid || '');
+  const [selectedChildUid, setSelectedChildUid] = useState(initialChildUid);
+  const [activeChildName, setActiveChildName] = useState('');
 
   const [courses, setCourses] = useState([]);
   const [studentClass, setStudentClass] = useState('');
@@ -134,9 +141,11 @@ export default function StudentSchedulePage() {
       setLoading(true);
       setError('');
       try {
-        const data = await apiFetch('/plannings/student/my');
+        const queryParam = role === 'parent' && selectedChildUid ? `?studentUid=${selectedChildUid}` : '';
+        const data = await apiFetch(`/plannings/student/my${queryParam}`);
         if (data && data.success) {
           setStudentClass(data.studentClass || '');
+          setActiveChildName(data.studentName || '');
           const rawCourses = Array.isArray(data.courses) ? data.courses : [];
           
           const normalized = rawCourses.map((c, idx) => {
@@ -153,7 +162,8 @@ export default function StudentSchedulePage() {
               title: c.title ? String(c.title).trim() : 'Cours sans titre',
               group: c.group ? String(c.group).trim() : (data.studentClass || 'Ma classe'),
               room: c.room ? String(c.room).trim() : 'Salle 402',
-              teacherName: c.teacherName || 'Professeur'
+              teacherName: c.teacherName || 'Professeur',
+              isCancelled: Boolean(c.isCancelled)
             };
           });
 
@@ -181,7 +191,7 @@ export default function StudentSchedulePage() {
     };
 
     fetchStudentPlanning();
-  }, [user]);
+  }, [user, selectedChildUid, role]);
 
   // Vérifier si le planning contient des dates de calendrier explicites
   const hasExplicitDates = useMemo(() => {
@@ -524,10 +534,16 @@ export default function StudentSchedulePage() {
       {/* HEADER AVEC TITRE & BOUTONS DE VUES */}
       <header className="student-page-header">
         <div>
-          <p className="student-kicker">Espace Étudiant & Scolarité</p>
-          <h1>Mon Emploi du Temps</h1>
+          <p className="student-kicker">
+            {role === 'parent' ? 'Espace Parent & Famille' : 'Espace Étudiant & Scolarité'}
+          </p>
+          <h1>
+            {role === 'parent' ? 'Emploi du Temps Étudiant' : 'Mon Emploi du Temps'}
+          </h1>
           <p>
-            Consultez le planning officiel de votre promotion {studentClass && <strong>({studentClass})</strong>}.
+            {role === 'parent'
+              ? (activeChildName ? `Planning de ${activeChildName} · Promotion ${studentClass}` : 'Consultez le planning officiel de votre enfant.')
+              : `Consultez le planning officiel de votre promotion ${studentClass ? `(${studentClass})` : ''}.`}
           </p>
         </div>
 
@@ -645,18 +661,38 @@ export default function StudentSchedulePage() {
             </h2>
           </div>
 
-          <div className="student-jump-date-group">
-            <label style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>Aller au :</label>
-            <input
-              type="date"
-              className="student-jump-date-input"
-              value={formatDateIso(safeCurDate)}
-              onChange={(e) => {
-                if (e.target.value) {
-                  setCurrentDate(safeDate(e.target.value));
-                }
-              }}
-            />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            {role === 'parent' && childrenList.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px', padding: '4px 12px', height: '40px' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0284c7', whiteSpace: 'nowrap' }}>Élève :</span>
+                <select
+                  value={selectedChildUid}
+                  onChange={(e) => {
+                    setSelectedChildUid(e.target.value);
+                    setSearchParams({ studentUid: e.target.value });
+                  }}
+                  style={{ background: '#fff', border: '1px solid #bae6fd', borderRadius: '6px', padding: '4px 10px', fontSize: '0.85rem', fontWeight: 700, color: '#0f172a', outline: 'none', cursor: 'pointer' }}
+                >
+                  {childrenList.map((c) => (
+                    <option key={c.uid} value={c.uid}>{c.displayName} ({c.className})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="student-jump-date-group">
+              <label style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>Aller au :</label>
+              <input
+                type="date"
+                className="student-jump-date-input"
+                value={formatDateIso(safeCurDate)}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setCurrentDate(safeDate(e.target.value));
+                  }
+                }}
+              />
+            </div>
           </div>
         </div>
 
