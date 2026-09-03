@@ -1,0 +1,261 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --ynov-dark: #1d1d1e;       /* Noir Onyx */
+  --ynov-teal: #23b2a4;       /* Bleu Canard */
+  --ynov-bg-light: #f8f9fa;
+  --ynov-font: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--ynov-font);
+  background-color: var(--ynov-bg-light);
+  color: var(--ynov-dark);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Layout global */
+.ynov-login-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Panneau gauche (Branding) */
+.ynov-branding-panel {
+  flex: 1;
+  background-color: var(--ynov-dark);
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 3rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.ynov-branding-panel::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -50px;
+  width: 100px;
+  height: 100%;
+  background: var(--ynov-teal);
+  transform: skewX(-21deg);
+  transform-origin: top;
+}
+
+.ynov-branding-content {
+  z-index: 2;
+  text-align: center;
+}
+
+.ynov-logo-badge {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.ynov-logo-img {
+  max-width: 220px;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.ynov-slogan {
+  font-size: 1.3rem;
+  font-weight: 300;
+  font-style: italic;
+  opacity: 0.9;
+  letter-spacing: -0.01em;
+}
+
+/* Panneau droit (Formulaires) */
+.ynov-form-panel {
+  flex: 1.2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  background-color: #ffffff;
+  z-index: 1;
+}
+
+.ynov-form-card {
+  width: 100%;
+  max-width: 420px;
+}
+
+.ynov-form-card h2 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ynov-dark);
+}
+
+.ynov-subtitle {
+  color: #64748b;
+  font-size: 0.92rem;
+  font-weight: 400;
+  margin-top: 0.4rem;
+  margin-bottom: 2rem;
+  line-height: 1.4;
+}
+
+/* Champs de formulaire */
+.form-group {
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  color: #334155;
+}
+
+.form-group input {
+  padding: 0.85rem 1rem;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 6px;
+  font-family: var(--ynov-font);
+  font-size: 0.92rem;
+  font-weight: 400;
+  color: #1e293b;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--ynov-teal);
+  box-shadow: 0 0 0 3px rgba(35, 178, 164, 0.15);
+}
+
+/* Boutons */
+.ynov-submit-btn {
+  width: 100%;
+  padding: 0.85rem;
+  background-color: var(--ynov-teal);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--ynov-font);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.ynov-submit-btn:hover {
+  background-color: #1e9b8f;
+}
+
+.ynov-submit-btn:active {
+  transform: scale(0.99);
+}
+
+.ynov-secondary-btn {
+  margin-top: 1rem;
+  background: transparent;
+  border: 1px solid var(--ynov-teal);
+  color: var(--ynov-teal);
+  padding: 0.6rem 1rem;
+  border-radius: 4px;
+  font-family: var(--ynov-font);
+  font-weight: 500;
+  font-size: 0.85rem;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.ynov-secondary-btn:hover {
+  background-color: rgba(35, 178, 164, 0.05);
+}
+
+/* Actions et bas de page */
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1.5rem;
+}
+
+.forgot-link {
+  color: var(--ynov-teal);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.forgot-link:hover {
+  text-decoration: underline;
+}
+
+.form-footer {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+.back-link {
+  color: #64748b;
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: color 0.2s ease;
+}
+
+.back-link:hover {
+  color: var(--ynov-dark);
+}
+
+/* Messages d'alerte */
+.ynov-alert-success {
+  background-color: #e8f5e9;
+  border-left: 4px solid #4caf50;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+  color: #2e7d32;
+  font-size: 0.9rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .ynov-login-container {
+    flex-direction: column;
+  }
+
+  .ynov-branding-panel {
+    padding: 2.5rem 1.5rem;
+    flex: none;
+  }
+
+  .ynov-branding-panel::after {
+    display: none;
+  }
+
+  .ynov-form-panel {
+    padding: 2.5rem 1.5rem;
+  }
+}
