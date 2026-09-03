@@ -1,0 +1,104 @@
+.document-generation-page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding-bottom: 32px;
+}
+
+.document-generation-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.document-generation-kicker {
+  margin-bottom: 6px;
+  color: var(--ynov-teal-dark);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.document-generation-header h2 {
+  color: var(--ynov-dark);
+  font-size: 1.7rem;
+}
+
+.document-generation-header p:last-child {
+  max-width: 700px;
+  margin-top: 8px;
+  color: var(--ynov-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.document-generation-form {
+  padding: 28px;
+}
+
+.document-generation-form .field-group {
+  min-width: 0;
+}
+
+.document-generation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.document-generation-full-width {
+  grid-column: 1 / -1;
+}
+
+.document-generation-section {
+  margin: 26px 0 18px;
+  padding-top: 22px;
+  border-top: 1px solid var(--ynov-border);
+}
+
+.document-generation-section h3 {
+  color: var(--ynov-dark);
+  font-size: 1rem;
+}
+
+.document-generation-section p {
+  margin-top: 5px;
+  color: var(--ynov-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.document-generation-notice {
+  margin: 0 0 22px;
+  padding: 12px 14px;
+  border: 1px solid #bae6fd;
+  border-radius: 10px;
+  background: #f0f9ff;
+  color: #075985;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.document-generation-message {
+  margin: 20px 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.document-generation-message.success { color: #047857; }
+.document-generation-message.error { color: #b91c1c; }
+
+.document-generation-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 26px;
+}
+
+@media (max-width: 700px) {
+  .document-generation-header,
+  .document-generation-grid { grid-template-columns: 1fr; display: grid; }
+
+  .document-generation-form { padding: 20px; }
+}
