@@ -16,7 +16,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetchStats = async () => {
-      const allowedRoles = ['admin', 'rh', 'administrateur', 'personnel', 'manager', 'employee'];
+      const allowedRoles = ['admin', 'rh', 'administrateur', 'personnel', 'employee'];
       if (!allowedRoles.includes(role)) {
         return;
       }
@@ -163,9 +163,8 @@ export default function DashboardPage() {
       case 'admin':
       case 'rh':
       case 'administrateur':
-      case 'manager':
       case 'employee':
-      case 'personnel':
+      case 'personnel': {
         if (loading) {
           return <div style={{ padding: '2rem', textAlign: 'center' }}>Chargement des statistiques...</div>;
         }
@@ -199,55 +198,60 @@ export default function DashboardPage() {
                 <span className="stat-badge success">Validées</span>
               </div>
               <div className="stat-card">
-                <h4>Refusées</h4>
+                <h4>Rejetées</h4>
                 <div className="stat-value">{stats.rejected}</div>
-                <span className="stat-badge danger">Rejetées</span>
+                <span className="stat-badge danger">Refusées</span>
               </div>
             </div>
 
-            {/* Graphiques */}
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
-              gap: '24px',
-              marginTop: '24px'
-            }}>
+            {/* Section Graphiques */}
+            <div className="charts-grid" style={{ marginTop: '24px' }}>
+              {/* Graphique répartition par type */}
               {typeChartData && (
-                <div style={{
-                  background: 'var(--ynov-card)',
-                  border: '1px solid var(--ynov-border)',
-                  borderRadius: '1rem',
-                  padding: '1.5rem'
-                }}>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem', color: 'var(--ynov-text-light)' }}>
-                    Répartition par type
-                  </h3>
-                  <div style={{ maxWidth: '300px', margin: '0 auto' }}>
-                    <Pie data={typeChartData} options={{ plugins: { legend: { position: 'bottom' } } }} />
+                <div className="chart-card">
+                  <h3>Répartition par type d'absence</h3>
+                  <div className="chart-wrapper">
+                    <Doughnut
+                      data={typeChartData}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                          legend: {
+                            position: 'bottom',
+                            labels: {
+                              boxWidth: 12,
+                              padding: 15,
+                              font: { size: 12 }
+                            }
+                          }
+                        }
+                      }}
+                    />
                   </div>
                 </div>
               )}
 
+              {/* Graphique demandes par département */}
               {departmentChartData && (
-                <div style={{
-                  background: 'var(--ynov-card)',
-                  border: '1px solid var(--ynov-border)',
-                  borderRadius: '1rem',
-                  padding: '1.5rem'
-                }}>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem', color: 'var(--ynov-text-light)' }}>
-                    Répartition par département
-                  </h3>
-                  <div>
-                    <Bar 
-                      data={departmentChartData} 
+                <div className="chart-card">
+                  <h3>Demandes par département</h3>
+                  <div className="chart-wrapper">
+                    <Bar
+                      data={departmentChartData}
                       options={{
-                        plugins: { legend: { display: false } },
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                          legend: { display: false }
+                        },
                         scales: {
-                          y: { beginAtZero: true, ticks: { color: '#94a3b8' } },
-                          x: { ticks: { color: '#94a3b8', maxRotation: 30 } }
+                          y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
+                          }
                         }
-                      }} 
+                      }}
                     />
                   </div>
                 </div>
@@ -271,6 +275,7 @@ export default function DashboardPage() {
             </div>
           </>
         );
+      }
 
       case 'teacher':
       case 'enseignant':

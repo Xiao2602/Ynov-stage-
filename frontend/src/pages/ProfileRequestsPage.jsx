@@ -59,10 +59,6 @@ export default function ProfileRequestsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchRequests();
-  }, []);
-
   const fetchRequests = async () => {
     setLoading(true);
     setError(null);
@@ -80,6 +76,10 @@ export default function ProfileRequestsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchRequests();
+  }, []);
 
   const handleApprove = async (id) => {
     if (!window.confirm("Voulez-vous vraiment approuver ces modifications ?")) return;
