@@ -1,0 +1,94 @@
+.data-terms-page h2 {
+  line-height: 1.25;
+}
+
+.data-terms-eyebrow {
+  margin-bottom: 0.65rem;
+  color: var(--ynov-teal);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.data-terms-content {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid var(--ynov-teal);
+  border-radius: 6px;
+  color: #475569;
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.data-terms-content p + p {
+  margin-top: 0.85rem;
+}
+
+.data-terms-content ul {
+  margin: 0.55rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.data-terms-content li + li {
+  margin-top: 0.35rem;
+}
+
+.data-terms-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.data-terms-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  color: #334155;
+  cursor: pointer;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.data-terms-checkbox input {
+  flex: 0 0 auto;
+  accent-color: var(--ynov-teal);
+  height: 1rem;
+  margin-top: 0.15rem;
+  width: 1rem;
+}
+
+.data-terms-form .ynov-submit-btn:disabled {
+  background-color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.data-terms-logout {
+  display: block;
+  margin: 1rem auto 0;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font-family: var(--ynov-font);
+  font-size: 0.82rem;
+}
+
+.data-terms-logout:hover {
+  color: var(--ynov-dark);
+  text-decoration: underline;
+}
+
+.data-terms-logout:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.data-terms-account {
+  margin-top: 1.25rem;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
