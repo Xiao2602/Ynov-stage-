@@ -1,0 +1,126 @@
+.absence-dashboard { color: #24324a; }
+.absence-dashboard-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 30px; }
+.absence-dashboard-header h1 { margin: 0 0 5px; color: #1e2b43; font-size: clamp(1.7rem, 2vw, 2.2rem); font-weight: 700; letter-spacing: -.035em; }
+.absence-dashboard-header p { margin: 0; color: #71819a; font-size: .98rem; }
+.absence-dashboard-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.absence-child-selector { display: inline-flex; align-items: center; gap: 10px; margin: -8px 0 22px; padding: 11px 14px; border: 1px solid #dfe7f1; border-radius: 10px; background: #f8fbfc; color: #4d6078; font-size: .84rem; font-weight: 650; }
+.absence-child-selector select { min-width: 210px; padding: 8px 31px 8px 10px; border: 1px solid #cad9e5; border-radius: 7px; color: #263a55; background: #fff; font: inherit; cursor: pointer; }
+.absence-child-selector select:disabled { cursor: not-allowed; opacity: .65; }
+.absence-period-button, .absence-report-button { min-height: 46px; border-radius: 9px; padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; font: inherit; font-size: .88rem; font-weight: 600; cursor: pointer; }
+.absence-period-button { color: #42516a; background: #fff; border: 1px solid #dfe7f1; }
+.absence-period-button svg { width: 18px; height: 18px; color: #71819a; }
+.absence-calendar-picker { position: relative; }
+.absence-calendar-button { min-width: 172px; }
+.absence-calendar-button:hover { border-color: #06afd2; background: #f5fcfe; }
+.absence-calendar-popover { position: absolute; top: calc(100% + 9px); right: 0; z-index: 100; width: 308px; padding: 16px; border: 1px solid #dbe8ee; border-radius: 13px; background: #fff; box-shadow: 0 16px 35px rgba(30, 52, 75, .18); }
+.absence-calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; color: #263a55; text-transform: capitalize; }.absence-calendar-header button { width: 30px; height: 30px; border: 0; border-radius: 7px; color: #50647d; background: #f4f8fa; font-size: 1.5rem; line-height: 1; cursor: pointer; }.absence-calendar-header button:hover { color: #008fb2; background: #e7f8fc; }.absence-calendar-header strong { font-size: .88rem; }
+.absence-calendar-weekdays, .absence-calendar-days { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; text-align: center; }.absence-calendar-weekdays { margin-bottom: 5px; color: #8493a8; font-size: .68rem; font-weight: 700; }.absence-calendar-days button { height: 34px; border: 0; border-radius: 7px; color: #3e5169; background: transparent; font: inherit; font-size: .76rem; cursor: pointer; }.absence-calendar-days button:hover { background: #e3f7fc; color: #008cae; }.absence-calendar-days button.is-outside { color: #bdc7d2; }.absence-calendar-days button.is-selected-week { color: #008eb1; background: #dff6fb; font-weight: 700; }.absence-calendar-days button.is-today { outline: 1px solid #0bb4d5; outline-offset: -2px; }.absence-calendar-days button.is-selected-week.is-today { color: #fff; background: #07afd1; }.absence-calendar-popover p { margin: 13px 0 0; color: #8190a5; font-size: .71rem; text-align: center; }
+.absence-report-button { color: #fff; background: #06afd2; border: 1px solid #06afd2; box-shadow: 0 6px 12px rgba(6, 175, 210, .15); }
+.absence-report-button:hover { background: #0798b7; }
+.absence-metrics-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-bottom: 28px; }
+.absence-metric-card { padding: 25px 27px; background: #fff; border: 1px solid #dfe7f1; border-radius: 15px; display: flex; flex-direction: column; justify-content: space-between; }
+.absence-metric-card.is-emphasis { border: 2px solid #09afd2; padding: 24px 26px; box-shadow: 0 5px 18px rgba(6, 175, 210, .09); }
+.absence-metric-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #6d7d96; font-size: .92rem; font-weight: 600; }
+.absence-metric-icon { width: 35px; height: 35px; display: grid; place-items: center; color: #65758e; }
+.absence-metric-card.is-emphasis .absence-metric-icon { color: #05afd0; }
+.absence-metric-icon svg { width: 31px; height: 31px; stroke-width: 2; }
+.absence-metric-value { color: #1d2a42; font-size: 2.1rem; font-weight: 700; line-height: 1; letter-spacing: -.04em; }
+.absence-metric-detail { margin-top: 8px; color: #26a47c; font-size: .79rem; font-weight: 600; }
+.absence-metric-detail.is-alert { color: #ee4037; }
+.absence-dashboard-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(295px, 1fr); gap: 28px; align-items: start; }
+.absence-dashboard-left, .absence-dashboard-right { min-width: 0; }
+.absence-panel, .absence-alert-panel { background: #fff; border: 1px solid #dfe7f1; border-radius: 15px; padding: 30px 34px; }
+.absence-panel + .absence-panel { margin-top: 28px; }
+.absence-panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 24px; }
+.absence-panel h2, .absence-alert-panel h2 { margin: 0; color: #26344d; font-size: 1rem; font-weight: 700; letter-spacing: -.015em; }
+.absence-panel-header > button { border: 0; background: transparent; color: #91a0b6; cursor: pointer; }
+.absence-panel-header > button svg { width: 22px; height: 22px; }
+.absence-text-button { padding: 8px 13px; color: #42516a; background: #fff !important; border: 1px solid #dfe7f1 !important; border-radius: 9px !important; font-size: .8rem; font-weight: 600; }
+.absence-panel-description { margin: 5px 0 0; color: #8190a5; font-size: .78rem; }
+.absence-line-chart { overflow: hidden; border-radius: 11px; border: 1px solid #e0edf1; background: linear-gradient(180deg, #effbfe 0%, #fff 100%); }
+.absence-chart-key { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 15px 18px 0; color: #5d6d84; font-size: .76rem; }
+.absence-chart-key span { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; color: #294663; }.absence-chart-key i { width: 9px; height: 9px; border-radius: 50%; background: #06b6d4; box-shadow: 0 0 0 4px rgba(6, 182, 212, .12); }.absence-chart-key small { color: #7e8da3; font-size: .72rem; }
+.absence-line-chart svg { display: block; width: 100%; height: auto; min-height: 280px; overflow: visible; }
+.absence-chart-gridline { stroke: #dcecf0; stroke-dasharray: 4 5; }.absence-chart-axis { stroke: #b8c8d3; }.absence-chart-line { stroke: #06b6d4; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }.absence-chart-point { fill: #fff; stroke: #06b6d4; stroke-width: 3; transition: r .15s ease; }.absence-chart-point:hover { r: 7; }.absence-chart-y-label, .absence-chart-x-label { fill: #76879b; font-size: 12px; font-family: inherit; }.absence-chart-axis-title { fill: #5e7188; font-size: 12px; font-family: inherit; font-weight: 700; }.absence-chart-count { fill: #d6544d; font-size: 11px; font-family: inherit; font-weight: 700; }
+.absence-alert-panel { margin-bottom: 28px; background: #fff4f4; border-color: #ffc8c8; min-height: 202px; }
+.absence-alert-panel h2 { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; color: #ae2b29; font-size: 1.05rem; }
+.absence-alert-panel h2 svg { width: 23px; height: 23px; }
+.absence-alert-panel p { margin: 0; color: #9c4846; line-height: 1.55; font-size: .87rem; }
+.absence-alert-item + .absence-alert-item { margin-top: 20px; }
+.absence-alert-item { display: flex; flex-direction: column; gap: 5px; color: #a42c2a; }
+.absence-alert-item strong { font-size: .88rem; }
+.absence-alert-item span { padding-left: 18px; font-size: .82rem; }
+.absence-distribution-panel { padding: 35px 30px; text-align: left; }
+.absence-donut-wrap { display: grid; place-items: center; margin: 28px 0 25px; }
+.absence-donut { position: relative; width: 166px; height: 166px; display: grid; place-items: center; border-radius: 50%; background: conic-gradient(#079f70 0 var(--approved), #e98603 var(--approved) var(--pending), #e72b2b var(--pending) var(--rejected)); }
+.absence-donut.is-empty { border: 2px solid #1f2937; background: #fff; }
+.absence-donut::before { content: ''; position: absolute; width: 104px; height: 104px; border-radius: 50%; background: #fff; }
+.absence-donut.is-empty::before { display: none; }
+.absence-donut span { z-index: 1; color: #2a3850; font-size: 1.3rem; font-weight: 700; }
+.absence-donut-legend { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; color: #596981; font-size: .75rem; font-weight: 600; }
+.absence-donut-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.absence-donut-legend i { width: 9px; height: 9px; border-radius: 50%; }
+.absence-donut-legend .approved { background: #079f70; }.absence-donut-legend .pending { background: #e98603; }.absence-donut-legend .rejected { background: #e72b2b; }
+.absence-table-wrap { overflow-x: auto; }.absence-table { width: 100%; min-width: 650px; border-collapse: collapse; }.absence-table th { padding: 12px 16px; color: #71819a; border-bottom: 1px solid #dfe7f1; text-align: left; font-size: .72rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }.absence-table td { padding: 16px; color: #51617a; border-bottom: 1px solid #e9eef5; font-size: .86rem; white-space: nowrap; }.absence-student { display: flex; align-items: center; gap: 11px; color: #46566d; font-weight: 600; }.absence-avatar { width: 35px; height: 35px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid #dfe7f1; border-radius: 50%; color: #3d4d66; background: #f4f7fa; font-size: .77rem; font-weight: 700; }.absence-status { display: inline-flex; padding: 5px 11px; border-radius: 99px; font-size: .78rem; font-weight: 600; }.absence-status.pending { color: #df7d00; background: #fff8e7; border: 1px solid #fde6ae; }.absence-status.approved { color: #199d6c; background: #eafbf4; border: 1px solid #c9f2df; }.absence-status.rejected { color: #cc3131; background: #fff0f0; border: 1px solid #ffcaca; }.absence-view-button { width: 32px; height: 32px; display: grid; place-items: center; border: 0; color: #74849a; background: transparent; cursor: pointer; }.absence-view-button:hover { color: #06afd2; }.absence-view-button svg { width: 21px; height: 21px; }.absence-empty-state { margin: 0; color: #71819a; font-size: .87rem; }.absence-dashboard-feedback { display: grid; gap: 6px; min-height: 160px; place-content: center; border: 1px solid #dfe7f1; border-radius: 15px; color: #71819a; background: #fff; text-align: center; }.absence-dashboard-feedback.is-error { color: #b42318; }.absence-dashboard-feedback.is-error span { color: #9d5b56; font-size: .85rem; }
+@media (max-width: 1180px) { .absence-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.absence-dashboard-grid { grid-template-columns: 1fr; }.absence-dashboard-right { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; }.absence-alert-panel { margin-bottom: 0; }.absence-distribution-panel { padding: 30px; } }
+@media (max-width: 760px) { .absence-dashboard-header { flex-direction: column; margin-bottom: 22px; }.absence-dashboard-actions { width: 100%; }.absence-period-button, .absence-report-button { flex: 1; padding: 0 12px; }.absence-child-selector { display: grid; width: 100%; margin-top: 0; }.absence-child-selector select { width: 100%; min-width: 0; }.absence-metrics-grid, .absence-dashboard-right { grid-template-columns: 1fr; gap: 14px; }.absence-metric-card { min-height: 142px; }.absence-panel, .absence-alert-panel { padding: 22px; }.absence-line-chart { height: 200px; }.absence-panel + .absence-panel { margin-top: 18px; }.absence-alert-panel { margin-bottom: 0; } }
+
+/* Cette page était construite avec des couleurs fixes. Les règles suivantes
+   assurent une lecture homogène dans le vrai thème sombre. */
+:root[data-theme='dark'] .absence-dashboard { color: var(--text-main); }
+:root[data-theme='dark'] .absence-dashboard-header h1,
+:root[data-theme='dark'] .absence-metric-value,
+:root[data-theme='dark'] .absence-panel h2,
+:root[data-theme='dark'] .absence-alert-panel h2,
+:root[data-theme='dark'] .absence-donut span { color: #f1f5f9; }
+:root[data-theme='dark'] .absence-dashboard-header p,
+:root[data-theme='dark'] .absence-metric-heading,
+:root[data-theme='dark'] .absence-panel-description,
+:root[data-theme='dark'] .absence-donut-legend,
+:root[data-theme='dark'] .absence-table th,
+:root[data-theme='dark'] .absence-table td,
+:root[data-theme='dark'] .absence-student,
+:root[data-theme='dark'] .absence-empty-state,
+:root[data-theme='dark'] .absence-dashboard-feedback { color: #b8c7da; }
+:root[data-theme='dark'] .absence-child-selector,
+:root[data-theme='dark'] .absence-metric-card,
+:root[data-theme='dark'] .absence-panel,
+:root[data-theme='dark'] .absence-dashboard-feedback,
+:root[data-theme='dark'] .absence-period-button,
+:root[data-theme='dark'] .absence-calendar-popover,
+:root[data-theme='dark'] .absence-text-button { background: var(--bg-card) !important; border-color: var(--border-color) !important; color: var(--text-main) !important; }
+:root[data-theme='dark'] .absence-child-selector { background: #111c2e; }
+:root[data-theme='dark'] .absence-child-selector select { background: #0d1727; color: #eef5ff; border-color: #34465f; }
+:root[data-theme='dark'] .absence-period-button svg,
+:root[data-theme='dark'] .absence-metric-icon { color: #aebed3; }
+:root[data-theme='dark'] .absence-line-chart { background: linear-gradient(180deg, #102b3a, #111c2e); border-color: #30465c; }
+:root[data-theme='dark'] .absence-chart-key,
+:root[data-theme='dark'] .absence-chart-key span,
+:root[data-theme='dark'] .absence-chart-key small { color: #c4d1e1; }
+:root[data-theme='dark'] .absence-chart-gridline { stroke: #31465c; }
+:root[data-theme='dark'] .absence-chart-axis { stroke: #5b7087; }
+:root[data-theme='dark'] .absence-chart-y-label,
+:root[data-theme='dark'] .absence-chart-x-label,
+:root[data-theme='dark'] .absence-chart-axis-title { fill: #b8c7da; }
+:root[data-theme='dark'] .absence-chart-point,
+:root[data-theme='dark'] .absence-donut::before { fill: #111c2e; background: #111c2e; }
+:root[data-theme='dark'] .absence-alert-panel { background: #321b22; border-color: #6c3542; }
+:root[data-theme='dark'] .absence-alert-panel h2,
+:root[data-theme='dark'] .absence-alert-panel p,
+:root[data-theme='dark'] .absence-alert-item { color: #ffd0d3; }
+:root[data-theme='dark'] .absence-table th,
+:root[data-theme='dark'] .absence-table td { border-color: #293b52; }
+:root[data-theme='dark'] .absence-avatar { color: #d8e5f3; background: #18263b; border-color: #334a63; }
+:root[data-theme='dark'] .absence-status.pending { color: #ffd16a; background: #3e3012; border-color: #715824; }
+:root[data-theme='dark'] .absence-status.approved { color: #82e4bf; background: #103b31; border-color: #27745f; }
+:root[data-theme='dark'] .absence-status.rejected { color: #ffabae; background: #421e25; border-color: #783842; }
+:root[data-theme='dark'] .absence-donut.is-empty { border-color: #b8c7da; background: #111c2e; }
+
+/* Contraste garanti du thème clair, notamment pour les chiffres des métriques. */
+:root[data-theme='light'] .absence-dashboard { color: #24324a; }
+:root[data-theme='light'] .absence-metric-card,
+:root[data-theme='light'] .absence-panel { background: #ffffff; }
+:root[data-theme='light'] .absence-metric-value { color: #14233b; }
+:root[data-theme='light'] .absence-metric-heading { color: #50627c; }
+:root[data-theme='light'] .absence-panel h2,
+:root[data-theme='light'] .absence-dashboard-header h1 { color: #172b45; }

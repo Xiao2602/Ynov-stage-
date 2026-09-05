@@ -1,0 +1,13 @@
+.absence-requests .panel { border-radius: 16px; overflow: hidden; border: 1px solid var(--ynov-border); box-shadow: 0 8px 22px rgba(15, 23, 42, .06); }
+.absence-requests .panel-header { padding: 20px 22px; background: linear-gradient(110deg, rgba(0,180,216,.08), transparent 52%); border-bottom: 1px solid var(--ynov-border); }
+.absence-requests .data-table tbody tr { transition: background .16s ease, transform .16s ease; }
+.absence-requests .data-table tbody tr:hover { background: rgba(0,180,216,.06); }
+.absence-requests .table-action-btn { border-radius: 8px; border: 1px solid var(--ynov-border); background: var(--ynov-white); color: var(--ynov-teal); }
+.absence-requests .table-action-btn:hover { background: var(--ynov-teal); color: white; }
+.absence-review-modal { border: 1px solid var(--ynov-border); box-shadow: 0 28px 80px rgba(15, 23, 42, .28); }
+.absence-review-modal h3 { color: #132238; }
+.absence-review-modal strong { color: #243a55; }
+:root[data-theme='dark'] .absence-review-modal { background: var(--bg-card) !important; }
+:root[data-theme='dark'] .absence-review-modal h3, :root[data-theme='dark'] .absence-review-modal strong { color: var(--text-main); }
+:root[data-theme='dark'] .absence-review-modal > div > div > div { color: var(--text-main); }
+@media (max-width: 860px) { .absence-requests .stats-grid { grid-template-columns: repeat(2, 1fr) !important; } .absence-requests .data-table { min-width: 860px; } }
