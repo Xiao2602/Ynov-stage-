@@ -49,12 +49,12 @@ Le backend démarre habituellement sur `http://localhost:5000`.
 
 ## Configuration privée
 
-Les fichiers contenant des secrets ne sont volontairement pas inclus dans Git. Ne jamais les envoyer par GitHub, e-mail non sécurisé ou dans un fichier frontend.
+Les fichiers contenant des secrets ne sont volontairement pas inclus dans Git.
 
 ### Backend
 
 1. Copiez `backend/.env.example` vers `backend/.env`.
-2. Demandez à un responsable du projet les valeurs SMTP, Supabase et les accès Firebase.
+2. Demandez moi les valeurs SMTP, Supabase et les accès Firebase.
 3. Ajoutez le fichier de compte de service Firebase à la racine du projet ou dans `backend/`. Ce fichier reste local et est ignoré par Git.
 
 Variables Supabase requises dans `backend/.env` :
