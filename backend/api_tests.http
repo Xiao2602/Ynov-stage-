@@ -1,0 +1,268 @@
+###############################################################################
+# YNOV ABSENCE MANAGEMENT SYSTEM - COMPLETE API TEST SUITE (.http / REST Client)
+# Port Default: 5001 (Server default in server.js)
+###############################################################################
+
+@baseUrl = http://localhost:5001
+
+# Placeholders for Tokens (Replace after running Login endpoints)
+@authToken = eyJhbGciOiJSUzI1NiIsImtpZCI6IjZhYzkwNDdmNjcxMmZjZDVjZjY3YTMzMDc5NDFkOWZhNDIyODM5NTUiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiWWFzc2luZSBBbGFtaSAow4l0dWRpYW50KSIsInJvbGUiOiJzdHVkZW50IiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL2JhY2tlbmQtOTEwNjciLCJhdWQiOiJiYWNrZW5kLTkxMDY3IiwiYXV0aF90aW1lIjoxNzg2OTc3NzkzLCJ1c2VyX2lkIjoiV1NOS29Xb0xRZ1JDcHA0M3RmUUR4OXNWck95MiIsInN1YiI6IldTTktvV29MUWdSQ3BwNDN0ZlFEeDlzVnJPeTIiLCJpYXQiOjE3ODY5Nzc3OTMsImV4cCI6MTc4Njk4MTM5MywiZW1haWwiOiJldHVkaWFudEB5bm92LmNvbSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwiZmlyZWJhc2UiOnsiaWRlbnRpdGllcyI6eyJlbWFpbCI6WyJldHVkaWFudEB5bm92LmNvbSJdfSwic2lnbl9pbl9wcm92aWRlciI6InBhc3N3b3JkIn19.HVRivh8Apg2reSA24tidgrtMXw6uLjNSHHeqK6YkoydOpmQnVmJJa31LCKmZXPgvvbRcAiqbTv1k23PEW1HU7Ji7LA7mmKBqXqJ7ddCxNb1vW4zq45BNVjeu1KcIVzl8F3puGDyNKn0ex7wBBFC9Hv-x1WV2NQcWRmFcEUSgiLvo5YIXbsjucfsCB32AaOqNZCfPYo3ohstSn6t_vVLQqJXB_RGnxw5guv1UKDD-cnp7uXGm3Uk7TFVfL8mNj6kqQEYUQ9l2ilgXGEB8ptkBCqSOVjKvkvEOTVRdvqz_2T9sUa62LIlrPiSWG_cqROmE93HiZizVEmep2Xp1ObmbLA
+@adminToken = YOUR_ADMIN_ID_TOKEN_HERE
+@rhToken = YOUR_RH_ID_TOKEN_HERE
+@parentToken = YOUR_PARENT_ID_TOKEN_HERE
+
+# Placeholders for IDs (Replace after creating/getting resources)
+@absenceId = ABSENCE_ID_HERE
+@notificationId = NOTIFICATION_ID_HERE
+@parentUid = PARENT_UID_HERE
+@studentUid = WSNKoWoLQgRCpp43tfQDx9sVrOy2
+
+===============================================================================
+# 1. SYSTEM HEALTH & VERIFICATION
+===============================================================================
+
+### Health Check (Public)
+GET {{baseUrl}}/api/health
+Accept: application/json
+
+
+===============================================================================
+# 2. AUTHENTICATION MODULE (/api/auth)
+===============================================================================
+
+### 2.1 Login - Student Account (Public)
+# @name loginStudent
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "etudiant@ynov.com",
+  "password": "StudentPassword123!"
+}
+
+### 2.2 Login - Admin Account (Public)
+# @name loginAdmin
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "amine.fatih@ynov.com",
+  "password": "AdminPassword123!"
+}
+
+### 2.3 Login - RH Account (Public)
+# @name loginRH
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "rh@ynov.com",
+  "password": "RhPassword123!"
+}
+
+### 2.4 Login - Parent Account (Public)
+# @name loginParent
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "parent@ynov.com",
+  "password": "ParentPassword123!"
+}
+
+### 2.5 Request Password Reset (Public)
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "etudiant@ynov.com"
+}
+
+### 2.6 User Logout (Public / Auth)
+POST {{baseUrl}}/api/auth/logout
+Content-Type: application/json
+
+
+===============================================================================
+# 3. USER MANAGEMENT & ROLES MODULE (/api/users & /api/roles)
+===============================================================================
+
+### 3.1 Get All Users (Auth: Admin / RH / Staff)
+GET {{baseUrl}}/api/users
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### 3.2 Create New User / Parent (Auth: Admin / RH)
+POST {{baseUrl}}/api/users/create
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "email": "nouveau.parent@ynov.com",
+  "password": "ParentPassword123!",
+  "displayName": "Karim Bennani (Parent)",
+  "role": "parent",
+  "department": "Famille",
+  "childrenUids": [
+    "STUDENT_UID_HERE"
+  ]
+}
+
+### 3.3 Create New Student User (Auth: Admin / RH)
+POST {{baseUrl}}/api/users/create
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "email": "nouveau.etudiant@ynov.com",
+  "password": "StudentPassword123!",
+  "displayName": "Sara Bennani (Étudiante)",
+  "role": "student",
+  "department": "Informatique"
+}
+
+### 3.4 Assign / Change User Role Custom Claim (Auth: Admin)
+POST {{baseUrl}}/api/roles/assign
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "uid": "TARGET_USER_UID_HERE",
+  "role": "rh"
+}
+
+### 3.5 Link Parent Account to Student Account(s) (Auth: Admin / RH)
+POST {{baseUrl}}/api/users/link-parent-student
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "parentUid": "{{parentUid}}",
+  "studentUids": [
+    "{{studentUid1}}",
+    "{{studentUid2}}"
+  ]
+}
+
+### 3.6 Get Linked Children Profiles (Auth: Parent / Admin / RH)
+GET {{baseUrl}}/api/users/my-children
+Authorization: Bearer {{parentToken}}
+Accept: application/json
+
+
+===============================================================================
+# 4. ABSENCE MANAGEMENT MODULE (/api/absences)
+===============================================================================
+
+### 4.1 Submit New Absence Request (Auth: Student / Employee)
+POST {{baseUrl}}/api/absences
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "type": "medical",
+  "startDate": "2026-09-01T08:00:00.000Z",
+  "endDate": "2026-09-02T18:00:00.000Z",
+  "reason": "Consultation médicale spécialisée et repos prescrit",
+  "justificationUrl": "http://localhost:9000/ynov-absences/documents/certificat_medical.pdf"
+}
+
+### 4.2 Submit Absence Request - Family Reason Example
+POST {{baseUrl}}/api/absences
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "type": "family",
+  "startDate": "2026-09-10T08:00:00.000Z",
+  "endDate": "2026-09-10T18:00:00.000Z",
+  "reason": "Événement familial urgent"
+}
+
+### 4.3 Get My Absence History (Auth: Student / Employee)
+GET {{baseUrl}}/api/absences/my
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### 4.4 Get Linked Children's Absences (Auth: Parent / Admin / RH)
+GET {{baseUrl}}/api/absences/children
+Authorization: Bearer {{parentToken}}
+Accept: application/json
+
+### 4.5 Get Pending Absence Requests for Review (Auth: Admin / RH / Manager)
+GET {{baseUrl}}/api/absences/pending
+Authorization: Bearer {{rhToken}}
+Accept: application/json
+
+### 4.6 Get All Absences List (Auth: Admin / RH / Manager / Teacher)
+GET {{baseUrl}}/api/absences
+Authorization: Bearer {{rhToken}}
+Accept: application/json
+
+### 4.7 Get All Absences with Filters (Auth: Admin / RH / Manager / Teacher)
+GET {{baseUrl}}/api/absences?status=pending&type=medical
+Authorization: Bearer {{rhToken}}
+Accept: application/json
+
+### 4.8 Review Absence - Approve Request (Auth: Admin / RH / Manager)
+PATCH {{baseUrl}}/api/absences/{{absenceId}}/review
+Authorization: Bearer {{rhToken}}
+Content-Type: application/json
+
+{
+  "status": "approved",
+  "reviewNotes": "Certificat médical vérifié et conforme aux exigences."
+}
+
+### 4.9 Review Absence - Reject Request (Auth: Admin / RH / Manager)
+PATCH {{baseUrl}}/api/absences/{{absenceId}}/review
+Authorization: Bearer {{rhToken}}
+Content-Type: application/json
+
+{
+  "status": "rejected",
+  "reviewNotes": "Justificatif illisible ou périmé. Merci de téléverser un nouveau document."
+}
+
+### 4.10 Delete Pending Absence Request (Auth: Owner Student / Admin)
+DELETE {{baseUrl}}/api/absences/{{absenceId}}
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+
+===============================================================================
+# 5. DOCUMENT UPLOAD MODULE (/api/documents)
+===============================================================================
+
+### 5.1 Upload Justification Document (Auth: Student / Employee)
+# Note: In REST Client / Postman, select body format multipart/form-data with key "file".
+POST {{baseUrl}}/api/documents/upload
+Authorization: Bearer {{authToken}}
+Content-Type: multipart/form-data; boundary=BoundaryExample
+
+--BoundaryExample
+Content-Disposition: form-data; name="file"; filename="certificat_medical.pdf"
+Content-Type: application/pdf
+
+< ./sample_justification.pdf
+--BoundaryExample--
+
+
+===============================================================================
+# 6. IN-APP NOTIFICATIONS MODULE (/api/notifications)
+===============================================================================
+
+### 6.1 Get My In-App Notifications (Auth: Any User)
+GET {{baseUrl}}/api/notifications/my
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### 6.2 Mark Single Notification as Read (Auth: Notification Owner)
+PATCH {{baseUrl}}/api/notifications/{{notificationId}}/read
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### 6.3 Mark All Notifications as Read (Auth: Any User)
+POST {{baseUrl}}/api/notifications/read-all
+Authorization: Bearer {{authToken}}
+Content-Type: application/json

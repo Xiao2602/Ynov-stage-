@@ -1,0 +1,1189 @@
+import admin from "firebase-admin";
+import { adminDb } from "../../firebaseAdmin.js";
+import { ABSENCE_STATUS } from "../Validators/absenceValidator.js";
+import { sendNewAbsenceAlertToHR, sendAbsenceStatusEmail, sendCourseCancellationEmail } from "../../Auth/Authentication/customEmailService.js";
+import { createNotificationService } from "../../Notifications/Services/notificationService.js";
+
+const COLLECTION_NAME = "absences";
+
+/**
+ * Créer une demande d'absence dans Firestore et déclencher l'alerte email RH + la notification In-App
+ * 
+ * @param {Object} user - Contenu du jeton JWT décodé (req.user)
+ * @param {Object} absenceData - Données de l'absence (type, startDate, endDate, reason, justificationUrl)
+ */
+export async function submitAbsenceService(user, { type, startDate, endDate, reason, justificationUrl = "" }) {
+  try {
+    const docRef = adminDb.collection(COLLECTION_NAME).doc();
+    const newAbsence = {
+      id: docRef.id,
+      userId: user.uid,
+      userEmail: user.email || "",
+      displayName: user.displayName || user.name || user.email || "Utilisateur",
+      role: user.role || "student",
+      department: user.department || "",
+      type,
+      startDate,
+      endDate,
+      reason,
+      justificationUrl,
+      status: ABSENCE_STATUS.PENDING,
+      reviewedBy: null,
+      reviewNotes: null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    await docRef.set(newAbsence);
+
+    // 1. Déclenchement de l'alerte email RH (asynchrone)
+    sendNewAbsenceAlertToHR(newAbsence).catch(err => {
+      console.warn("Avertissement : L'email d'alerte RH n'a pas pu être envoyé :", err.message);
+    });
+
+    // 2. Déclenchement de la notification In-App pour l'étudiant// Dans submitAbsenceService, après avoir créé l'absence
+
+    // 1. Notification pour l'étudiant (comme avant)
+    createNotificationService({
+      userId: user.uid,
+      title: "Demande d'absence enregistrée",
+      message: `Votre demande d'absence (${type}) a bien été enregistrée et est en attente de révision par l'administration RH.`,
+      type: "absence_submission",
+      relatedId: docRef.id
+    }).catch(err => {
+      console.warn("Avertissement : La notification In-App n'a pas pu être créée :", err.message);
+    });
+
+    // 2. Notification pour TOUS les admins et RH
+    try {
+      // Récupérer tous les utilisateurs avec rôle admin ou rh
+      const usersSnapshot = await adminDb.collection("users").get();
+      const adminRhUsers = [];
+      usersSnapshot.forEach(doc => {
+        const userData = doc.data();
+        if (['admin', 'rh'].includes(userData.role)) {
+          adminRhUsers.push(userData.uid);
+        }
+      });
+
+      // Créer une notification pour chaque admin/RH
+      const notificationPromises = adminRhUsers.map(adminId => {
+        return createNotificationService({
+          userId: adminId,
+          title: "Nouvelle demande d'absence à traiter",
+          message: `${user.displayName || user.email} a soumis une demande d'absence (${type}).`,
+          type: "absence_pending_review",
+          relatedId: docRef.id
+        });
+      });
+
+      await Promise.all(notificationPromises);
+      console.log(`✅ Notifications envoyées à ${adminRhUsers.length} administrateurs/RH`);
+    } catch (error) {
+      console.warn("⚠️ Erreur lors de l'envoi des notifications aux admins:", error.message);
+    }
+
+    return {
+      success: true,
+      message: "Demande d'absence soumise avec succès.",
+      absence: {
+        ...newAbsence,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la création de la demande : " + error.message };
+  }
+}
+
+/**
+ * Obtenir les demandes d'absence de l'utilisateur connecté
+ * 
+ * @param {string} userId - UID de l'utilisateur
+ */
+export async function getMyAbsencesService(userId) {
+  try {
+    const snapshot = await adminDb.collection(COLLECTION_NAME)
+      .where("userId", "==", userId)
+      .orderBy("createdAt", "desc")
+      .get();
+
+    const absences = [];
+    snapshot.forEach(doc => {
+      absences.push(doc.data());
+    });
+
+    return { success: true, count: absences.length, absences };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la récupération des absences : " + error.message };
+  }
+}
+
+/**
+ * Obtenir les demandes d'absence des enfants (étudiants) liés à un parent
+ * 
+ * @param {string} parentUid - UID du parent
+ */
+export async function getChildrenAbsencesService(parentUid) {
+  try {
+    const parentDoc = await adminDb.collection("users").doc(parentUid).get();
+    if (!parentDoc.exists) {
+      return { success: false, error: "Compte Parent introuvable." };
+    }
+
+    const childrenUids = parentDoc.data().childrenUids || [];
+    if (childrenUids.length === 0) {
+      return { success: true, count: 0, absences: [] };
+    }
+
+    const snapshot = await adminDb.collection(COLLECTION_NAME)
+      .where("userId", "in", childrenUids)
+      .get();
+
+    const absences = [];
+    snapshot.forEach(doc => {
+      absences.push(doc.data());
+    });
+
+    return { success: true, count: absences.length, absences };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la récupération des absences des enfants : " + error.message };
+  }
+}
+
+/**
+ * Obtenir les demandes d'absence en attente de validation (Pending)
+ */
+export async function getPendingAbsencesService() {
+  try {
+    const snapshot = await adminDb.collection(COLLECTION_NAME)
+      .where("status", "==", ABSENCE_STATUS.PENDING)
+      .get();
+
+    const absences = [];
+    snapshot.forEach(doc => {
+      absences.push(doc.data());
+    });
+
+    return { success: true, count: absences.length, absences };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la récupération des demandes en attente : " + error.message };
+  }
+}
+
+/**
+ * Obtenir toutes les demandes d'absence (pour Admin / RH / Manager / Enseignant)
+ */
+export async function getAllAbsencesService(filters = {}) {
+  try {
+    let query = adminDb.collection(COLLECTION_NAME);
+
+    if (filters.status) {
+      query = query.where("status", "==", filters.status);
+    }
+    if (filters.department) {
+      query = query.where("department", "==", filters.department);
+    }
+    if (filters.type) {
+      query = query.where("type", "==", filters.type);
+    }
+
+    const snapshot = await query.get();
+    const absences = [];
+    snapshot.forEach(doc => {
+      absences.push(doc.data());
+    });
+
+    return { success: true, count: absences.length, absences };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la récupération de toutes les absences : " + error.message };
+  }
+}
+
+/**
+ * Réviser une demande d'absence (Approuver ou Rejeter) et notifier l'utilisateur par email + Notification In-App
+ * 
+ * @param {string} absenceId - ID du document d'absence
+ * @param {Object} reviewerUser - Utilisateur modérateur (Admin / RH / Manager)
+ * @param {Object} reviewData - { status, reviewNotes }
+ */
+
+/**
+ * Notifie automatiquement les étudiants (et parents) des cours impactés
+ * par l'absence confirmée d'un professeur.
+ *
+ * @param {Object} absence - Données de l'absence confirmée
+ * @param {string} absenceId - ID du document d'absence
+ */
+export async function notifyStudentsOfTeacherAbsence(absence, absenceId) {
+  try {
+    const teacherUid = absence.userId;
+    if (!teacherUid) return;
+
+    // 1. Vérifier si l'utilisateur est bien un enseignant
+    let isTeacher = absence.role === 'teacher';
+    if (!isTeacher) {
+      const userDoc = await adminDb.collection("users").doc(teacherUid).get();
+      if (userDoc.exists && userDoc.data()?.role === 'teacher') {
+        isTeacher = true;
+      }
+    }
+    if (!isTeacher) return;
+
+    // 2. Récupérer le planning de ce professeur
+    const planningDoc = await adminDb.collection("plannings").doc(teacherUid).get();
+    if (!planningDoc.exists) return;
+
+    const teacherPlanning = planningDoc.data();
+    const courses = Array.isArray(teacherPlanning.courses) ? teacherPlanning.courses : [];
+    if (courses.length === 0) return;
+
+    // 3. Normaliser les dates de début et fin de l'absence (format YYYY-MM-DD)
+    const startIso = String(absence.startDate || '').slice(0, 10);
+    const endIso = String(absence.endDate || startIso).slice(0, 10);
+    if (!startIso) return;
+
+    // 4. Identifier tous les cours du professeur tombant dans l'intervalle [startIso, endIso]
+    const cancelledCourses = courses.filter(c => {
+      if (!c.date) return false;
+      const cd = String(c.date).slice(0, 10);
+      return cd >= startIso && cd <= endIso;
+    });
+
+    if (cancelledCourses.length === 0) {
+      console.log(`ℹ️ Aucun cours prévu pour le professeur ${teacherUid} entre le ${startIso} et le ${endIso}.`);
+      return;
+    }
+
+    console.log(`📢 ${cancelledCourses.length} cours impacté(s) par l'absence confirmée du professeur ${absence.displayName || teacherUid}. Notification des étudiants et des parents...`);
+
+    // 5. Récupérer tous les étudiants actifs et tous les comptes parents
+    const [studentsSnap, parentsSnap] = await Promise.all([
+      adminDb.collection("users").where("role", "==", "student").get(),
+      adminDb.collection("users").where("role", "==", "parent").get()
+    ]);
+
+    // Indexation bidirectionnelle des parents : studentId -> Map<parentUid, parentData>
+    const studentToParentsMap = new Map();
+    const parentDocsById = new Map();
+
+    parentsSnap.docs.forEach(pDoc => {
+      const pData = pDoc.data();
+      const pUid = pDoc.id;
+      parentDocsById.set(pUid, { uid: pUid, ...pData });
+      const childrenUids = Array.isArray(pData.childrenUids) ? pData.childrenUids : [];
+      childrenUids.forEach(childUid => {
+        if (!studentToParentsMap.has(childUid)) studentToParentsMap.set(childUid, new Map());
+        studentToParentsMap.get(childUid).set(pUid, { uid: pUid, ...pData });
+      });
+    });
+
+    const teacherName = absence.displayName || "Votre professeur";
+    const sentAlertKeys = new Set();
+
+    // Pour chaque cours annulé, trouver les étudiants de la classe correspondante
+    for (const course of cancelledCourses) {
+      const groupNorm = String(course.group || '').toLowerCase().trim();
+      if (!groupNorm) continue;
+
+      const courseTitle = course.title || "Séance de cours";
+      const courseDate = course.date;
+      const courseTime = course.start || "horaire habituel";
+      const courseRoom = course.room ? ` (Salle ${course.room})` : "";
+
+      const notifStudentTitle = `⚠️ Cours annulé : ${courseTitle}`;
+      const notifStudentMessage = `Le cours "${courseTitle}" prévu le ${courseDate} à ${courseTime}${courseRoom} est annulé en raison de l'absence confirmée de ${teacherName}.`;
+
+      for (const sDoc of studentsSnap.docs) {
+        const sData = sDoc.data();
+        const sId = sDoc.id;
+        const sClass = String(sData.className || sData.department || '').toLowerCase().trim();
+        
+        const isMatch = groupNorm === sClass ||
+          (groupNorm && sClass.includes(groupNorm)) ||
+          (sClass && groupNorm.includes(sClass));
+
+        if (!isMatch) continue;
+
+        const studentName = sData.displayName || "Étudiant";
+        const studentEmail = sData.email || "";
+
+        // A. Notification In-App pour l'étudiant (dé-doublonnée)
+        const studentAlertKey = `student_${sId}_${courseTitle}_${courseDate}_${courseTime}`;
+        if (!sentAlertKeys.has(studentAlertKey)) {
+          sentAlertKeys.add(studentAlertKey);
+
+          createNotificationService({
+            userId: sId,
+            title: notifStudentTitle,
+            message: notifStudentMessage,
+            type: "warning",
+            relatedId: absenceId
+          }).catch(err => console.warn(`Erreur notification étudiant ${sId}:`, err.message));
+
+          if (studentEmail) {
+            sendCourseCancellationEmail({
+              toEmail: studentEmail,
+              recipientName: studentName,
+              isParent: false,
+              studentName,
+              courseTitle,
+              courseDate,
+              courseTime,
+              courseRoom,
+              teacherName
+            }).catch(err => console.warn(`Erreur email étudiant ${sId}:`, err.message));
+          }
+        }
+
+        // B. Notification In-App et Email pour tous les parents liés (bidirectionnel)
+        const linkedParentsMap = studentToParentsMap.get(sId) || new Map();
+
+        // Intégrer également sData.parentUids s'il est renseigné sur le profil étudiant
+        if (Array.isArray(sData.parentUids)) {
+          sData.parentUids.forEach(pUid => {
+            if (!linkedParentsMap.has(pUid) && parentDocsById.has(pUid)) {
+              linkedParentsMap.set(pUid, parentDocsById.get(pUid));
+            }
+          });
+        }
+
+        for (const [parentUid, parentData] of linkedParentsMap.entries()) {
+          const parentAlertKey = `parent_${parentUid}_${sId}_${courseTitle}_${courseDate}_${courseTime}`;
+          if (sentAlertKeys.has(parentAlertKey)) continue;
+          sentAlertKeys.add(parentAlertKey);
+
+          const parentTitle = `⚠️ Cours annulé : ${courseTitle} (${studentName})`;
+          const parentMessage = `Le cours "${courseTitle}" prévu le ${courseDate} à ${courseTime}${courseRoom} pour votre enfant ${studentName} (${sData.className || 'classe'}) est annulé en raison de l'absence confirmée de ${teacherName}.`;
+
+          createNotificationService({
+            userId: parentUid,
+            title: parentTitle,
+            message: parentMessage,
+            type: "warning",
+            relatedId: absenceId
+          }).catch(err => console.warn(`Erreur notification parent ${parentUid}:`, err.message));
+
+          if (parentData?.email) {
+            sendCourseCancellationEmail({
+              toEmail: parentData.email,
+              recipientName: parentData.displayName || "Parent d'élève",
+              isParent: true,
+              studentName,
+              courseTitle,
+              courseDate,
+              courseTime,
+              courseRoom,
+              teacherName
+            }).catch(err => console.warn(`Erreur email parent ${parentUid}:`, err.message));
+          }
+        }
+      }
+    }
+    console.log(`✅ Notifications des cours annulés envoyées avec succès aux étudiants et parents concernés.`);
+  } catch (error) {
+    console.error("❌ Erreur notifyStudentsOfTeacherAbsence:", error);
+  }
+}
+
+export async function reviewAbsenceService(absenceId, reviewerUser, { status, reviewNotes = "" }) {
+  try {
+    const docRef = adminDb.collection(COLLECTION_NAME).doc(absenceId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return { success: false, error: "Demande d'absence introuvable." };
+    }
+
+    const currentAbsence = doc.data();
+
+    const updateData = {
+      status,
+      reviewedBy: reviewerUser.uid,
+      reviewerName: reviewerUser.displayName || reviewerUser.email || "Modérateur",
+      reviewNotes: reviewNotes || "",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    await docRef.update(updateData);
+
+    // Si la demande est approuvée et concerne un professeur, notifier automatiquement les étudiants des cours impactés
+    if (status === "approved") {
+      notifyStudentsOfTeacherAbsence({ ...currentAbsence, ...updateData }, absenceId).catch(err => {
+        console.warn("Avertissement : Erreur notification étudiants absence prof:", err.message);
+      });
+    }
+
+    // 1. Déclenchement de l'email de décision à l'étudiant / employé (asynchrone)
+    if (currentAbsence.userEmail) {
+      sendAbsenceStatusEmail(currentAbsence.userEmail, currentAbsence.displayName, status, reviewNotes).catch(err => {
+        console.warn("Avertissement : L'email de décision n'a pas pu être envoyé :", err.message);
+      });
+    }
+
+    // 2. Déclenchement de la notification In-App à l'étudiant / employé
+    const isApproved = status === "approved";
+    createNotificationService({
+      userId: currentAbsence.userId,
+      title: isApproved ? "Demande d'absence approuvée" : "Demande d'absence refusée",
+      message: isApproved 
+        ? `Votre demande d'absence a été approuvée par l'administration RH.${reviewNotes ? ' Remarque: ' + reviewNotes : ''}`
+        : `Votre demande d'absence a été refusée par l'administration RH.${reviewNotes ? ' Motif: ' + reviewNotes : ''}`,
+      type: isApproved ? "absence_approved" : "absence_rejected",
+      relatedId: absenceId
+    }).catch(err => {
+      console.warn("Avertissement : La notification In-App n'a pas pu être créée :", err.message);
+    });
+
+    return {
+      success: true,
+      message: `Demande d'absence mise à jour vers le statut '${status}'.`,
+      absenceId
+    };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la révision de la demande : " + error.message };
+  }
+}
+
+/**
+ * Supprimer une demande d'absence (si elle est encore en attente et appartient à l'utilisateur)
+ * 
+ * @param {string} absenceId 
+ * @param {string} userId 
+ */
+export async function deleteAbsenceService(absenceId, userId) {
+  try {
+    const docRef = adminDb.collection(COLLECTION_NAME).doc(absenceId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return { success: false, error: "Demande d'absence introuvable." };
+    }
+
+    const absence = doc.data();
+
+    if (absence.userId !== userId) {
+      return { success: false, error: "Vous n'êtes pas autorisé à supprimer cette demande." };
+    }
+
+    if (absence.status !== ABSENCE_STATUS.PENDING) {
+      return { success: false, error: "Seules les demandes en attente (pending) peuvent être supprimées." };
+    }
+
+    await docRef.delete();
+
+    return { success: true, message: "Demande d'absence supprimée avec succès." };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la suppression de la demande : " + error.message };
+  }
+
+}
+
+/**
+ * Récupérer les statistiques globales pour le tableau de bord
+ * (Admin / RH)
+ */
+export async function getStatisticsService() {
+  try {
+    const snapshot = await adminDb.collection("absences").get();
+    const absences = [];
+    snapshot.forEach(doc => absences.push(doc.data()));
+
+    const total = absences.length;
+    const pending = absences.filter(a => a.status === ABSENCE_STATUS.PENDING).length;
+    const approved = absences.filter(a => a.status === ABSENCE_STATUS.APPROVED).length;
+    const rejected = absences.filter(a => a.status === ABSENCE_STATUS.REJECTED).length;
+
+    // Répartition par type d'absence
+    const byType = {};
+    absences.forEach(a => {
+      byType[a.type] = (byType[a.type] || 0) + 1;
+    });
+
+    // Répartition par département
+    const byDepartment = {};
+    absences.forEach(a => {
+      const dept = a.department || "Non défini";
+      byDepartment[dept] = (byDepartment[dept] || 0) + 1;
+    });
+
+    // Répartition par statut (pour les graphiques)
+    const byStatus = { pending, approved, rejected };
+
+    return {
+      success: true,
+      stats: {
+        total,
+        pending,
+        approved,
+        rejected,
+        byType,
+        byDepartment,
+        byStatus
+      }
+    };
+  } catch (error) {
+    return { success: false, error: "Erreur lors du calcul des statistiques : " + error.message };
+  }
+}
+
+import XLSX from "xlsx";
+import PDFDocument from "pdfkit";
+
+/**
+ * Exporter les absences en Excel (.xlsx)
+ * @param {Object} filters - { status, department, type, startDate, endDate }
+ */
+/**
+ * Helper commun pour agréger toutes les absences (actives et archivées/traitées)
+ */
+/**
+ * Helper commun pour récupérer et filtrer les demandes d'absence actives
+ */
+async function getFilteredAbsences(filters = {}, customAbsences = null) {
+  let absences = [];
+
+  if (Array.isArray(customAbsences) && customAbsences.length > 0) {
+    absences = customAbsences;
+  } else {
+    const snapshot = await adminDb.collection("absences").get();
+    snapshot.forEach(doc => absences.push({ id: doc.id, ...doc.data() }));
+
+    // Filtrage par statut
+    if (filters.status && filters.status !== 'all') {
+      const s = String(filters.status).toLowerCase();
+      if (s === 'approved' || s === 'validé' || s === 'valide') {
+        absences = absences.filter(a => a.status === 'approved');
+      } else if (s === 'rejected' || s === 'rejeté' || s === 'rejete') {
+        absences = absences.filter(a => a.status === 'rejected' || a.status === 'to_justify');
+      } else if (s === 'pending' || s === 'en attente' || s === 'en cours') {
+        absences = absences.filter(a => a.status === 'pending');
+      } else {
+        absences = absences.filter(a => String(a.status || '').toLowerCase() === s);
+      }
+    }
+
+    // Filtrage par département / classe
+    if (filters.department && filters.department !== 'all') {
+      const dep = String(filters.department).toLowerCase();
+      absences = absences.filter(a => 
+        String(a.department || '').toLowerCase().includes(dep) ||
+        String(a.className || '').toLowerCase().includes(dep)
+      );
+    }
+
+    // Filtrage par type
+    if (filters.type && filters.type !== 'all') {
+      const t = String(filters.type).toLowerCase();
+      absences = absences.filter(a => String(a.type || '').toLowerCase().includes(t));
+    }
+
+    // Filtrage par date de début
+    if (filters.startDate) {
+      const start = new Date(filters.startDate);
+      absences = absences.filter(a => {
+        const d = a.startDate ? new Date(a.startDate) : null;
+        return d ? d >= start : true;
+      });
+    }
+
+    // Filtrage par date de fin
+    if (filters.endDate) {
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      absences = absences.filter(a => {
+        const d = a.endDate ? new Date(a.endDate) : null;
+        return d ? d <= end : true;
+      });
+    }
+  }
+
+  // Tri antéchronologique (plus récent d'abord)
+  absences.sort((a, b) => {
+    const dateA = a.startDate || (a.createdAt?.toDate ? a.createdAt.toDate().toISOString() : '') || '';
+    const dateB = b.startDate || (b.createdAt?.toDate ? b.createdAt.toDate().toISOString() : '') || '';
+    return dateB.localeCompare(dateA);
+  });
+
+  return absences;
+}
+
+/**
+ * Exporter les demandes d'absence en Excel
+ */
+export async function exportAbsencesToExcelService(filters = {}, customAbsences = null) {
+  try {
+    const filtered = await getFilteredAbsences(filters, customAbsences);
+
+    const rows = filtered.map(a => {
+      let statusLabel = 'En attente';
+      const s = String(a.status || '').toLowerCase();
+      if (s === 'approved' || s === 'validé' || s === 'valide') statusLabel = 'Validée';
+      else if (s === 'rejected' || s === 'rejeté' || s === 'rejete' || s === 'to_justify') statusLabel = 'Rejetée';
+      else if (s === 'justified' || s === 'justifiée') statusLabel = 'Justifiée';
+
+      const typeLabel = a.type === 'late' ? 'Retard' : a.type === 'unjustified' ? 'Injustifiée' : a.type === 'medical' ? 'Médical' : a.type || 'Absence';
+
+      return {
+        "ID": a.id || "",
+        "Étudiant": a.displayName || a.studentName || "",
+        "Email": a.userEmail || "",
+        "Classe / Département": a.className || a.department || "",
+        "Type": typeLabel,
+        "Objet / Motif": a.title || a.reason || a.courseName || "",
+        "Date Début": a.startDate || "",
+        "Date Fin": a.endDate || "",
+        "Statut": statusLabel,
+        "Traité par": a.reviewerName || "",
+        "Remarques": a.adminNote || a.reviewNotes || "",
+        "Date création": a.date || (a.createdAt?.toDate ? a.createdAt.toDate().toLocaleDateString('fr-FR') : (a.startDate || ""))
+      };
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Demandes_Absence");
+    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    return { success: true, buffer, filename: `absences_${new Date().toISOString().slice(0, 10)}.xlsx` };
+  } catch (error) {
+    console.error("❌ Erreur exportAbsencesToExcelService:", error);
+    return { success: false, error: "Erreur lors de l'export Excel : " + error.message };
+  }
+}
+
+/**
+ * Exporter les demandes d'absence en PDF
+ */
+export async function exportAbsencesToPdfService(filters = {}, customAbsences = null) {
+  try {
+    const filtered = await getFilteredAbsences(filters, customAbsences);
+
+    const buffer = await new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 30, size: "A4", layout: "landscape" });
+      const buffers = [];
+
+      doc.on('data', chunk => buffers.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+      doc.on('error', err => reject(err));
+
+      const treatedCount = filtered.filter(a => {
+        const s = String(a.status || '').toLowerCase();
+        return ['approved', 'rejected', 'to_justify', 'validé', 'rejeté', 'justified'].includes(s);
+      }).length;
+      const pendingCount = filtered.filter(a => {
+        const s = String(a.status || '').toLowerCase();
+        return ['pending', 'en cours', 'en attente'].includes(s);
+      }).length;
+
+      const drawPageHeader = () => {
+        doc.rect(0, 0, 842, 60).fill('#0f172a');
+        doc.fillColor('#ffffff').fontSize(16).font('Helvetica-Bold')
+           .text("YNOV CAMPUS — RAPPORT DES DEMANDES D'ABSENCE", 35, 16);
+        
+        doc.fontSize(8.5).font('Helvetica')
+           .text(`Généré le ${new Date().toLocaleString('fr-FR')} • Total : ${filtered.length} demande(s) (${treatedCount} traitée(s), ${pendingCount} en attente)`, 35, 38);
+      };
+
+      drawPageHeader();
+
+      const startY = 75;
+      const rowHeight = 22;
+      const cols = [
+        { header: "#", width: 25, align: 'center' },
+        { header: "Étudiant", width: 115, align: 'left' },
+        { header: "Email / Classe", width: 135, align: 'left' },
+        { header: "Type", width: 65, align: 'center' },
+        { header: "Objet / Motif", width: 155, align: 'left' },
+        { header: "Date Début", width: 75, align: 'center' },
+        { header: "Date Fin", width: 75, align: 'center' },
+        { header: "Statut", width: 65, align: 'center' },
+        { header: "Traité par", width: 70, align: 'left' }
+      ];
+
+      let currentY = startY;
+
+      const drawTableHeader = (yPos) => {
+        doc.rect(30, yPos, 780, rowHeight).fill('#1e293b');
+        let xOffset = 30;
+        doc.fillColor('#ffffff').fontSize(7.5).font('Helvetica-Bold');
+        cols.forEach(col => {
+          doc.text(col.header, xOffset + 3, yPos + 6, { width: col.width - 6, align: col.align });
+          xOffset += col.width;
+        });
+      };
+
+      drawTableHeader(currentY);
+      currentY += rowHeight;
+
+      filtered.forEach((a, idx) => {
+        if (currentY > 540) {
+          doc.addPage();
+          drawPageHeader();
+          currentY = 75;
+          drawTableHeader(currentY);
+          currentY += rowHeight;
+        }
+
+        // Alternance de couleur (Zebra)
+        if (idx % 2 === 0) {
+          doc.rect(30, currentY, 780, rowHeight).fill('#f8fafc');
+        } else {
+          doc.rect(30, currentY, 780, rowHeight).fill('#ffffff');
+        }
+
+        doc.rect(30, currentY, 780, rowHeight).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
+
+        const typeLabel = a.type === 'late' ? 'Retard' : a.type === 'unjustified' ? 'Injustifiée' : a.type === 'medical' ? 'Médical' : a.type || 'Absence';
+        
+        let statusLabel = 'En attente';
+        let statusColor = '#d97706'; // Amber
+
+        const s = String(a.status || '').toLowerCase();
+        if (s === 'approved' || s === 'validé' || s === 'valide') {
+          statusLabel = 'Validée';
+          statusColor = '#16a34a'; // Green
+        } else if (s === 'rejected' || s === 'rejeté' || s === 'rejete' || s === 'to_justify') {
+          statusLabel = 'Rejetée';
+          statusColor = '#dc2626'; // Red
+        } else if (s === 'justified' || s === 'justifiée') {
+          statusLabel = 'Justifiée';
+          statusColor = '#0284c7'; // Blue
+        }
+
+        const rowValues = [
+          String(idx + 1),
+          a.displayName || a.studentName || '—',
+          a.userEmail || a.department || a.className || '—',
+          typeLabel,
+          a.title || a.reason || a.courseName || '—',
+          a.startDate ? String(a.startDate).slice(0, 10) : '—',
+          a.endDate ? String(a.endDate).slice(0, 10) : '—',
+          statusLabel,
+          a.reviewerName || '—'
+        ];
+
+        let colX = 30;
+        rowValues.forEach((val, cIdx) => {
+          const col = cols[cIdx];
+          if (cIdx === 7) {
+            doc.fillColor(statusColor).font('Helvetica-Bold');
+          } else {
+            doc.fillColor('#1e293b').font('Helvetica');
+          }
+          doc.fontSize(7).text(val, colX + 3, currentY + 6, {
+            width: col.width - 6,
+            align: col.align,
+            lineBreak: false,
+            ellipsis: true
+          });
+          colX += col.width;
+        });
+
+        currentY += rowHeight;
+      });
+
+      doc.end();
+    });
+
+    return {
+      success: true,
+      buffer,
+      filename: `absences_${new Date().toISOString().slice(0, 10)}.pdf`
+    };
+  } catch (error) {
+    console.error("❌ Erreur exportAbsencesToPdfService:", error);
+    return { success: false, error: "Erreur lors de l'export PDF : " + error.message };
+  }
+}
+
+/**
+ * 🔥 Déclarer une absence pour un étudiant (par un professeur)
+ * @param {Object} teacherUser - Professeur (req.user)
+ * @param {Object} data - { studentId, startDate, endDate, reason, courseName }
+ */
+
+/**
+ * Justifier une absence (déposer un justificatif)
+ * @param {string} absenceId - ID de l'absence
+ * @param {string} userId - UID de l'étudiant
+ * @param {string} justificationUrl - URL du justificatif
+ * @param {string} reason - Motif de l'absence (optionnel)
+ */
+export async function justifyAbsenceService(absenceId, userId, justificationUrl, reason = '') {
+  try {
+    const docRef = adminDb.collection(COLLECTION_NAME).doc(absenceId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return { success: false, error: "Absence introuvable." };
+    }
+
+    const absence = doc.data();
+
+    // Vérifier que l'absence appartient bien à l'étudiant
+    if (absence.userId !== userId) {
+      return { success: false, error: "Vous n'êtes pas autorisé à justifier cette absence." };
+    }
+
+    // Vérifier que l'absence est dans un état justifiable (to_justify ou pending)
+    if (absence.status !== ABSENCE_STATUS.TO_JUSTIFY && absence.status !== ABSENCE_STATUS.PENDING) {
+      return { success: false, error: "Cette absence ne peut pas être justifiée (statut actuel: " + absence.status + ")." };
+    }
+
+    const updateData = {
+      justificationUrl: justificationUrl,
+      // La raison du professeur est conservée, même après la justification.
+      originalReason: absence.originalReason || absence.reason || '',
+      studentJustification: reason || '',
+      justificationSubmittedAt: admin.firestore.FieldValue.serverTimestamp(),
+      justificationSubmittedBy: userId,
+      status: ABSENCE_STATUS.PENDING, // repasse en attente de validation RH
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    await docRef.update(updateData);
+
+    // Notification à l'étudiant
+    createNotificationService({
+      userId: userId,
+      title: "Justificatif déposé avec succès",
+      message: "Votre justificatif a été enregistré. Il sera examiné par l'administration RH.",
+      type: "justification_submitted",
+      relatedId: absenceId
+    }).catch(err => console.warn("Notification échouée:", err.message));
+
+    // Notification aux admins/RH
+    try {
+      const usersSnapshot = await adminDb.collection("users").get();
+      const adminRhUsers = [];
+      usersSnapshot.forEach(doc => {
+        const userData = doc.data();
+        if (['admin', 'rh'].includes(userData.role)) {
+          adminRhUsers.push(userData.uid);
+        }
+      });
+      const notificationPromises = adminRhUsers.map(adminId => {
+        return createNotificationService({
+          userId: adminId,
+          title: "Nouveau justificatif déposé",
+          message: `Un étudiant a déposé un justificatif pour une absence.`,
+          type: "justification_pending_review",
+          relatedId: absenceId
+        });
+      });
+      await Promise.all(notificationPromises);
+    } catch (error) {
+      console.warn("⚠️ Erreur notifications admins:", error.message);
+    }
+
+    return {
+      success: true,
+      message: "Justificatif déposé avec succès. En attente de validation.",
+      absenceId
+    };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la justification : " + error.message };
+  }
+}
+
+/**
+ * Déclarer une absence pour un étudiant (par un professeur)
+ * @param {Object} teacherUser - Professeur (req.user)
+ * @param {Object} data - { studentId, startDate, endDate, reason, courseName, type }
+ */
+export async function teacherDeclareAbsenceService(teacherUser, { 
+  studentId, 
+  startDate, 
+  endDate, 
+  reason, 
+  courseName,
+  type = 'unjustified',  // 🔥 nouveau paramètre
+  isLate = false         // 🔥 nouveau paramètre
+}) {
+  try {
+    const studentDoc = await adminDb.collection("users").doc(studentId).get();
+    if (!studentDoc.exists) {
+      return { success: false, error: "Étudiant introuvable." };
+    }
+    const studentData = studentDoc.data();
+
+    // Une déclaration est unique pour un élève, un professeur, un cours et une séance.
+    // Cela empêche de déclarer successivement « absent » puis « retard » pour le même cours.
+    const existing = await adminDb.collection(COLLECTION_NAME)
+      .where("userId", "==", studentId)
+      .where("declaredBy", "==", teacherUser.uid)
+      .where("courseName", "==", courseName || "Cours non spécifié")
+      .get();
+    const existingForSession = existing.docs.find((doc) => String(doc.data().startDate || "").slice(0, 10) === String(startDate || "").slice(0, 10));
+    if (existingForSession && !isLate && (existingForSession.data().isLate || existingForSession.data().type === "late")) {
+      await existingForSession.ref.update({
+        type: type || "unjustified",
+        isLate: false,
+        reason: reason || `Absence en cours - ${courseName}`,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return { success: true, message: "Le retard a été converti en absence pour cette séance.", converted: true };
+    }
+    if (existingForSession) {
+      return { success: false, error: "Cet étudiant a déjà été déclaré absent ou en retard pour cette séance." };
+    }
+
+    const docRef = adminDb.collection(COLLECTION_NAME).doc();
+    // Dans teacherDeclareAbsenceService (ligne où vous créez newAbsence)
+    const newAbsence = {
+      id: docRef.id,
+      userId: studentId,
+      userEmail: studentData.email || "",
+      displayName: studentData.displayName || "Étudiant",
+      role: studentData.role || "student",
+      department: studentData.department || "",
+      type: type, // "unjustified" ou "late"
+      startDate,
+      endDate,
+      reason: reason || (isLate ? "Retard en cours - " + courseName : "Absence en cours - " + courseName),
+      justificationUrl: "",
+      status: ABSENCE_STATUS.TO_JUSTIFY,
+      declaredBy: teacherUser.uid,
+      declaredByName: teacherUser.displayName || teacherUser.email || "Professeur",
+      originalReason: reason || (isLate ? "Retard en cours - " + courseName : "Absence en cours - " + courseName),
+      courseName: courseName || "Cours non spécifié",
+      justificationDeadline: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+      reviewedBy: null,
+      reviewNotes: null,
+      isLate: isLate === true, // 🔥 IMPORTANT
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    await docRef.set(newAbsence);
+
+    // Notification à l'étudiant
+    const message = type === "late" 
+      ? `Le professeur ${teacherUser.displayName} vous a déclaré en retard pour le cours "${courseName || 'non spécifié'}" le ${startDate}. Vous avez 48h pour justifier ce retard.`
+      : `Le professeur ${teacherUser.displayName} vous a déclaré absent pour le cours "${courseName || 'non spécifié'}" le ${startDate}. Vous avez 48h pour justifier cette absence.`;
+
+    createNotificationService({
+      userId: studentId,
+      title: type === "late" ? "Retard déclaré par votre professeur" : "Absence déclarée par votre professeur",
+      message: message,
+      type: type === "late" ? "teacher_late_declaration" : "teacher_absence_declaration",
+      relatedId: docRef.id
+    }).catch(err => console.warn("Notification étudiant échouée:", err.message));
+
+    // Notification aux admins/RH/Personnel
+    try {
+      const usersSnapshot = await adminDb.collection("users").get();
+      const adminUsers = [];
+      usersSnapshot.forEach(doc => {
+        const userData = doc.data();
+        if (['admin', 'rh', 'employee'].includes(userData.role)) {
+          adminUsers.push(userData.uid);
+        }
+      });
+
+      const notificationPromises = adminUsers.map(adminId => {
+        return createNotificationService({
+          userId: adminId,
+          title: type === "late" ? "Nouveau retard déclaré par un professeur" : "Nouvelle absence déclarée par un professeur",
+          message: `L'étudiant ${studentData.displayName} a été déclaré ${type === "late" ? "en retard" : "absent"} par le professeur ${teacherUser.displayName}.`,
+          type: type === "late" ? "teacher_late_declaration_admin" : "teacher_absence_declaration_admin",
+          relatedId: docRef.id
+        });
+      });
+
+      await Promise.all(notificationPromises);
+    } catch (error) {
+      console.warn("⚠️ Erreur notifications admins:", error.message);
+    }
+
+    return {
+      success: true,
+      message: isLate ? "Retard déclaré pour l'étudiant." : "Absence déclarée pour l'étudiant.",
+      absence: {
+        ...newAbsence,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la déclaration : " + error.message };
+  }
+}
+
+/**
+ * 🔥 Récupérer le nombre de retards non justifiés pour un étudiant
+ * @param {string} userId - UID de l'étudiant
+ */
+export async function getLateCountService(userId) {
+  try {
+    const snapshot = await adminDb.collection(COLLECTION_NAME)
+      .where("userId", "==", userId)
+      .where("type", "==", "late")
+      .where("status", "in", [ABSENCE_STATUS.TO_JUSTIFY_LATE, ABSENCE_STATUS.PENDING])
+      .get();
+
+    let count = 0;
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      // Ne compter que les retards qui ne sont pas encore transformés en absence
+      if (!data.transformedToAbsence) {
+        count++;
+      }
+    });
+
+    return { success: true, count };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * 🔥 Transformer 2 retards non justifiés en 1 absence
+ * @param {string} userId - UID de l'étudiant
+ */
+export async function transformLatesToAbsenceService(userId) {
+  try {
+    // Récupérer les retards non justifiés
+    const snapshot = await adminDb.collection(COLLECTION_NAME)
+      .where("userId", "==", userId)
+      .where("type", "==", "late")
+      .where("status", "in", [ABSENCE_STATUS.TO_JUSTIFY_LATE, ABSENCE_STATUS.PENDING])
+      .where("transformedToAbsence", "==", false)
+      .orderBy("createdAt", "asc")
+      .get();
+
+    const lates = [];
+    snapshot.forEach(doc => lates.push({ id: doc.id, ...doc.data() }));
+
+    if (lates.length < 2) {
+      return { success: true, message: `Pas assez de retards (${lates.length}/2) pour créer une absence.` };
+    }
+
+    // Prendre les 2 premiers retards
+    const firstLate = lates[0];
+    const secondLate = lates[1];
+
+    // Créer une absence à partir des retards
+    const docRef = adminDb.collection(COLLECTION_NAME).doc();
+    const newAbsence = {
+      id: docRef.id,
+      userId: userId,
+      userEmail: firstLate.userEmail || "",
+      displayName: firstLate.displayName || "Étudiant",
+      role: firstLate.role || "student",
+      department: firstLate.department || "",
+      type: "unjustified",
+      startDate: firstLate.startDate,
+      endDate: secondLate.endDate || firstLate.endDate,
+      reason: `Absence générée automatiquement suite à ${lates.length} retards non justifiés.`,
+      justificationUrl: "",
+      status: ABSENCE_STATUS.TO_JUSTIFY,
+      declaredBy: "system",
+      declaredByName: "Système (automatique)",
+      courseName: firstLate.courseName || "Cours non spécifié",
+      justificationDeadline: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+      reviewedBy: null,
+      reviewNotes: null,
+      transformedFromLates: [firstLate.id, secondLate.id],
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    await docRef.set(newAbsence);
+
+    // Marquer les retards comme transformés
+    const batch = adminDb.batch();
+    lates.forEach(late => {
+      const ref = adminDb.collection(COLLECTION_NAME).doc(late.id);
+      batch.update(ref, { transformedToAbsence: true });
+    });
+    await batch.commit();
+
+    // Notification à l'étudiant
+    createNotificationService({
+      userId: userId,
+      title: "Absence générée automatiquement",
+      message: `Vos ${lates.length} retards non justifiés ont été transformés en une absence. Vous avez 48h pour la justifier.`,
+      type: "lates_transformed_to_absence",
+      relatedId: docRef.id
+    }).catch(err => console.warn("Notification échouée:", err.message));
+
+    return {
+      success: true,
+      message: `${lates.length} retards transformés en 1 absence.`,
+      absenceId: docRef.id
+    };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la transformation des retards : " + error.message };
+  }
+}
+
+export async function archiveAbsencesService(year) {
+  try {
+    const snapshot = await adminDb.collection("absences").get();
+    if (snapshot.empty) {
+      return { success: true, message: "Aucune absence à archiver.", archived: 0 };
+    }
+
+    let yearStart, yearEnd;
+    if (year.includes('-')) {
+      const parts = year.split('-');
+      yearStart = parseInt(parts[0]);
+      yearEnd = parseInt(parts[1]);
+    } else {
+      yearStart = parseInt(year);
+      yearEnd = yearStart;
+    }
+
+    if (isNaN(yearStart) || isNaN(yearEnd)) {
+      return { success: false, error: "Format d'année invalide." };
+    }
+
+    const absencesToArchive = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      let dateValue = data.startDate || data.createdAt;
+      if (!dateValue) return;
+
+      let docYear;
+      if (dateValue.toDate && typeof dateValue.toDate === 'function') {
+        docYear = dateValue.toDate().getFullYear();
+      } else if (typeof dateValue === 'string') {
+        docYear = new Date(dateValue).getFullYear();
+      } else if (typeof dateValue === 'number') {
+        docYear = new Date(dateValue).getFullYear();
+      } else if (dateValue.seconds !== undefined) {
+        docYear = new Date(dateValue.seconds * 1000).getFullYear();
+      } else {
+        return;
+      }
+
+      if (!isNaN(docYear) && docYear >= yearStart && docYear <= yearEnd) {
+        absencesToArchive.push({ id: doc.id, ...data });
+      }
+    });
+
+    if (absencesToArchive.length === 0) {
+      return { success: true, message: `Aucune absence à archiver pour l'année ${year}.`, archived: 0 };
+    }
+
+    const batch = adminDb.batch();
+    absencesToArchive.forEach(absence => {
+      const archiveRef = adminDb.collection("archived_absences").doc(absence.id);
+      batch.set(archiveRef, { ...absence, archivedAt: admin.firestore.FieldValue.serverTimestamp() });
+      batch.delete(adminDb.collection("absences").doc(absence.id));
+    });
+    await batch.commit();
+
+    return { 
+      success: true, 
+      message: `${absencesToArchive.length} absence(s) archivée(s) pour l'année ${year}.`, 
+      archived: absencesToArchive.length 
+    };
+  } catch (error) {
+    console.error("Erreur archiveAbsencesService:", error);
+    return { success: false, error: "Erreur lors de l'archivage : " + error.message };
+  }
+}

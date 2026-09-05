@@ -1,0 +1,336 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --ynov-dark: #0a0e17;
+  --ynov-card: #131b2e;
+  --ynov-border: #1e293b;
+  --ynov-cyan: #00d2b8;
+  --ynov-cyan-hover: #00b8a2;
+  --ynov-text-muted: #94a3b8;
+  --ynov-text-light: #f8fafc;
+}
+
+/* La préférence sauvegardée depuis Paramètres s'applique à toute l'application. */
+:root[data-theme='light'] {
+  --ynov-dark: #f5f8fc;
+  --ynov-card: #ffffff;
+  --ynov-border: #dbe5ef;
+  --ynov-text-light: #172033;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--ynov-dark);
+  color: var(--ynov-text-light);
+  font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Conteneur principal */
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Effets de lueur en arrière-plan */
+.glow-cyan {
+  position: absolute;
+  top: 20%;
+  left: -5rem;
+  width: 24rem;
+  height: 24rem;
+  background: rgba(0, 210, 184, 0.12);
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+}
+
+.glow-indigo {
+  position: absolute;
+  bottom: 20%;
+  right: -5rem;
+  width: 24rem;
+  height: 24rem;
+  background: rgba(99, 102, 241, 0.12);
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+}
+
+/* Carte de connexion */
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background-color: var(--ynov-card);
+  border: 1px solid var(--ynov-border);
+  border-radius: 1rem;
+  padding: 2rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  position: relative;
+  z-index: 10;
+}
+
+/* En-tête */
+.brand-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.icon-badge {
+  display: inline-flex;
+  padding: 0.75rem;
+  background: rgba(0, 210, 184, 0.1);
+  border: 1px solid rgba(0, 210, 184, 0.2);
+  border-radius: 1rem;
+  color: var(--ynov-cyan);
+  margin-bottom: 0.75rem;
+}
+
+.brand-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+}
+
+.brand-title span {
+  color: var(--ynov-cyan);
+}
+
+.brand-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ynov-cyan);
+  background: rgba(0, 210, 184, 0.1);
+  border: 1px solid rgba(0, 210, 184, 0.2);
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  margin: 0.5rem 0;
+}
+
+.brand-subtitle {
+  font-size: 0.875rem;
+  color: var(--ynov-text-muted);
+}
+
+/* Formulaire */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.form-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.form-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #cbd5e1;
+}
+
+.forgot-link {
+  font-size: 0.75rem;
+  color: var(--ynov-cyan);
+  text-decoration: none;
+}
+
+.forgot-link:hover {
+  text-decoration: underline;
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: 0.875rem;
+  color: var(--ynov-text-muted);
+  pointer-events: none;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.75rem 0.875rem 0.75rem 2.75rem;
+  background-color: var(--ynov-dark);
+  border: 1px solid var(--ynov-border);
+  border-radius: 0.75rem;
+  color: var(--ynov-text-light);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-input:focus {
+  border-color: var(--ynov-cyan);
+  box-shadow: 0 0 0 2px rgba(0, 210, 184, 0.2);
+}
+
+.toggle-password {
+  position: absolute;
+  right: 0.875rem;
+  background: none;
+  border: none;
+  color: var(--ynov-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.toggle-password:hover {
+  color: var(--ynov-text-light);
+}
+
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.checkbox-group input {
+  accent-color: var(--ynov-cyan);
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+
+.checkbox-group label {
+  font-size: 0.75rem;
+  color: var(--ynov-text-muted);
+  cursor: pointer;
+}
+
+/* Boutons */
+.btn-submit {
+  width: 100%;
+  padding: 0.875rem;
+  background-color: var(--ynov-cyan);
+  color: #020617;
+  font-weight: 700;
+  font-size: 0.875rem;
+  border: none;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.btn-submit:hover {
+  background-color: var(--ynov-cyan-hover);
+}
+
+.btn-submit:active {
+  transform: scale(0.98);
+}
+
+.btn-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.security-note {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--ynov-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--ynov-text-muted);
+}
+
+.footer-text {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--ynov-text-muted);
+  margin-top: 1.5rem;
+}
+
+.spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid #020617;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   TAILLES DES ICÔNES
+   ============================================ */
+
+.icon-sm {
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0;
+}
+
+.icon-md {
+  width: 20px !important;
+  height: 20px !important;
+  flex-shrink: 0;
+}
+
+.icon-lg {
+  width: 24px !important;
+  height: 24px !important;
+  flex-shrink: 0;
+}
+
+/* Pour les icônes dans les boutons d'action */
+.action-icon {
+  width: 18px !important;
+  height: 18px !important;
+  flex-shrink: 0;
+}
+
+/* Pour les badges de statut */
+.status-icon {
+  width: 14px !important;
+  height: 14px !important;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Pour les icônes de recherche */
+.search-icon {
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0;
+  color: #94a3b8;
+}
