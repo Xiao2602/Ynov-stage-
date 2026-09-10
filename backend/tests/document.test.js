@@ -1,7 +1,7 @@
 import { describe, it, before } from "node:test";
 import assert from "node:assert";
 
-const BASE_URL = process.env.API_URL || "http://localhost:5001/api";
+const BASE_URL = process.env.API_URL || `http://localhost:${process.env.PORT || 5000}/api`;
 
 function generateMockToken(payload) {
   const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
