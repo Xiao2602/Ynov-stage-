@@ -770,7 +770,7 @@ export default function DocumentsPage() {
             Consultez, envoyez et gérez vos justificatifs.
           </p>
         </div>
-        {!isStudentAccount && <button
+        <button
           type="button"
           className="btn-primary"
           onClick={openUploadModal}
@@ -780,7 +780,7 @@ export default function DocumentsPage() {
             <IconPlus />
           </div>
           Importer un document
-        </button>}
+        </button>
       </div>
 
       {/* MESSAGE */}
@@ -868,19 +868,17 @@ export default function DocumentsPage() {
               />
             </div>
 
-            {!isStudentAccount && <>
-              <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="Filtrer par catégorie">
-                <option value="all">Toutes les catégories</option>
-                {CATEGORY_OPTIONS.map((category) => (
-                  <option key={category.value} value={category.value}>{category.label}</option>
-                ))}
-              </select>
-              <select value={originFilter} onChange={(event) => setOriginFilter(event.target.value)} aria-label="Filtrer par origine">
-                <option value="all">Tous les documents</option>
-                <option value="received">Documents reçus</option>
-                <option value="imported">Documents importés</option>
-              </select>
-            </>}
+            <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="Filtrer par catégorie">
+              <option value="all">Toutes les catégories</option>
+              {CATEGORY_OPTIONS.map((category) => (
+                <option key={category.value} value={category.value}>{category.label}</option>
+              ))}
+            </select>
+            <select value={originFilter} onChange={(event) => setOriginFilter(event.target.value)} aria-label="Filtrer par origine">
+              <option value="all">Tous les documents</option>
+              <option value="received">Documents reçus</option>
+              <option value="imported">Documents importés</option>
+            </select>
 
           </div>
         </div>
@@ -1067,23 +1065,23 @@ export default function DocumentsPage() {
                             gap: "6px"
                           }}
                         >
-                          {!isStudentAccount && <>
+                          {!isStudentAccount && (
                             <button type="button" className="table-action-btn" title="Transférer" onClick={() => openTransferModal(document)}>
                               <IconForward size={18} />
                             </button>
-                            <button type="button" className="table-action-btn" title="Consulter" onClick={() => handleView(document)}>
-                              <IconEye size={18} />
+                          )}
+                          <button type="button" className="table-action-btn" title="Consulter" onClick={() => handleView(document)}>
+                            <IconEye size={18} />
+                          </button>
+                          {document.archived ? (
+                            <button type="button" className="table-action-btn" title="Désarchiver" onClick={() => handleUnarchive(document)}>
+                              <IconArchive size={18} style={{ transform: "rotate(180deg)" }} />
                             </button>
-                            {document.archived ? (
-                              <button type="button" className="table-action-btn" title="Désarchiver" onClick={() => handleUnarchive(document)}>
-                                <IconArchive size={18} style={{ transform: "rotate(180deg)" }} />
-                              </button>
-                            ) : (
-                              <button type="button" className="table-action-btn" title="Archiver" onClick={() => handleArchive(document)}>
-                                <IconArchive size={18} />
-                              </button>
-                            )}
-                          </>}
+                          ) : (
+                            <button type="button" className="table-action-btn" title="Archiver" onClick={() => handleArchive(document)}>
+                              <IconArchive size={18} />
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="table-action-btn"
