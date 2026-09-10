@@ -355,8 +355,8 @@ export default function DocumentsPage() {
         )
           ? result.documents.filter((document) => {
             if (originFilter === "generated") return isGeneratedDocument(document);
-            if (originFilter === "received") return isReceivedDocument(document);
-            if (originFilter === "imported") return !isGeneratedDocument(document);
+            if (originFilter === "received") return isReceivedDocument(document, user?.uid);
+            if (originFilter === "imported") return !isGeneratedDocument(document) && !isReceivedDocument(document, user?.uid);
             return true;
           })
           : []
@@ -1181,9 +1181,29 @@ export default function DocumentsPage() {
                       </td>
 
                       <td>
-                        <span className={`status-badge ${document.status === "rejected" ? "rejected" : document.status === "transferred" ? "pending" : "approved"}`}>
-                          {formatStatus(document.status)}
-                        </span>
+                        {(() => {
+                          if (document.status === "rejected") {
+                            return <span className="status-badge rejected">Refusé</span>;
+                          }
+                          if (document.status === "transferred" || document.transferredAt) {
+                            if (document.recipientUid === user?.uid) {
+                              return (
+                                <span className="status-badge" style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0" }} title={`Transféré par ${document.transferredByName || "un utilisateur"}`}>
+                                  📥 Reçu ({document.transferredByName?.split(" ")[0] || "Transféré"})
+                                </span>
+                              );
+                            }
+                            if (document.transferredBy === user?.uid) {
+                              return (
+                                <span className="status-badge" style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" }} title={`Transféré à ${document.recipientName || "Destinataire"}`}>
+                                  📤 Transféré ({document.recipientName?.split(" ")[0] || "Envoyé"})
+                                </span>
+                              );
+                            }
+                            return <span className="status-badge pending">Transféré</span>;
+                          }
+                          return <span className="status-badge approved">{formatStatus(document.status)}</span>;
+                        })()}
                       </td>
 
                       <td>
@@ -1817,15 +1837,43 @@ export default function DocumentsPage() {
                   required
                 >
                   <option value="">
-                    {recipientsLoading ? "Chargement..." : "Choisir un destinataire"}
+                    {recipientsLoading ? "Chargement des destinataires..." : "— Choisir un destinataire —"}
                   </option>
-                  {recipients
-                    .filter((recipient) => recipient.uid !== user?.uid && recipient.uid !== transferModal.document.uid)
-                    .map((recipient) => (
-                      <option key={recipient.uid} value={recipient.uid}>
-                        {recipient.displayName || recipient.email || recipient.uid} {recipient.role ? `(${recipient.role})` : ""}
-                      </option>
-                    ))}
+                  {isParent ? (
+                    <>
+                      {childrenList.length > 0 && (
+                        <optgroup label="👨‍👦 Mes enfants (Étudiants)">
+                          {childrenList
+                            .filter((c) => c.uid !== transferModal.document.uid)
+                            .map((child) => (
+                              <option key={child.uid} value={child.uid}>
+                                🎓 {child.displayName || child.email} {child.className ? `(${child.className})` : ""}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                      <optgroup label="🏫 Administration & Scolarité">
+                        {recipients
+                          .filter((recipient) => {
+                            const rRole = String(recipient.role || "").toLowerCase();
+                            return ["admin", "rh", "manager", "employee", "teacher"].includes(rRole) && recipient.uid !== user?.uid;
+                          })
+                          .map((staff) => (
+                            <option key={staff.uid} value={staff.uid}>
+                              🏛️ {staff.displayName || staff.email} ({staff.role?.toUpperCase()}{staff.department ? ` - ${staff.department}` : ""})
+                            </option>
+                          ))}
+                      </optgroup>
+                    </>
+                  ) : (
+                    recipients
+                      .filter((recipient) => recipient.uid !== user?.uid && recipient.uid !== transferModal.document.uid)
+                      .map((recipient) => (
+                        <option key={recipient.uid} value={recipient.uid}>
+                          {recipient.displayName || recipient.email || recipient.uid} {recipient.role ? `(${recipient.role})` : ""}
+                        </option>
+                      ))
+                  )}
                 </select>
               </div>
               <div className="modal-actions">
@@ -1905,10 +1953,12 @@ function isGeneratedDocument(document) {
     String(document.documentId || "").startsWith("generated-");
 }
 
-function isReceivedDocument(document) {
-  return document.received === true ||
-    document.source === "received" ||
-    document.origin === "received" ||
-    document.status === "received" ||
-    Boolean(document.recipientUid);
+function isReceivedDocument(document, currentUid) {
+  if (document.received === true || document.source === "received" || document.origin === "received" || document.status === "received") {
+    return true;
+  }
+  if (currentUid && (document.recipientUid === currentUid || document.transferredTo === currentUid)) {
+    return true;
+  }
+  return false;
 }

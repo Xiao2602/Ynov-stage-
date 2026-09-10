@@ -826,7 +826,32 @@ export async function transferDocumentService({
   const result = await getDocumentService({ documentId, user });
   if (!result.success) return result;
 
-  let recipientName = "Utilisateur";
+  // Validation de sécurité pour le profil Parent
+  if (user.role === ROLES.PARENT) {
+    const childrenUids = await getUserChildrenUids(user);
+    let isAllowedRecipient = childrenUids.includes(recipientUid);
+
+    if (!isAllowedRecipient && adminDb) {
+      try {
+        const recDoc = await adminDb.collection("users").doc(recipientUid).get();
+        if (recDoc.exists) {
+          const recRole = String(recDoc.data().role || "").toLowerCase();
+          if ([ROLES.ADMIN, ROLES.RH, ROLES.MANAGER, ROLES.EMPLOYEE, ROLES.TEACHER].includes(recRole)) {
+            isAllowedRecipient = true;
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (!isAllowedRecipient) {
+      return {
+        success: false,
+        error: "Un parent ne peut transférer un document qu'à ses enfants ou aux membres de l'administration / pédagogie."
+      };
+    }
+  }
+
+  let recipientName = "Destinataire";
   if (adminDb) {
     try {
       const recipientDoc = await Promise.race([
