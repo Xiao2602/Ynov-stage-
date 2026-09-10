@@ -113,29 +113,111 @@ export default function DashboardOverview() {
   // ============================================================
 
   // --- Rôle Étudiant ---
-  if (role === 'etudiant') {
+  if (role === 'student' || role === 'etudiant') {
     return (
-      <div className="dashboard-page-content">
-        <div className="stats-grid">
-          <div className="stat-card">
-            <h4>Documents Validés</h4>
-            <div className="stat-value">4 / 5</div>
-            <span className="stat-badge success">Conforme</span>
+      <div className="dashboard-page-content" style={{ padding: '2rem' }}>
+        <div className="overview-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h2 className="overview-title" style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--ynov-text-light)' }}>
+              Espace Étudiant
+            </h2>
+            <p className="overview-subtitle" style={{ color: 'var(--ynov-text-muted)' }}>
+              Bienvenue sur votre portail Ynov Campus. Accédez rapidement à vos documents et absences.
+            </p>
           </div>
-          <div className="stat-card">
-            <h4>Volume d'absence</h4>
-            <div className="stat-value">12h</div>
-            <span className="stat-badge warning">Seuil critique : 20h</span>
-          </div>
-          <div className="stat-card">
-            <h4>Moyenne Semestrielle</h4>
-            <div className="stat-value">14.5 / 20</div>
-            <span className="stat-badge info">Semestre 2</span>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button
+              className="ynov-btn-outline"
+              onClick={() => window.location.href = '/documents'}
+              style={{
+                padding: '0.6rem 1.2rem',
+                background: 'var(--ynov-cyan)',
+                color: '#020617',
+                border: 'none',
+                borderRadius: '0.75rem',
+                cursor: 'pointer',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              📁 Consulter mes documents
+            </button>
+            <button
+              className="ynov-btn-outline"
+              onClick={() => window.location.href = '/documents/demandes'}
+              style={{
+                padding: '0.6rem 1.2rem',
+                background: 'transparent',
+                border: '1px solid var(--ynov-cyan)',
+                color: 'var(--ynov-cyan)',
+                borderRadius: '0.75rem',
+                cursor: 'pointer',
+                fontWeight: 500
+              }}
+            >
+              📝 Demande de document
+            </button>
           </div>
         </div>
-        <div className="dashboard-section">
-          <h3>Suivi des demandes administratives</h3>
-          <p>Consultez l'état de vos dossiers en cours.</p>
+
+        <div className="stats-grid" style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '1.5rem',
+          marginBottom: '2.5rem'
+        }}>
+          <div className="stat-card" style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '1rem', padding: '1.5rem' }}>
+            <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.875rem', margin: '0 0 0.5rem 0' }}>Mes Documents</h4>
+            <div className="stat-value" style={{ fontSize: '1.75rem', fontWeight: 700, color: '#38bdf8', marginBottom: '0.5rem' }}>Espace Actif</div>
+            <span className="stat-badge success" style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', padding: '0.25rem 0.6rem', borderRadius: '9999px', fontSize: '0.75rem' }}>Consultation & Dépôt</span>
+          </div>
+          <div className="stat-card" style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '1rem', padding: '1.5rem' }}>
+            <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.875rem', margin: '0 0 0.5rem 0' }}>Demandes de documents</h4>
+            <div className="stat-value" style={{ fontSize: '1.75rem', fontWeight: 700, color: '#a855f7', marginBottom: '0.5rem' }}>En ligne</div>
+            <span className="stat-badge info" style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', padding: '0.25rem 0.6rem', borderRadius: '9999px', fontSize: '0.75rem' }}>Attestations & Certificats</span>
+          </div>
+          <div className="stat-card" style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '1rem', padding: '1.5rem' }}>
+            <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.875rem', margin: '0 0 0.5rem 0' }}>Suivi des Absences</h4>
+            <div className="stat-value" style={{ fontSize: '1.75rem', fontWeight: 700, color: '#f59e0b', marginBottom: '0.5rem' }}>Justificatifs</div>
+            <span className="stat-badge warning" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '0.25rem 0.6rem', borderRadius: '9999px', fontSize: '0.75rem' }}>Dépôt en ligne</span>
+          </div>
+        </div>
+
+        <div className="dashboard-section" style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '1rem', padding: '1.5rem' }}>
+          <h3 style={{ color: 'var(--ynov-text-light)', marginTop: 0 }}>Accès Rapides</h3>
+          <p style={{ color: 'var(--ynov-text-muted)', marginBottom: '1.25rem' }}>Gérez vos justificatifs, attestations et demandes administratives en quelques clics.</p>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => window.location.href = '/documents'}
+              style={{
+                padding: '0.75rem 1.5rem',
+                background: '#1e293b',
+                color: '#fff',
+                border: '1px solid #334155',
+                borderRadius: '0.5rem',
+                cursor: 'pointer',
+                fontWeight: 500
+              }}
+            >
+              📂 Consulter tous mes documents
+            </button>
+            <button
+              onClick={() => window.location.href = '/absences/mes-absences'}
+              style={{
+                padding: '0.75rem 1.5rem',
+                background: '#1e293b',
+                color: '#fff',
+                border: '1px solid #334155',
+                borderRadius: '0.5rem',
+                cursor: 'pointer',
+                fontWeight: 500
+              }}
+            >
+              📅 Consulter mes absences
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -144,46 +226,75 @@ export default function DashboardOverview() {
   // --- Rôle Parent ---
   if (role === 'parent') {
     return (
-      <div className="dashboard-page-content">
-        <div className="stats-grid">
-          <div className="stat-card">
-            <h4>Statut du Dossier</h4>
-            <div className="stat-value">Validé</div>
-            <span className="stat-badge success">Scolarité active</span>
+      <div className="dashboard-page-content" style={{ padding: '2rem' }}>
+        <div className="overview-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h2 className="overview-title" style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--ynov-text-light)' }}>
+              Espace Parent
+            </h2>
+            <p className="overview-subtitle" style={{ color: 'var(--ynov-text-muted)' }}>
+              Suivez la scolarité, les documents et les absences de votre enfant.
+            </p>
           </div>
-          <div className="stat-card">
-            <h4>Absences du Trimestre</h4>
-            <div className="stat-value">8h</div>
-            <span className="stat-badge info">Justifiées : 6h / Non justifiées : 2h</span>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              className="ynov-btn-outline"
+              onClick={() => window.location.href = '/documents'}
+              style={{
+                padding: '0.6rem 1.2rem',
+                background: 'var(--ynov-cyan)',
+                color: '#020617',
+                border: 'none',
+                borderRadius: '0.75rem',
+                cursor: 'pointer',
+                fontWeight: 600
+              }}
+            >
+              📁 Documents de mon enfant
+            </button>
           </div>
         </div>
-        <div className="dashboard-section">
-          <h3>Bulletins et relevés académiques</h3>
-          <p>Accès aux bilans périodiques.</p>
+        <div className="stats-grid" style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '1.5rem',
+          marginBottom: '2.5rem'
+        }}>
+          <div className="stat-card" style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '1rem', padding: '1.5rem' }}>
+            <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.875rem', margin: '0 0 0.5rem 0' }}>Statut du Dossier</h4>
+            <div className="stat-value" style={{ fontSize: '1.75rem', fontWeight: 700, color: '#22c55e', marginBottom: '0.5rem' }}>Validé</div>
+            <span className="stat-badge success" style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', padding: '0.25rem 0.6rem', borderRadius: '9999px', fontSize: '0.75rem' }}>Scolarité active</span>
+          </div>
+          <div className="stat-card" style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '1rem', padding: '1.5rem' }}>
+            <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.875rem', margin: '0 0 0.5rem 0' }}>Absences</h4>
+            <div className="stat-value" style={{ fontSize: '1.75rem', fontWeight: 700, color: '#38bdf8', marginBottom: '0.5rem' }}>Suivi en ligne</div>
+            <span className="stat-badge info" style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', padding: '0.25rem 0.6rem', borderRadius: '9999px', fontSize: '0.75rem' }}>Justificatifs accessibles</span>
+          </div>
         </div>
       </div>
     );
   }
 
   // --- Rôle Professeur ---
-  if (role === 'professeur') {
+  if (role === 'teacher' || role === 'professeur') {
     return (
-      <div className="dashboard-page-content">
-        <div className="stats-grid">
-          <div className="stat-card">
-            <h4>Promotions assignées</h4>
-            <div className="stat-value">6</div>
-            <span className="stat-badge info">Campus Ynov</span>
+      <div className="dashboard-page-content" style={{ padding: '2rem' }}>
+        <div className="stats-grid" style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '1.5rem',
+          marginBottom: '2.5rem'
+        }}>
+          <div className="stat-card" style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '1rem', padding: '1.5rem' }}>
+            <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.875rem', margin: '0 0 0.5rem 0' }}>Promotions assignées</h4>
+            <div className="stat-value" style={{ fontSize: '1.75rem', fontWeight: 700, color: '#38bdf8', marginBottom: '0.5rem' }}>Campus Ynov</div>
+            <span className="stat-badge info" style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', padding: '0.25rem 0.6rem', borderRadius: '9999px', fontSize: '0.75rem' }}>Année en cours</span>
           </div>
-          <div className="stat-card">
-            <h4>Appels en cours</h4>
-            <div className="stat-value">2</div>
-            <span className="stat-badge warning">Séance active</span>
+          <div className="stat-card" style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '1rem', padding: '1.5rem' }}>
+            <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.875rem', margin: '0 0 0.5rem 0' }}>Appels & Présences</h4>
+            <div className="stat-value" style={{ fontSize: '1.75rem', fontWeight: 700, color: '#22c55e', marginBottom: '0.5rem' }}>Espace Pédagogique</div>
+            <span className="stat-badge success" style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', padding: '0.25rem 0.6rem', borderRadius: '9999px', fontSize: '0.75rem' }}>Gestion active</span>
           </div>
-        </div>
-        <div className="dashboard-section">
-          <h3>Planning des cours</h3>
-          <p>Gestion des présences obligatoires.</p>
         </div>
       </div>
     );
