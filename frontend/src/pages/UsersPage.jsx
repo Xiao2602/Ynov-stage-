@@ -10,6 +10,7 @@ import {
   IconAlertTriangle
 } from '../components/Icons';
 import { apiFetch } from '../services/api';
+import { useAuth } from '../auth/AuthContext';
 import '../components/DashboardLayout.css';
 
 // ============================================================
@@ -43,6 +44,16 @@ const serviceOptions = [
   'Direction', 'Ressources humaines', 'Finance', 'Admissions', 'Pédagogie', 'Campus'
 ];
 
+const academicYearOptions = [
+  '2021-2022',
+  '2022-2023',
+  '2023-2024',
+  '2024-2025',
+  '2025-2026',
+  '2026-2027',
+  '2027-2028',
+];
+
 // ============================================================
 // OUTILS
 // ============================================================
@@ -73,6 +84,17 @@ function formatDate(value) {
 // ============================================================
 
 export default function UsersPage() {
+  const { role: currentUserRole } = useAuth();
+  const isRH = String(currentUserRole || '').trim().toLowerCase() === 'rh';
+  const isAdmin = String(currentUserRole || '').trim().toLowerCase() === 'admin';
+
+  // Rôles visibles selon le rôle de l'utilisateur connecté
+  // Le RH ne peut pas voir ni assigner le rôle admin
+  const visibleRoleOptions = useMemo(() =>
+    isRH
+      ? roleOptions.filter((r) => r.key !== 'admin')
+      : roleOptions
+  , [isRH]);
   // ----------------------------------------------------------
   // UTILISATEURS
   // ----------------------------------------------------------
@@ -87,6 +109,13 @@ export default function UsersPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Réinitialiser la pagination lors de la recherche ou du changement de filtre
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, roleFilter, itemsPerPage]);
 
   // ----------------------------------------------------------
   // MODAL DE CRÉATION
@@ -113,6 +142,9 @@ export default function UsersPage() {
     department: '',
     className: '',
     assignedClass: '',
+    dateOfBirth: '',
+    placeOfBirth: '',
+    academicYear: '2024-2025',
   });
 
   // ----------------------------------------------------------
@@ -147,6 +179,9 @@ const openEditModal = (user) => {
     phone: user.phone || '',
     department: user.department || '',
     className: user.className || '',
+    academicYear: user.academicYear || user.schoolYear || '',
+    dateOfBirth: user.dateOfBirth || '',
+    placeOfBirth: user.placeOfBirth || '',
     assignedClasses: user.assignedClasses || [],
   });
   setShowEditModal(true);
@@ -188,9 +223,16 @@ const closeEditModal = () => {
   // UTILISATEURS FILTRÉS
   // ==========================================================
 
+  // Utilisateurs accessibles (exclut impérativement les administrateurs pour le rôle RH)
+  const accessibleUsers = useMemo(() => {
+    return isRH
+      ? users.filter((u) => String(u.role || '').trim().toLowerCase() !== 'admin')
+      : users;
+  }, [users, isRH]);
+
   const filteredUsers = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
-    return users.filter((user) => {
+    return accessibleUsers.filter((user) => {
       const matchesRole = roleFilter === 'all' || user.role === roleFilter;
       if (!matchesRole) return false;
       if (!normalizedSearch) return true;
@@ -200,15 +242,23 @@ const closeEditModal = () => {
       ].filter(Boolean).join(' ').toLowerCase();
       return searchableText.includes(normalizedSearch);
     });
-  }, [users, roleFilter, searchTerm]);
+  }, [accessibleUsers, roleFilter, searchTerm]);
+
+  // Calculs pour la pagination
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / itemsPerPage));
+
+  const paginatedUsers = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredUsers.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredUsers, currentPage, itemsPerPage]);
 
   // ==========================================================
   // STATISTIQUES
   // ==========================================================
 
-  const totalUsers = users.length;
-  const activeUsers = users.filter((user) => user.disabled !== true).length;
-  const inactiveUsers = users.filter((user) => user.disabled === true).length;
+  const totalUsers = accessibleUsers.length;
+  const activeUsers = accessibleUsers.filter((user) => user.disabled !== true).length;
+  const inactiveUsers = accessibleUsers.filter((user) => user.disabled === true).length;
 
   const [selectedClasses, setSelectedClasses] = useState([]);
 
@@ -229,6 +279,9 @@ const closeEditModal = () => {
       department: '',
       className: '',
       assignedClass: '',
+      dateOfBirth: '',
+      placeOfBirth: '',
+      academicYear: '2024-2025',
     });
     setChildren([{ id: Date.now(), name: '', className: '' }]);
     setFormError('');
@@ -281,7 +334,7 @@ const closeEditModal = () => {
   // ==========================================================
 
   const validateForm = () => {
-    const { firstName, lastName, email, password, role, className, assignedClass } = formData;
+    const { firstName, lastName, email, password, role, className, assignedClass, dateOfBirth, placeOfBirth, academicYear } = formData;
     if (!firstName.trim()) return 'Le prénom est obligatoire.';
     if (!lastName.trim()) return 'Le nom est obligatoire.';
     if (!email.trim()) return "L'adresse email est obligatoire.";
@@ -290,7 +343,10 @@ const closeEditModal = () => {
     if (password.length < 6) return 'Le mot de passe doit contenir au moins 6 caractères.';
     if (!roleOptions.some((r) => r.key === role)) return 'Le rôle sélectionné est invalide.';
     if (role === 'student' && !className) return 'Veuillez sélectionner une classe pour l\'étudiant.';
+    if (role === 'student' && !academicYear?.trim()) return "L'année scolaire est obligatoire pour un étudiant.";
     if (role === 'teacher' && !assignedClass) return 'Veuillez sélectionner une classe pour le professeur.';
+    if (role === 'student' && !dateOfBirth) return 'La date de naissance est obligatoire pour un étudiant.';
+    if (role === 'student' && !placeOfBirth.trim()) return 'Le lieu de naissance est obligatoire pour un étudiant.';
     return '';
   };
 
@@ -320,11 +376,16 @@ const closeEditModal = () => {
         password: formData.password,
         displayName,
         role: selectedRole,
+        phone: formData.phone.trim() || '',
       };
 
       if (selectedRole === 'student') {
         payload.className = formData.className;
         payload.department = formData.className;
+        payload.dateOfBirth = formData.dateOfBirth;
+        payload.placeOfBirth = formData.placeOfBirth.trim();
+        payload.academicYear = formData.academicYear.trim();
+        payload.schoolYear = formData.academicYear.trim();
       } else if (selectedRole === 'teacher') {
         payload.assignedClass = formData.assignedClass;
         payload.department = formData.assignedClass;
@@ -396,6 +457,10 @@ const closeEditModal = () => {
   // ==========================================================
 
   const handleSuspendUser = async (user) => {
+    if (!isAdmin) {
+      alert("Seul un administrateur peut suspendre ou réactiver un compte.");
+      return;
+    }
     const newStatus = !user.disabled;
     const confirmMsg = newStatus
       ? `Suspendre le compte de ${user.displayName || user.email} ?`
@@ -415,6 +480,10 @@ const closeEditModal = () => {
   };
 
   const handleDeleteUser = async (user) => {
+    if (!isAdmin) {
+      alert("Seul un administrateur peut supprimer un compte.");
+      return;
+    }
     if (!window.confirm(`Supprimer définitivement le compte de ${user.displayName || user.email} ?`)) return;
     try {
       const result = await apiFetch(`/api/users/${user.uid}`, { method: 'DELETE' });
@@ -528,7 +597,7 @@ const closeEditModal = () => {
             </div>
             <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', color: '#334155', fontSize: '0.85rem', fontWeight: '500', outline: 'none', cursor: 'pointer' }}>
               <option value="all">Tous les rôles</option>
-              {roleOptions.map((role) => (
+              {visibleRoleOptions.map((role) => (
                 <option key={role.key} value={role.key}>{role.label}</option>
               ))}
             </select>
@@ -540,21 +609,21 @@ const closeEditModal = () => {
             <tr>
               <th>Utilisateur</th>
               <th>Email</th>
-              <th>Rôle</th>
+              <th style={{ whiteSpace: 'nowrap' }}>Rôle</th>
               <th>Classe (étudiant)</th>
               <th>Classe assignée (prof)</th>
               <th>Date création</th>
               <th>Statut</th>
-              <th>Actions</th>
+              <th style={{ minWidth: '220px', whiteSpace: 'nowrap' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {isLoadingUsers ? (
               <tr><td colSpan="8" style={{ textAlign: 'center', padding: '32px' }}>Chargement...</td></tr>
-            ) : filteredUsers.length === 0 ? (
+            ) : paginatedUsers.length === 0 ? (
               <tr><td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>Aucun utilisateur trouvé.</td></tr>
             ) : (
-              filteredUsers.map((user) => {
+              paginatedUsers.map((user) => {
                 const displayName = user.displayName || user.email || 'Utilisateur';
                 const isDisabled = user.disabled === true;
                 const isStudent = user.role === 'student';
@@ -568,12 +637,14 @@ const closeEditModal = () => {
                       </div>
                     </td>
                     <td style={{ color: '#64748b' }}>{user.email || '—'}</td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       <span style={{
-                        padding: '3px 8px',
+                        padding: '4px 10px',
                         borderRadius: '4px',
                         fontSize: '0.78rem',
                         fontWeight: '500',
+                        whiteSpace: 'nowrap',
+                        display: 'inline-block',
                         background: user.role === 'admin' ? '#fee2e2' : user.role === 'rh' ? '#fef3c7' : user.role === 'manager' ? '#dbeafe' : '#f1f5f9',
                         color: user.role === 'admin' ? '#991b1b' : user.role === 'rh' ? '#92400e' : user.role === 'manager' ? '#1d4ed8' : '#475569'
                       }}>
@@ -581,7 +652,22 @@ const closeEditModal = () => {
                       </span>
                     </td>
                     <td>
-                      {isStudent ? (user.className || user.department || '—') : '—'}
+                      {isStudent ? (
+                        user.className ? (
+                          <span>
+                            {user.className}
+                            {(user.academicYear || user.schoolYear) && (
+                              <span style={{ display: 'block', fontSize: '0.78rem', color: '#64748b' }}>
+                                {user.academicYear || user.schoolYear}
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          user.department || '—'
+                        )
+                      ) : (
+                        '—'
+                      )}
                     </td>
                     <td>
                       {isTeacher ? (
@@ -600,10 +686,10 @@ const closeEditModal = () => {
                         {isDisabled ? 'Inactif' : 'Actif'}
                       </span>
                     </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <td style={{ whiteSpace: 'nowrap', width: '1%' }}>
+                      <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'nowrap' }}>
                         <button className="table-action-btn" onClick={() => window.alert(
-                          `${displayName}\nEmail : ${user.email || '—'}\nRôle : ${getRoleLabel(user.role)}${isStudent ? `\nClasse : ${user.className || '—'}` : ''}${isTeacher ? `\nClasse assignée : ${user.assignedClass || '—'}` : ''}`
+                          `${displayName}\nEmail : ${user.email || '—'}\nRôle : ${getRoleLabel(user.role)}${isStudent ? `\nClasse : ${user.className || '—'}\nAnnée scolaire : ${user.academicYear || user.schoolYear || '—'}` : ''}${isTeacher ? `\nClasse assignée : ${user.assignedClass || '—'}` : ''}`
                         )}><IconEye className="action-icon" /></button>
                         <button className="table-action-btn" onClick={() => openEditModal(user)} title="Modifier">
                           ✏️
@@ -614,10 +700,14 @@ const closeEditModal = () => {
                         {isTeacher && (
                           <button className="table-action-btn" style={{ color: '#23b2a4' }} onClick={() => openAssignModal(user)}>📚</button>
                         )}
-                        <button className="table-action-btn" style={{ color: isDisabled ? '#10b981' : '#f59e0b' }} onClick={() => handleSuspendUser(user)}>
-                          {isDisabled ? '🔓' : '🔒'}
-                        </button>
-                        <button className="table-action-btn" style={{ color: '#ef4444' }} onClick={() => handleDeleteUser(user)}>🗑️</button>
+                        {isAdmin && (
+                          <>
+                            <button className="table-action-btn" style={{ color: isDisabled ? '#10b981' : '#f59e0b' }} onClick={() => handleSuspendUser(user)} title={isDisabled ? 'Réactiver' : 'Suspendre'}>
+                              {isDisabled ? '🔓' : '🔒'}
+                            </button>
+                            <button className="table-action-btn" style={{ color: '#ef4444' }} onClick={() => handleDeleteUser(user)} title="Supprimer">🗑️</button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -626,6 +716,173 @@ const closeEditModal = () => {
             )}
           </tbody>
         </table>
+
+        {/* PAGINATION CONTROLS */}
+        {!isLoadingUsers && filteredUsers.length > 0 && (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '16px 20px',
+            borderTop: '1px solid #e2e8f0',
+            flexWrap: 'wrap',
+            gap: '12px',
+            fontSize: '0.875rem',
+            color: '#64748b'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span>
+                Affichage de <strong>{Math.min((currentPage - 1) * itemsPerPage + 1, filteredUsers.length)}</strong> à <strong>{Math.min(currentPage * itemsPerPage, filteredUsers.length)}</strong> sur <strong>{filteredUsers.length}</strong> utilisateurs
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '0.8rem' }}>Lignes :</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    background: '#fff',
+                    color: '#334155',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    outline: 'none'
+                  }}
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid #e2e8f0',
+                  background: currentPage === 1 ? '#f8fafc' : '#ffffff',
+                  color: currentPage === 1 ? '#94a3b8' : '#334155',
+                  cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: 500,
+                  transition: 'all 0.15s ease'
+                }}
+                title="Première page"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #e2e8f0',
+                  background: currentPage === 1 ? '#f8fafc' : '#ffffff',
+                  color: currentPage === 1 ? '#94a3b8' : '#334155',
+                  cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: 500,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                Précédent
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                  .reduce((acc, p, idx, arr) => {
+                    if (idx > 0 && p - arr[idx - 1] > 1) {
+                      acc.push({ type: 'ellipsis', key: `ellipsis-${p}` });
+                    }
+                    acc.push({ type: 'page', number: p, key: `page-${p}` });
+                    return acc;
+                  }, [])
+                  .map((item) => {
+                    if (item.type === 'ellipsis') {
+                      return (
+                        <span key={item.key} style={{ padding: '0 4px', color: '#94a3b8' }}>
+                          ...
+                        </span>
+                      );
+                    }
+                    const isActive = item.number === currentPage;
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setCurrentPage(item.number)}
+                        style={{
+                          minWidth: '32px',
+                          height: '32px',
+                          borderRadius: '6px',
+                          border: isActive ? '1px solid var(--ynov-cyan)' : '1px solid #e2e8f0',
+                          background: isActive ? 'var(--ynov-cyan)' : '#ffffff',
+                          color: isActive ? '#ffffff' : '#334155',
+                          fontWeight: isActive ? 600 : 500,
+                          cursor: 'pointer',
+                          fontSize: '0.85rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {item.number}
+                      </button>
+                    );
+                  })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #e2e8f0',
+                  background: currentPage === totalPages ? '#f8fafc' : '#ffffff',
+                  color: currentPage === totalPages ? '#94a3b8' : '#334155',
+                  cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: 500,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                Suivant
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid #e2e8f0',
+                  background: currentPage === totalPages ? '#f8fafc' : '#ffffff',
+                  color: currentPage === totalPages ? '#94a3b8' : '#334155',
+                  cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: 500,
+                  transition: 'all 0.15s ease'
+                }}
+                title="Dernière page"
+              >
+                »
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* MODAL CREATION */}
@@ -647,7 +904,7 @@ const closeEditModal = () => {
               <div className="field-group">
                 <label className="field-label">Type de compte</label>
                 <div className="role-selector">
-                  {roleOptions.map((option) => (
+                  {visibleRoleOptions.map((option) => (
                     <button
                       key={option.key}
                       type="button"
@@ -684,16 +941,59 @@ const closeEditModal = () => {
                   <input className="field-input" type="tel" name="phone" value={formData.phone} onChange={handleFieldChange} placeholder="Ex : +33 6 12 34 56 78" disabled={isSubmitting} />
                 </div>
 
+                
+
                 {selectedRole === 'student' && (
-                  <div className="field-group full-width">
-                    <label className="field-label">Classe *</label>
-                    <select name="className" value={formData.className} onChange={handleFieldChange} className="field-input" disabled={isSubmitting}>
-                      <option value="">-- Sélectionner --</option>
-                      {classOptions.map((cls) => (
-                        <option key={cls} value={cls}>{cls}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <>
+                    <div className="field-group">
+                      <label className="field-label">Classe *</label>
+                      <select name="className" value={formData.className} onChange={handleFieldChange} className="field-input" disabled={isSubmitting}>
+                        <option value="">-- Sélectionner --</option>
+                        {classOptions.map((cls) => (
+                          <option key={cls} value={cls}>{cls}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Année scolaire *</label>
+                      <select
+                        name="academicYear"
+                        value={formData.academicYear}
+                        onChange={handleFieldChange}
+                        className="field-input"
+                        disabled={isSubmitting}
+                      >
+                        <option value="">-- Sélectionner une année --</option>
+                        {academicYearOptions.map((yr) => (
+                          <option key={yr} value={yr}>{yr}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Date de naissance *</label>
+                      <input
+                        className="field-input"
+                        type="date"
+                        name="dateOfBirth"
+                        value={formData.dateOfBirth}
+                        onChange={handleFieldChange}
+                        disabled={isSubmitting}
+                        max={new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Lieu de naissance *</label>
+                      <input
+                        className="field-input"
+                        type="text"
+                        name="placeOfBirth"
+                        value={formData.placeOfBirth}
+                        onChange={handleFieldChange}
+                        placeholder="Ex : Casablanca, Maroc"
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                  </>
                 )}
 
                 {selectedRole === 'teacher' && (
@@ -887,12 +1187,30 @@ const closeEditModal = () => {
 
               {/* Champs spécifiques selon le rôle */}
               {editingUser.role === 'student' && (
-                <div className="field-group" style={{ marginTop: '16px' }}>
-                  <label className="field-label">Classe</label>
-                  <select className="field-input" value={editFormData.className || ''} onChange={(e) => setEditFormData({ ...editFormData, className: e.target.value })}>
-                    <option value="">-- Sélectionner --</option>
-                    {classOptions.map(cls => <option key={cls} value={cls}>{cls}</option>)}
-                  </select>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+                  <div className="field-group">
+                    <label className="field-label">Classe</label>
+                    <select className="field-input" value={editFormData.className || ''} onChange={(e) => setEditFormData({ ...editFormData, className: e.target.value })}>
+                      <option value="">-- Sélectionner --</option>
+                      {classOptions.map(cls => <option key={cls} value={cls}>{cls}</option>)}
+                    </select>
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Année scolaire</label>
+                    <select
+                      className="field-input"
+                      value={editFormData.academicYear || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, academicYear: e.target.value })}
+                    >
+                      <option value="">-- Sélectionner une année --</option>
+                      {academicYearOptions.map((yr) => (
+                        <option key={yr} value={yr}>{yr}</option>
+                      ))}
+                      {editFormData.academicYear && !academicYearOptions.includes(editFormData.academicYear) && (
+                        <option value={editFormData.academicYear}>{editFormData.academicYear}</option>
+                      )}
+                    </select>
+                  </div>
                 </div>
               )}
 

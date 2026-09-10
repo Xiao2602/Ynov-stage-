@@ -16,6 +16,8 @@ import {
 } from "./documentRequestValidator.js";
 
 const REQUESTS_DIR = path.resolve(process.cwd(), "storage-local", "document_requests");
+const META_DIR = path.resolve(process.cwd(), "storage-local", "meta");
+
 
 async function ensureRequestsDirectory() {
   await fs.mkdir(REQUESTS_DIR, { recursive: true });
@@ -25,6 +27,60 @@ function generateRequestId() {
   const year = new Date().getFullYear();
   const randomSuffix = Math.floor(100 + Math.random() * 900);
   return `DOC-REQ-${year}-${randomSuffix}`;
+}
+
+export async function getStudentProfile(uid) {
+  if (!uid || !adminDb) return null;
+  try {
+    const doc = await adminDb.collection("users").doc(uid).get();
+    if (doc.exists) {
+      return doc.data();
+    }
+  } catch (e) {}
+  return null;
+}
+
+export async function enrichRequestsWithStudentProfile(requests) {
+  if (!requests || !requests.length || !adminDb) return requests;
+  const missingUids = [...new Set(
+    requests
+      .filter(r => (
+        !r.dateOfBirth || !r.placeOfBirth || !r.className || !r.studentName ||
+        r.dateOfBirth === "" || r.placeOfBirth === "" || r.className === "" || r.studentName === ""
+      ) && (r.uid || r.requestedBy))
+      .map(r => r.uid || r.requestedBy)
+  )];
+
+  if (missingUids.length === 0) return requests;
+
+  const userMap = new Map();
+  await Promise.all(
+    missingUids.map(async (uid) => {
+      try {
+        const uDoc = await adminDb.collection("users").doc(uid).get();
+        if (uDoc.exists) userMap.set(uid, uDoc.data());
+      } catch (e) {}
+    })
+  );
+
+  return requests.map(r => {
+    const uid = r.uid || r.requestedBy;
+    const u = userMap.get(uid);
+    if (!u) return r;
+    const profileAcademicYear = u.academicYear || u.schoolYear || r.academicYear || "";
+    return {
+      ...r,
+      requesterName: r.requesterName || u.displayName || u.email?.split("@")[0] || "Étudiant",
+      studentName: (r.studentName && r.studentName !== "") ? r.studentName : (u.displayName || u.email?.split("@")[0] || "Étudiant"),
+      studentEmail: (r.studentEmail && r.studentEmail !== "") ? r.studentEmail : (u.email || ""),
+      dateOfBirth: (r.dateOfBirth && r.dateOfBirth !== "") ? r.dateOfBirth : (u.dateOfBirth || ""),
+      placeOfBirth: (r.placeOfBirth && r.placeOfBirth !== "") ? r.placeOfBirth : (u.placeOfBirth || ""),
+      className: (r.className && r.className !== "") ? r.className : (u.className || u.assignedClass || ""),
+      department: (r.department && r.department !== "") ? r.department : (u.department || ""),
+      genre: (r.genre && r.genre !== "") ? r.genre : (u.genre || u.gender || ""),
+      academicYear: profileAcademicYear
+    };
+  });
 }
 
 /**
@@ -53,6 +109,17 @@ export async function createDocumentRequestService({ user, body }) {
     }
   }
 
+  // Récupérer le profil étudiant pour enrichir les informations
+  const studentProfile = await getStudentProfile(targetUid);
+  const studentName = studentProfile?.displayName || user.displayName || user.email?.split("@")[0] || "Étudiant";
+  const studentEmail = studentProfile?.email || user.email || "";
+  const dateOfBirth = studentProfile?.dateOfBirth || user.dateOfBirth || "";
+  const placeOfBirth = studentProfile?.placeOfBirth || user.placeOfBirth || "";
+  const className = studentProfile?.className || studentProfile?.assignedClass || user.className || "";
+  const department = studentProfile?.department || user.department || "";
+  const genre = studentProfile?.genre || studentProfile?.gender || user.genre || user.gender || "";
+  const academicYear = studentProfile?.academicYear || studentProfile?.schoolYear || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+
   const requestId = generateRequestId();
   const nowIso = new Date().toISOString();
 
@@ -63,6 +130,14 @@ export async function createDocumentRequestService({ user, body }) {
     requesterName: user.displayName || user.email?.split("@")[0] || "Étudiant",
     requesterEmail: user.email || "",
     requesterRole: user.role || ROLES.STUDENT,
+    studentName,
+    studentEmail,
+    dateOfBirth,
+    placeOfBirth,
+    className,
+    department,
+    genre,
+    academicYear,
     type: type,
     documentType: type,
     message: message || `Demande de ${type}`,
@@ -228,11 +303,12 @@ export async function getMyDocumentRequestsService(uid, filters = {}, user = nul
   }
 
   const totalPages = Math.ceil(total / limit) || 1;
+  const enrichedPagedRequests = await enrichRequestsWithStudentProfile(pagedRequests);
 
   return {
     success: true,
-    data: pagedRequests,
-    requests: pagedRequests,
+    data: enrichedPagedRequests,
+    requests: enrichedPagedRequests,
     pagination: {
       total,
       page,
@@ -286,6 +362,9 @@ export async function getDocumentRequestByIdService(requestId, user) {
   if (!isOwner && !isAdminOrRh && !isParentOfOwner) {
     return { success: false, error: "Accès refusé à cette demande." };
   }
+
+  const [enrichedItem] = await enrichRequestsWithStudentProfile([item]);
+  item = enrichedItem || item;
 
   return {
     success: true,
@@ -364,7 +443,13 @@ export async function getDocumentRequestsQueueService(filters = {}, user) {
       const snapshot = await adminDb.collection("document_requests").get();
       if (snapshot?.docs) {
         for (const doc of snapshot.docs) {
-          requestMap.set(doc.id, { id: doc.id, ...doc.data() });
+          const firestoreItem = { id: doc.id, ...doc.data() };
+          const localItem = requestMap.get(doc.id);
+          const localUpdatedAt = new Date(localItem?.updatedAt || 0).getTime();
+          const firestoreUpdatedAt = new Date(firestoreItem.updatedAt || 0).getTime();
+          if (!localItem || firestoreUpdatedAt >= localUpdatedAt) {
+            requestMap.set(doc.id, firestoreItem);
+          }
         }
       }
     } catch (e) {}
@@ -403,6 +488,28 @@ export async function getDocumentRequestsQueueService(filters = {}, user) {
     );
   }
 
+  // Calcul enrichi pour l'archivage automatique (1 semaine après validation ou refus)
+  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  requests = requests.map(r => {
+    const decisionDate = r.approvedAt || r.rejectedAt || ((r.status === "approved" || r.status === "rejected") ? r.updatedAt : null);
+    const decisionTime = decisionDate ? new Date(decisionDate).getTime() : null;
+    const isAutoArchived = Boolean(decisionTime && (Date.now() - decisionTime >= ONE_WEEK_MS));
+    const daysSinceDecision = decisionTime ? Math.floor((Date.now() - decisionTime) / (24 * 60 * 60 * 1000)) : null;
+
+    return {
+      ...r,
+      isAutoArchived,
+      daysSinceDecision,
+      archived: Boolean(r.archived || isAutoArchived)
+    };
+  });
+
+  // Filtre Archivé
+  if (filters.archived !== undefined && filters.archived !== null && filters.archived !== "" && filters.archived !== "all") {
+    const wantArchived = filters.archived === true || filters.archived === "true";
+    requests = requests.filter(r => Boolean(r.archived) === wantArchived);
+  }
+
   // Tri antichronologique
   requests.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
@@ -412,11 +519,12 @@ export async function getDocumentRequestsQueueService(filters = {}, user) {
   const startIndex = (page - 1) * limit;
   const pagedRequests = requests.slice(startIndex, startIndex + limit);
   const totalPages = Math.ceil(total / limit) || 1;
+  const enrichedPagedRequests = await enrichRequestsWithStudentProfile(pagedRequests);
 
   return {
     success: true,
-    data: pagedRequests,
-    requests: pagedRequests,
+    data: enrichedPagedRequests,
+    requests: enrichedPagedRequests,
     pagination: {
       total,
       page,
@@ -474,6 +582,11 @@ export async function assignDocumentRequestService(requestId, body, user) {
  * 7. APPROUVER UNE DEMANDE (AVEC DOCUMENT ASSOCIÉ)
  */
 export async function approveDocumentRequestService(requestId, body, user) {
+  return {
+    success: false,
+    error: "La demande est validée uniquement lors du transfert du document."
+  };
+
   const validation = validateApproveDocumentRequest(body);
   if (!validation.valid) {
     return { success: false, error: validation.error };
@@ -604,6 +717,9 @@ export async function attachDocumentToRequestService(requestId, { documentId, do
 
   if (documentId) item.documentId = documentId;
   if (documentUrl) item.documentUrl = documentUrl;
+  item.generated = true;
+  item.source = String(documentId || "").startsWith("generated-") ? "generated" : "imported";
+  item.generatedAt = nowIso;
   item.updatedAt = nowIso;
 
   const filePath = path.join(REQUESTS_DIR, `${requestId}.json`);
@@ -613,6 +729,9 @@ export async function attachDocumentToRequestService(requestId, { documentId, do
     adminDb.collection("document_requests").doc(requestId).update({
       documentId: item.documentId,
       documentUrl: item.documentUrl,
+      generated: true,
+      source: item.source,
+      generatedAt: item.generatedAt,
       updatedAt: nowIso
     }).catch(() => {});
   }
@@ -620,6 +739,186 @@ export async function attachDocumentToRequestService(requestId, { documentId, do
   return {
     success: true,
     message: "Document associé à la demande.",
+    data: item
+  };
+}
+
+export async function transferGeneratedDocumentService(requestId, { message }, user) {
+  const result = await getDocumentRequestByIdService(requestId, user);
+  if (!result.success) return result;
+
+  const nowIso = new Date().toISOString();
+  const item = result.data;
+
+  // Si aucun document n'est encore associé, créer un ID généré fictif
+  if (!item.generated && !item.documentId && !item.documentUrl) {
+    item.documentId = `generated-${requestId}`;
+    item.generated = true;
+    item.source = "generated";
+    item.generatedAt = nowIso;
+  }
+
+  item.status = DOCUMENT_REQUEST_STATUSES.APPROVED;
+  item.statusLabel = "Disponible";
+  item.approvedAt = nowIso;
+  item.approvedBy = user.uid;
+  item.approvedByName = user.displayName || "Administration";
+  item.transferredAt = nowIso;
+  item.transferredBy = user.uid;
+  item.transferredTo = item.uid;
+  item.transferredToName = item.studentName || item.requesterName || item.requesterEmail || 'Étudiant';
+  item.transferMessage = message || '';
+  item.updatedAt = nowIso;
+
+  await fs.writeFile(path.join(REQUESTS_DIR, `${requestId}.json`), JSON.stringify(item, null, 2));
+
+  // Synchroniser le META file du document physique si c'est un vrai UUID importé
+  // (ni un ID généré "generated-xxx", ni un ancien ID fictif "imported-xxx")
+  const docId = item.documentId || "";
+  const isGeneratedId = docId.startsWith("generated-");
+  const isFakeImportId = docId.startsWith("imported-");
+
+  if (docId && !isGeneratedId && !isFakeImportId) {
+    // Vrai UUID d'un document physique uploadé → synchroniser son META file
+    const metaFilePath = path.join(META_DIR, `${docId}.json`);
+    if (existsSync(metaFilePath)) {
+      try {
+        const metaDoc = JSON.parse(await fs.readFile(metaFilePath, "utf8"));
+        metaDoc.status = "validated";
+        metaDoc.recipientUid = item.uid;
+        metaDoc.transferredAt = nowIso;
+        metaDoc.transferredBy = user.uid;
+        metaDoc.updatedAt = nowIso;
+        await fs.writeFile(metaFilePath, JSON.stringify(metaDoc, null, 2));
+
+        // Synchroniser aussi Firestore pour ce document physique
+        if (adminDb) {
+          adminDb.collection("documents").doc(docId).set({
+            status: "validated",
+            recipientUid: item.uid,
+            transferredAt: nowIso,
+            transferredBy: user.uid,
+            updatedAt: nowIso
+          }, { merge: true }).catch(() => {});
+        }
+      } catch (e) {}
+    }
+  }
+
+  if (adminDb) {
+    await adminDb.collection('document_requests').doc(requestId).set({
+      status: DOCUMENT_REQUEST_STATUSES.APPROVED,
+      statusLabel: "Disponible",
+      documentId: item.documentId,
+      generated: true,
+      source: item.source || "generated",
+      generatedAt: item.generatedAt || nowIso,
+      approvedAt: nowIso,
+      approvedBy: user.uid,
+      approvedByName: item.approvedByName,
+      transferredAt: nowIso,
+      transferredBy: user.uid,
+      transferredTo: item.transferredTo,
+      transferredToName: item.transferredToName,
+      transferMessage: item.transferMessage,
+      updatedAt: nowIso
+    }, { merge: true }).catch(() => {});
+  }
+
+  return { success: true, message: 'Document transféré avec succès.', data: item };
+}
+
+export async function deleteDocumentRequestService(requestId, user) {
+  const result = await getDocumentRequestByIdService(requestId, user);
+  if (!result.success) return result;
+
+  await fs.rm(path.join(REQUESTS_DIR, `${requestId}.json`), { force: true });
+  if (adminDb) {
+    await adminDb.collection('document_requests').doc(requestId).delete().catch(() => {});
+  }
+
+  return { success: true, message: 'Document supprimé avec succès.' };
+}
+
+/**
+ * 10. ARCHIVER UNE DEMANDE DE DOCUMENT (MANUELLEMENT)
+ */
+export async function archiveDocumentRequestService(requestId, user) {
+  const result = await getDocumentRequestByIdService(requestId, user);
+  if (!result.success) return result;
+
+  const item = result.data;
+
+  // Vérifier que la demande est bien traitée (approved ou rejected) avant d'archiver
+  const isStaffRole = [ROLES.ADMIN, ROLES.RH, ROLES.MANAGER].includes(user.role);
+  const isOwner = item.uid === user.uid || item.requestedBy === user.uid;
+
+  // L'utilisateur peut archiver uniquement ses propres demandes traitées
+  if (!isStaffRole && !isOwner) {
+    return { success: false, error: "Vous ne pouvez archiver que vos propres demandes." };
+  }
+
+  // Une demande ne peut être archivée que si son statut est validé ou refusé
+  if (item.status !== "approved" && item.status !== "rejected") {
+    return { success: false, error: "Vous ne pouvez archiver une demande de document que lorsqu'elle est validée ou refusée." };
+  }
+
+  const nowIso = new Date().toISOString();
+
+  item.archived = true;
+  item.archivedAt = nowIso;
+  item.archivedBy = user.uid;
+  item.updatedAt = nowIso;
+
+  const filePath = path.join(REQUESTS_DIR, `${requestId}.json`);
+  await fs.writeFile(filePath, JSON.stringify(item, null, 2));
+
+  if (adminDb) {
+    adminDb.collection("document_requests").doc(requestId).update({
+      archived: true,
+      archivedAt: nowIso,
+      archivedBy: user.uid,
+      updatedAt: nowIso
+    }).catch(() => {});
+  }
+
+  return {
+    success: true,
+    message: "Demande archivée avec succès.",
+    data: item
+  };
+}
+
+/**
+ * 11. DÉSARCHIVER UNE DEMANDE DE DOCUMENT
+ */
+export async function unarchiveDocumentRequestService(requestId, user) {
+  const result = await getDocumentRequestByIdService(requestId, user);
+  if (!result.success) return result;
+
+  const item = result.data;
+  const nowIso = new Date().toISOString();
+
+  item.archived = false;
+  item.archivedAt = null;
+  item.archivedBy = null;
+  item.updatedAt = nowIso;
+
+  const filePath = path.join(REQUESTS_DIR, `${requestId}.json`);
+  await fs.writeFile(filePath, JSON.stringify(item, null, 2));
+
+  if (adminDb) {
+    adminDb.collection("document_requests").doc(requestId).update({
+      archived: false,
+      archivedAt: null,
+      archivedBy: null,
+      updatedAt: nowIso
+    }).catch(() => {});
+  }
+
+  return {
+    success: true,
+    message: "Demande restaurée / désarchivée avec succès.",
     data: item
   };
 }

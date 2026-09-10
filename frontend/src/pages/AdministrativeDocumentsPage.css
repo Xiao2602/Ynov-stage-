@@ -8,6 +8,25 @@
 .administrative-summary strong, .administrative-summary span { display: block; }
 .administrative-summary strong { color: var(--ynov-gray-900); font-size: 1.15rem; }
 .administrative-summary span { margin-top: 3px; color: var(--ynov-text-muted); font-size: .65rem; }
+.administrative-tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--ynov-border); }
+.administrative-tab { padding: 10px 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--ynov-text-muted); font: inherit; font-size: .76rem; font-weight: 700; cursor: pointer; }
+.administrative-tab.active { border-bottom-color: var(--ynov-teal); color: var(--ynov-teal-dark); }
+.administrative-tab-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-left: 5px; padding: 0 5px; border-radius: 10px; background: var(--ynov-teal-light); color: var(--ynov-teal-dark); font-size: .65rem; }
+.generated-documents-panel { border: 1px solid var(--ynov-border); border-radius: 8px; background: #fff; overflow: hidden; }
+.generated-documents-heading { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid var(--ynov-border); }
+.generated-documents-heading h2 { color: var(--ynov-gray-900); font-size: 1rem; }
+.generated-documents-heading p { margin-top: 4px; color: var(--ynov-text-muted); font-size: .72rem; }
+.generated-documents-total { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 8px; background: var(--ynov-teal-light); color: var(--ynov-teal-dark); font-size: 1.05rem; font-weight: 800; }
+.generated-documents-table-wrap { overflow-x: auto; }
+.generated-documents-table { width: 100%; border-collapse: collapse; font-size: .75rem; }
+.generated-documents-table th { padding: 12px 16px; background: #f8fafc; color: var(--ynov-text-muted); font-size: .64rem; font-weight: 700; text-align: left; text-transform: uppercase; }
+.generated-documents-table td { padding: 14px 16px; border-top: 1px solid var(--ynov-border); color: #475569; }
+.generated-documents-table td strong, .generated-documents-table td small { display: block; }
+.generated-documents-table td strong { color: var(--ynov-gray-900); }
+.generated-documents-table td small { margin-top: 4px; color: var(--ynov-text-muted); font-size: .64rem; }
+.generated-status { display: inline-flex; padding: 4px 8px; border-radius: 999px; font-size: .64rem; font-weight: 700; }
+.generated-status.transferred { background: #dcfce7; color: #047857; }
+.generated-status.not-transferred { background: #f1f5f9; color: #64748b; }
 .administrative-toolbar { justify-content: flex-end; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .administrative-search { display: flex; align-items: center; gap: 8px; width: 260px; padding: 8px 10px; border: 1px solid var(--ynov-border); border-radius: 6px; background: #fff; }
 .administrative-search svg { width: 15px !important; height: 15px !important; flex-shrink: 0; color: var(--ynov-text-muted); }
@@ -35,6 +54,31 @@
 .document-action { padding: 6px 9px; border: 1px solid var(--ynov-border); border-radius: 5px; background: #fff; font: inherit; font-size: .64rem; font-weight: 700; cursor: pointer; }
 .document-action.reject { color: #b91c1c; }
 .document-action.approve { border-color: #99f6e4; background: #ecfdf5; color: #047857; }
+.document-action.archive {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #475569;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+.document-action.archive:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+  border-color: #94a3b8;
+}
+.document-action.unarchive {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #6366f1;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+.document-action.unarchive:hover {
+  background: #e0e7ff;
+  color: #4338ca;
+}
 .document-action:disabled { opacity: .45; cursor: not-allowed; }
 .administrative-empty { padding: 38px; border: 1px dashed var(--ynov-border); border-radius: 8px; color: var(--ynov-text-muted); text-align: center; font-size: .8rem; }
 .administrative-footnote { gap: 6px; margin-top: 14px; color: #94a3b8; font-size: .66rem; }
