@@ -103,21 +103,26 @@ function sanitizeFilename(filename) {
 
 export async function getUserChildrenUids(user) {
   if (!user || user.role !== ROLES.PARENT) return [];
-  if (Array.isArray(user.childrenUids) && user.childrenUids.length > 0) {
-    return user.childrenUids;
-  }
 
-  if (adminDb) {
+  // 1. Lire en priorité depuis Firestore si adminDb est actif
+  if (adminDb && user.uid) {
     try {
       const parentDoc = await adminDb.collection("users").doc(user.uid).get();
       if (parentDoc.exists) {
         const data = parentDoc.data();
-        if (Array.isArray(data.childrenUids)) return data.childrenUids;
-        if (Array.isArray(data.children)) {
-          return data.children.map(c => c.uid || c.id).filter(Boolean);
+        if (Array.isArray(data.childrenUids) && data.childrenUids.length > 0) {
+          return data.childrenUids.map(c => typeof c === 'string' ? c : (c.uid || c.id)).filter(Boolean);
+        }
+        if (Array.isArray(data.children) && data.children.length > 0) {
+          return data.children.map(c => typeof c === 'string' ? c : (c.uid || c.id)).filter(Boolean);
         }
       }
     } catch (e) {}
+  }
+
+  // 2. Fallback sur user.childrenUids
+  if (Array.isArray(user.childrenUids) && user.childrenUids.length > 0) {
+    return user.childrenUids.map(c => typeof c === 'string' ? c : (c.uid || c.id)).filter(Boolean);
   }
 
   return [];
@@ -126,11 +131,13 @@ export async function getUserChildrenUids(user) {
 export async function canUserAccessDocument(user, document) {
   if (!user || !document) return false;
   if (user.role === ROLES.ADMIN || user.role === ROLES.RH || user.role === ROLES.MANAGER) return true;
-  if (document.uid === user.uid || document.recipientUid === user.uid) return true;
+  if (document.uid === user.uid || document.recipientUid === user.uid || document.uploadedBy === user.uid) return true;
 
   if (user.role === ROLES.PARENT) {
     const childrenUids = await getUserChildrenUids(user);
-    if (childrenUids.includes(document.uid)) return true;
+    if (childrenUids.includes(document.uid) || (document.studentUid && childrenUids.includes(document.studentUid))) {
+      return true;
+    }
   }
 
   return false;
@@ -324,7 +331,8 @@ export async function getMyDocumentsService(
         try {
           const content = await fs.readFile(path.join(META_DIR, file), "utf8");
           const parsed = JSON.parse(content);
-          if (isStaff || allowedOwnerUids.includes(parsed.uid) || parsed.recipientUid === uid) {
+          const isOwner = allowedOwnerUids.includes(parsed.uid) || (parsed.studentUid && allowedOwnerUids.includes(parsed.studentUid)) || parsed.uploadedBy === uid;
+          if (isStaff || isOwner || parsed.recipientUid === uid) {
             docMap.set(parsed.id, parsed);
           }
         } catch (e) {}
@@ -369,39 +377,7 @@ export async function getMyDocumentsService(
     }
   }
 
-  // 3. Scan storage-local/justificatifs/
-  if (existsSync(JUSTIFICATIFS_DIR)) {
-    try {
-      const files = await fs.readdir(JUSTIFICATIFS_DIR);
-      for (const f of files) {
-        if (f.startsWith(".")) continue;
-        const docId = f.substring(0, 36);
-        const originalName = f.length > 37 ? f.substring(37) : f;
-        const fullPath = path.join(JUSTIFICATIFS_DIR, f);
-        const stat = await fs.stat(fullPath);
-
-        if (!docMap.has(docId)) {
-          docMap.set(docId, {
-            id: docId,
-            uid: uid,
-            originalName: originalName,
-            filename: f,
-            mimeType: f.endsWith(".pdf") ? "application/pdf" : (f.endsWith(".png") ? "image/png" : "image/jpeg"),
-            size: stat.size,
-            category: "justificatif_absence",
-            status: "validated",
-            archived: false,
-            storageArea: "justificatifs",
-            storagePath: fullPath,
-            createdAt: stat.birthtime?.toISOString() || new Date().toISOString(),
-            updatedAt: stat.mtime?.toISOString() || new Date().toISOString()
-          });
-        }
-      }
-    } catch (e) {}
-  }
-
-  // 4. Documents administratifs générés/importés depuis une demande
+  // 3. Documents administratifs générés/importés depuis une demande
   if (existsSync(REQUESTS_DIR)) {
     try {
       const requestFiles = await fs.readdir(REQUESTS_DIR);
@@ -412,7 +388,7 @@ export async function getMyDocumentsService(
           const request = JSON.parse(
             await fs.readFile(path.join(REQUESTS_DIR, file), "utf8")
           );
-          const isOwner = allowedOwnerUids.includes(request.uid) || allowedOwnerUids.includes(request.requestedBy) || allowedOwnerUids.includes(request.transferredTo);
+          const isOwner = allowedOwnerUids.includes(request.uid) || (request.studentUid && allowedOwnerUids.includes(request.studentUid)) || allowedOwnerUids.includes(request.requestedBy) || allowedOwnerUids.includes(request.transferredTo);
           const isTransferredRecipient = Boolean(request.transferredAt) && (request.transferredTo === uid || isOwner);
           const isGenerated = request.generated === true || String(request.documentId || "").startsWith("generated-");
 

@@ -1,4 +1,4 @@
-import { adminAuth } from "../Firebase config/firebase.js";
+import { adminAuth, adminDb } from "../Firebase config/firebase.js";
 
 export async function authenticateToken(req, res, next) {
   try {
@@ -57,19 +57,34 @@ export async function authenticateToken(req, res, next) {
 
       customClaims = {
         role: decodedToken.role || inferredRole,
-        childrenUids: decodedToken.childrenUids || (inferredRole === "parent" ? ["WSNKoWoLQgRCpp43tfQDx9sVrOy2"] : [])
+        childrenUids: decodedToken.childrenUids || []
       };
     }
 
+    // Récupérer le document Firestore de l'utilisateur pour les métadonnées récentes
+    let firestoreData = {};
+    if (adminDb) {
+      try {
+        const userDoc = await adminDb.collection("users").doc(uid).get();
+        if (userDoc.exists) {
+          firestoreData = userDoc.data() || {};
+        }
+      } catch (err) {}
+    }
+
+    const effectiveRole = firestoreData.role || customClaims.role || decodedToken.role || "student";
+    const effectiveChildrenUids = firestoreData.childrenUids || customClaims.childrenUids || decodedToken.childrenUids || [];
+
     req.user = {
       uid: uid,
-      email: decodedToken.email,
-      displayName: displayName || decodedToken.email?.split('@')[0],
-      role: customClaims.role || decodedToken.role || "student",
-      childrenUids: customClaims.childrenUids || decodedToken.childrenUids || (decodedToken.email?.includes('parent') ? ["WSNKoWoLQgRCpp43tfQDx9sVrOy2"] : []),
-      ...customClaims
+      email: decodedToken.email || firestoreData.email,
+      displayName: displayName || firestoreData.displayName || decodedToken.email?.split('@')[0],
+      role: effectiveRole,
+      childrenUids: effectiveChildrenUids,
+      ...firestoreData,
+      ...customClaims,
+      role: effectiveRole // Priorité au rôle effectif
     };
-
 
     next();
   } catch (error) {

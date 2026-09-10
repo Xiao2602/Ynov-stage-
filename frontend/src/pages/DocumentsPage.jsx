@@ -125,6 +125,7 @@ export default function DocumentsPage() {
   const { role, user } = useAuth();
 
   const isStudentAccount = role === "student";
+  const isParent = String(role || "").toLowerCase() === "parent";
   /*
   |--------------------------------------------------------------------------
   | DOCUMENTS
@@ -240,6 +241,7 @@ export default function DocumentsPage() {
 
   /* Profil Parent : Multi-enfants */
   const [childrenList, setChildrenList] = useState([]);
+  const [childrenLoading, setChildrenLoading] = useState(false);
   const [selectedChildUid, setSelectedChildUid] = useState("all");
   const [uploadTargetStudentUid, setUploadTargetStudentUid] = useState("");
 
@@ -260,7 +262,8 @@ export default function DocumentsPage() {
   |--------------------------------------------------------------------------
   */
   useEffect(() => {
-    if (role === "parent") {
+    if (isParent) {
+      setChildrenLoading(true);
       apiFetch("/api/users/my-children")
         .then((res) => {
           if (res?.success && Array.isArray(res.children)) {
@@ -270,9 +273,10 @@ export default function DocumentsPage() {
             }
           }
         })
-        .catch((err) => console.error("Erreur chargement enfants :", err));
+        .catch((err) => console.error("Erreur chargement enfants :", err))
+        .finally(() => setChildrenLoading(false));
     }
-  }, [role]);
+  }, [isParent]);
 
   /*
   |--------------------------------------------------------------------------
@@ -324,7 +328,7 @@ export default function DocumentsPage() {
         );
       }
 
-      if (role === "parent" && selectedChildUid && selectedChildUid !== "all") {
+      if (isParent && selectedChildUid && selectedChildUid !== "all") {
         params.set("studentUid", selectedChildUid);
       }
 
@@ -400,7 +404,7 @@ export default function DocumentsPage() {
     setSelectedCategory("");
     setUploadError("");
     setUploadSuccess("");
-    if (role === "parent" && childrenList.length > 0) {
+    if (isParent && childrenList.length > 0) {
       setUploadTargetStudentUid(selectedChildUid !== "all" ? selectedChildUid : childrenList[0].uid);
     }
     setUploadOpen(true);
@@ -525,7 +529,7 @@ export default function DocumentsPage() {
         selectedCategory
       );
 
-      if (role === "parent" && uploadTargetStudentUid) {
+      if (isParent && uploadTargetStudentUid) {
         formData.append("studentUid", uploadTargetStudentUid);
       }
 
@@ -819,7 +823,7 @@ export default function DocumentsPage() {
       </div>
 
       {/* SÉLECTEUR MULTI-ENFANTS POUR LE PROFIL PARENT */}
-      {role === "parent" && childrenList.length > 0 && (
+      {isParent && childrenList.length > 0 && (
         <div style={{
           display: "flex",
           alignItems: "center",
@@ -889,6 +893,24 @@ export default function DocumentsPage() {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {isParent && !childrenLoading && childrenList.length === 0 && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          marginBottom: "20px",
+          padding: "12px 16px",
+          background: "#fffbeb",
+          border: "1px solid #fef3c7",
+          borderRadius: "12px",
+          color: "#b45309",
+          fontSize: "0.88rem"
+        }}>
+          <span>👨‍👦</span>
+          <span><strong>Compte Parent :</strong> Aucun profil étudiant n'est actuellement lié à votre compte. Veuillez contacter l'administration pour effectuer le rattachement.</span>
         </div>
       )}
 

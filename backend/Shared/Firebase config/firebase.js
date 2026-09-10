@@ -29,10 +29,6 @@ export const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-// Dans backend/Shared/Firebase config/firebase.js
-export const adminDb = admin.firestore();
-export const adminAuth = admin.auth();
-
 // Admin SDK Initialization
 // Chercher le fichier de service account à plusieurs endroits possibles
 const possiblePaths = [
@@ -71,5 +67,8 @@ if (serviceAccountPath) {
     });
   }
 }
+
+export const adminDb = admin.apps.length ? admin.firestore() : null;
+export const adminAuth = admin.apps.length ? admin.auth() : null;
 
 

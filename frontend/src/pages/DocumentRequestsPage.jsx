@@ -37,7 +37,9 @@ export default function DocumentRequestsPage() {
   const [toast, setToast] = useState({ message: '', type: 'info' });
 
   /* Profil Parent : Multi-enfants */
+  const isParent = String(role || '').toLowerCase() === 'parent';
   const [childrenList, setChildrenList] = useState([]);
+  const [childrenLoading, setChildrenLoading] = useState(false);
   const [selectedChildUid, setSelectedChildUid] = useState('all');
   const [targetStudentUid, setTargetStudentUid] = useState('');
 
@@ -50,7 +52,8 @@ export default function DocumentRequestsPage() {
   };
 
   useEffect(() => {
-    if (role === 'parent') {
+    if (isParent) {
+      setChildrenLoading(true);
       apiFetch('/api/users/my-children')
         .then((res) => {
           if (res?.success && Array.isArray(res.children)) {
@@ -60,15 +63,16 @@ export default function DocumentRequestsPage() {
             }
           }
         })
-        .catch((err) => console.error('Erreur chargement enfants :', err));
+        .catch((err) => console.error('Erreur chargement enfants :', err))
+        .finally(() => setChildrenLoading(false));
     }
-  }, [role]);
+  }, [isParent]);
 
   const loadRequests = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (role === 'parent' && selectedChildUid && selectedChildUid !== 'all') {
+      if (isParent && selectedChildUid && selectedChildUid !== 'all') {
         params.set('studentUid', selectedChildUid);
       }
       const query = params.toString();
@@ -102,7 +106,7 @@ export default function DocumentRequestsPage() {
   const openModal = () => {
     setType(documentTypes[0]);
     setUrgency('normal');
-    if (role === 'parent' && childrenList.length > 0) {
+    if (isParent && childrenList.length > 0) {
       setTargetStudentUid(selectedChildUid !== 'all' ? selectedChildUid : childrenList[0].uid);
     }
     setMessage(buildFormalMessage(documentTypes[0], userName));
@@ -125,7 +129,7 @@ export default function DocumentRequestsPage() {
         message,
         urgency
       };
-      if (role === 'parent' && targetStudentUid) {
+      if (isParent && targetStudentUid) {
         payload.studentUid = targetStudentUid;
       }
 
@@ -268,7 +272,7 @@ export default function DocumentRequestsPage() {
       </header>
 
       {/* SÉLECTEUR MULTI-ENFANTS POUR LE PROFIL PARENT */}
-      {role === 'parent' && childrenList.length > 0 && (
+      {isParent && childrenList.length > 0 && (
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -338,6 +342,24 @@ export default function DocumentRequestsPage() {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {isParent && !childrenLoading && childrenList.length === 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          marginBottom: '20px',
+          padding: '12px 16px',
+          background: '#fffbeb',
+          border: '1px solid #fef3c7',
+          borderRadius: '12px',
+          color: '#b45309',
+          fontSize: '0.88rem'
+        }}>
+          <span>👨‍👦</span>
+          <span><strong>Compte Parent :</strong> Aucun profil étudiant n'est actuellement lié à votre compte. Veuillez contacter l'administration pour effectuer le rattachement.</span>
         </div>
       )}
 

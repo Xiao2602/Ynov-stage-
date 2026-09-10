@@ -98,16 +98,34 @@ export async function handleLinkParentStudent(req, res) {
 
 export async function handleGetLinkedChildren(req, res) {
   try {
-    const parentDoc = await adminDb.collection("users").doc(req.user.uid).get();
-    if (!parentDoc.exists) return res.status(404).json({ success: false, error: "Parent introuvable." });
-    const parentData = parentDoc.data();
-    const childrenUids = parentData.childrenUids || [];
-    const children = [];
-    for (const uid of childrenUids) {
-      const childDoc = await adminDb.collection("users").doc(uid).get();
-      if (childDoc.exists) children.push({ uid: childDoc.id, ...childDoc.data() });
+    if (!adminDb) {
+      return res.status(200).json({ success: true, count: 0, children: [] });
     }
-    return res.status(200).json({ success: true, children });
+    const parentDoc = await adminDb.collection("users").doc(req.user.uid).get();
+    if (!parentDoc.exists) {
+      // Auto-création / initialisation du profil parent s'il n'existe pas encore dans Firestore
+      await adminDb.collection("users").doc(req.user.uid).set({
+        uid: req.user.uid,
+        email: req.user.email || "",
+        displayName: req.user.displayName || "Parent",
+        role: "parent",
+        childrenUids: req.user.childrenUids || [],
+        createdAt: new Date().toISOString()
+      }, { merge: true });
+      return res.status(200).json({ success: true, count: 0, children: [] });
+    }
+    const parentData = parentDoc.data();
+    const childrenUids = parentData.childrenUids || parentData.children || req.user.childrenUids || [];
+    const children = [];
+    for (const item of childrenUids) {
+      const childUid = typeof item === 'string' ? item : (item?.uid || item?.id);
+      if (!childUid) continue;
+      const childDoc = await adminDb.collection("users").doc(childUid).get();
+      if (childDoc.exists) {
+        children.push({ uid: childDoc.id, ...childDoc.data() });
+      }
+    }
+    return res.status(200).json({ success: true, count: children.length, children });
   } catch (error) {
     console.error("Erreur handleGetLinkedChildren:", error);
     return res.status(500).json({ success: false, error: error.message });
