@@ -42,6 +42,11 @@ const META_DIR = path.join(
   "meta"
 );
 
+const REQUESTS_DIR = path.join(
+  STORAGE_ROOT,
+  "document_requests"
+);
+
 const LEGACY_UPLOADS_DIR = path.join(
   process.cwd(),
   "uploads",
@@ -120,8 +125,8 @@ export async function getUserChildrenUids(user) {
 
 export async function canUserAccessDocument(user, document) {
   if (!user || !document) return false;
-  if (user.role === ROLES.ADMIN || user.role === ROLES.RH) return true;
-  if (document.uid === user.uid) return true;
+  if (user.role === ROLES.ADMIN || user.role === ROLES.RH || user.role === ROLES.MANAGER) return true;
+  if (document.uid === user.uid || document.recipientUid === user.uid) return true;
 
   if (user.role === ROLES.PARENT) {
     const childrenUids = await getUserChildrenUids(user);
@@ -208,7 +213,8 @@ export async function uploadDocumentService({
 
     // 6. Métadonnées du document
     const nowIso = new Date().toISOString();
-    const targetUid = (user.role === ROLES.PARENT && body.studentUid) ? body.studentUid : user.uid;
+    const isStaff = [ROLES.ADMIN, ROLES.RH, ROLES.MANAGER].includes(user.role);
+    const targetUid = ((isStaff || user.role === ROLES.PARENT) && body?.studentUid) ? body.studentUid : user.uid;
 
     const documentData = {
       id: documentId,
@@ -219,12 +225,15 @@ export async function uploadDocumentService({
       mimeType: validation.detectedMime,
       size: validation.size,
       category,
+      source: "imported",
       status: "validated",
       archived: false,
       storageArea: "justificatifs",
       storagePath: finalPath,
       sha256: hash,
+      requestId: body?.requestId || null,
       createdAt: nowIso,
+      receivedAt: nowIso,
       updatedAt: nowIso
     };
 
@@ -248,11 +257,13 @@ export async function uploadDocumentService({
         name: file.originalname,
         originalName: file.originalname,
         category,
+        source: "imported",
         status: "validated",
         archived: false,
         mimeType: validation.detectedMime,
         size: validation.size,
-        createdAt: nowIso
+        createdAt: nowIso,
+        receivedAt: nowIso
       }
     };
   } catch (error) {
@@ -296,7 +307,10 @@ export async function getMyDocumentsService(
     } else if (childrenUids.length > 0) {
       allowedOwnerUids = [...childrenUids, uid];
     }
-  } else if ((currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.RH) && filters.studentUid) {
+  }
+
+  const isStaff = (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.RH) && !filters.studentUid;
+  if ((currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.RH) && filters.studentUid) {
     allowedOwnerUids = [filters.studentUid];
   }
 
@@ -310,7 +324,7 @@ export async function getMyDocumentsService(
         try {
           const content = await fs.readFile(path.join(META_DIR, file), "utf8");
           const parsed = JSON.parse(content);
-          if (allowedOwnerUids.includes(parsed.uid)) {
+          if (isStaff || allowedOwnerUids.includes(parsed.uid) || parsed.recipientUid === uid) {
             docMap.set(parsed.id, parsed);
           }
         } catch (e) {}
@@ -387,20 +401,77 @@ export async function getMyDocumentsService(
     } catch (e) {}
   }
 
+  // 4. Documents administratifs générés/importés depuis une demande
+  if (existsSync(REQUESTS_DIR)) {
+    try {
+      const requestFiles = await fs.readdir(REQUESTS_DIR);
+      for (const file of requestFiles) {
+        if (!file.endsWith(".json")) continue;
+
+        try {
+          const request = JSON.parse(
+            await fs.readFile(path.join(REQUESTS_DIR, file), "utf8")
+          );
+          const isOwner = allowedOwnerUids.includes(request.uid) || allowedOwnerUids.includes(request.requestedBy) || allowedOwnerUids.includes(request.transferredTo);
+          const isTransferredRecipient = Boolean(request.transferredAt) && (request.transferredTo === uid || isOwner);
+          const isGenerated = request.generated === true || String(request.documentId || "").startsWith("generated-");
+
+          // Pour un non-staff (étudiant / parent) : le document DOIT avoir été transféré (transferredAt)
+          if (!isStaff && (!request.transferredAt || !isTransferredRecipient)) continue;
+          if (isStaff && !isOwner && !isTransferredRecipient) continue;
+          if (!isGenerated || !request.documentId) continue;
+
+          // Si le document est déjà dans docMap (via META_DIR pour les docs importés réels),
+          // ne pas l'écraser : ses métadonnées (filename, storagePath, source) sont plus précises.
+          if (docMap.has(request.documentId)) continue;
+
+          const docSource = request.source || "generated";
+          const isRealImport = docSource === "imported" && !String(request.documentId).startsWith("generated-");
+
+          docMap.set(request.documentId, {
+            id: request.documentId,
+            uid: request.uid,
+            requestId: request.id,
+            originalName: isRealImport
+              ? (request.importedFileName || `${request.type || request.documentType || "Document importé"}`)
+              : `${request.type || request.documentType || "Document administratif"}.pdf`,
+            mimeType: "application/pdf",
+            category: "administratif",
+            source: docSource,
+            generated: !isRealImport,
+            recipientUid: request.transferredTo || null,
+            transferredAt: request.transferredAt || null,
+            status: "validated",
+            archived: Boolean(request.archived),
+            createdAt: request.transferredAt || request.generatedAt || request.approvedAt || request.createdAt,
+            receivedAt: request.transferredAt || request.generatedAt || request.approvedAt || request.createdAt
+          });
+        } catch (e) {}
+      }
+    } catch (e) {}
+  }
+
   // 4. Firestore
   if (adminDb) {
     try {
-      const fetchPromise = (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.RH) && !filters.studentUid
-        ? adminDb.collection("documents").get()
-        : adminDb.collection("documents").where("uid", "in", allowedOwnerUids.slice(0, 10)).get();
+      const isStaffWithoutStudent = (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.RH) && !filters.studentUid;
+      const snapshotsPromise = isStaffWithoutStudent
+        ? Promise.all([adminDb.collection("documents").get()])
+        : Promise.all([
+          adminDb.collection("documents").where("uid", "in", allowedOwnerUids.slice(0, 10)).get(),
+          adminDb.collection("documents").where("recipientUid", "==", uid).get()
+        ]);
 
-      const snapshot = await Promise.race([
-        fetchPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 1500))
+      const snapshots = await Promise.race([
+        snapshotsPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000))
       ]);
-      if (snapshot?.docs) {
-        for (const doc of snapshot.docs) {
-          docMap.set(doc.id, { id: doc.id, ...doc.data() });
+      for (const snapshot of snapshots || []) {
+        for (const doc of snapshot?.docs || []) {
+          const data = doc.data();
+          if (isStaffWithoutStudent || data.uid === uid || data.recipientUid === uid) {
+            docMap.set(doc.id, { id: doc.id, ...data });
+          }
         }
       }
     } catch (e) {}
@@ -408,8 +479,14 @@ export async function getMyDocumentsService(
 
   let documents = Array.from(docMap.values());
 
-  // Seuls les documents validés sont visibles
-  documents = documents.filter((doc) => doc.status === "validated");
+  documents = documents.filter((doc) => ["validated", "transferred", "rejected"].includes(doc.status));
+
+  // Statistiques globales pour l'utilisateur / staff (avant l'application des filtres d'affichage)
+  const stats = {
+    total: documents.length,
+    active: documents.filter((doc) => !doc.archived).length,
+    archived: documents.filter((doc) => Boolean(doc.archived)).length
+  };
 
   // Filtre Archivé
   if (filters.archived !== undefined && filters.archived !== null && filters.archived !== "" && filters.archived !== "all") {
@@ -490,6 +567,7 @@ export async function getMyDocumentsService(
     success: true,
     data: safeDocs,
     documents: safeDocs,
+    stats,
     pagination: {
       total,
       page,
@@ -603,17 +681,49 @@ export async function getDocumentService({
     } catch (e) {}
   }
 
+  // 5. Scan REQUESTS_DIR pour les documents générés depuis une demande
+  if (!document && existsSync(REQUESTS_DIR)) {
+    try {
+      const reqFiles = await fs.readdir(REQUESTS_DIR);
+      for (const rf of reqFiles) {
+        if (!rf.endsWith(".json")) continue;
+        try {
+          const reqItem = JSON.parse(await fs.readFile(path.join(REQUESTS_DIR, rf), "utf8"));
+          if (reqItem.documentId === documentId || reqItem.id === documentId || `generated-${reqItem.id}` === documentId) {
+            document = {
+              id: documentId,
+              uid: reqItem.uid,
+              requestId: reqItem.id,
+              originalName: `${reqItem.type || reqItem.documentType || "Document administratif"}.pdf`,
+              filename: `${reqItem.type || reqItem.documentType || "Document administratif"}.pdf`,
+              mimeType: "application/pdf",
+              category: "administratif",
+              source: "generated",
+              generated: true,
+              recipientUid: reqItem.transferredTo || reqItem.uid,
+              transferredAt: reqItem.transferredAt || null,
+              status: "validated",
+              archived: Boolean(reqItem.archived),
+              createdAt: reqItem.transferredAt || reqItem.generatedAt || reqItem.approvedAt || reqItem.createdAt
+            };
+            break;
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+  }
+
   if (!document) {
     return { success: false, error: "Document introuvable." };
   }
 
-  // Vérification de sécurité Parent / Étudiant / Admin
+  // Vérification de sécurité Parent / Étudiant / Admin / RH / Manager
   const hasAccess = await canUserAccessDocument(user, document);
   if (!hasAccess) {
     return { success: false, error: "Accès refusé." };
   }
 
-  if (document.status !== "validated") {
+  if (document.status && !["validated", "transferred", "approved"].includes(document.status)) {
     return { success: false, error: "Ce document n'est pas disponible." };
   }
 
@@ -702,6 +812,7 @@ export async function unarchiveDocumentService({
   document.archived = false;
   document.storageArea = "justificatifs";
   document.storagePath = newPath;
+  document.unarchivedAt = new Date().toISOString();
   document.updatedAt = new Date().toISOString();
 
   const metaPath = path.join(META_DIR, `${documentId}.json`);
@@ -712,7 +823,8 @@ export async function unarchiveDocumentService({
       archived: false,
       storageArea: "justificatifs",
       storagePath: newPath,
-      updatedAt: new Date().toISOString()
+      unarchivedAt: document.unarchivedAt,
+      updatedAt: document.updatedAt
     }).catch(() => {});
   }
 
@@ -720,6 +832,73 @@ export async function unarchiveDocumentService({
     success: true,
     message: "Document restauré avec succès."
   };
+}
+
+export async function transferDocumentService({
+  documentId,
+  recipientUid,
+  user
+}) {
+  if (!recipientUid || typeof recipientUid !== "string") {
+    return { success: false, error: "Un destinataire est requis." };
+  }
+
+  if (recipientUid === user?.uid) {
+    return { success: false, error: "Vous ne pouvez pas vous transférer ce document." };
+  }
+
+  const result = await getDocumentService({ documentId, user });
+  if (!result.success) return result;
+
+  let recipientName = "Utilisateur";
+  if (adminDb) {
+    try {
+      const recipientDoc = await Promise.race([
+        adminDb.collection("users").doc(recipientUid).get(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2500))
+      ]);
+      if (recipientDoc && recipientDoc.exists) {
+        const rData = recipientDoc.data() || {};
+        recipientName = rData.displayName || rData.email || recipientUid;
+      }
+    } catch (e) {
+      console.warn("Vérification Firestore destinataire ignorée:", e.message);
+    }
+  }
+
+  const transferredAt = new Date().toISOString();
+  const document = {
+    ...result.document,
+    status: "transferred",
+    recipientUid,
+    recipientName,
+    transferredBy: user.uid,
+    transferredByName: user.displayName || user.email || "Utilisateur",
+    transferredAt,
+    updatedAt: transferredAt
+  };
+
+  await ensureStorageDirectories();
+  await fs.writeFile(
+    path.join(META_DIR, `${documentId}.json`),
+    JSON.stringify(document, null, 2)
+  );
+
+  if (adminDb) {
+    await adminDb.collection("documents").doc(documentId).set({
+      status: document.status,
+      recipientUid,
+      recipientName,
+      transferredBy: user.uid,
+      transferredByName: document.transferredByName,
+      transferredAt,
+      updatedAt: transferredAt
+    }, { merge: true }).catch((err) => {
+      console.warn("Erreur mise à jour Firestore dans transferDocumentService :", err.message);
+    });
+  }
+
+  return { success: true, message: `Document transféré avec succès à ${recipientName}.` };
 }
 
 /*

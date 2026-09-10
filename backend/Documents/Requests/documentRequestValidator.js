@@ -8,6 +8,7 @@ export const ALLOWED_DOCUMENT_TYPES = [
   "Relevé de notes",
   "Convention de stage",
   "Attestation de réussite",
+  "Attestation de réussite sous réserve",
   "Autre document administratif"
 ];
 

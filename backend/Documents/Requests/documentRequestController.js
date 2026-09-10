@@ -7,8 +7,13 @@ import {
   assignDocumentRequestService,
   approveDocumentRequestService,
   rejectDocumentRequestService,
-  attachDocumentToRequestService
+  attachDocumentToRequestService,
+  transferGeneratedDocumentService,
+  deleteDocumentRequestService,
+  archiveDocumentRequestService,
+  unarchiveDocumentRequestService
 } from "./documentRequestService.js";
+import { generateOfficialDocumentPdf } from "./documentPdfService.js";
 
 /**
  * POST /api/document-requests
@@ -160,5 +165,88 @@ export async function handleAttachDocument(req, res) {
   } catch (error) {
     console.error("Erreur handleAttachDocument :", error);
     return res.status(500).json({ success: false, error: "Erreur serveur lors de l'association du document." });
+  }
+}
+
+export async function handleTransferGeneratedDocument(req, res) {
+  try {
+    const result = await transferGeneratedDocumentService(req.params.id, req.body || {}, req.user);
+    return res.status(result.success ? 200 : 400).json(result);
+  } catch (error) {
+    console.error('Erreur handleTransferGeneratedDocument :', error);
+    return res.status(500).json({ success: false, error: 'Erreur lors du transfert du document.' });
+  }
+}
+
+export async function handleDeleteDocumentRequest(req, res) {
+  try {
+    const result = await deleteDocumentRequestService(req.params.id, req.user);
+    return res.status(result.success ? 200 : 400).json(result);
+  } catch (error) {
+    console.error('Erreur handleDeleteDocumentRequest :', error);
+    return res.status(500).json({ success: false, error: 'Erreur lors de la suppression du document.' });
+  }
+}
+
+/**
+ * PATCH /api/document-requests/:id/archive
+ * Archiver manuellement une demande de document
+ */
+export async function handleArchiveDocumentRequest(req, res) {
+  try {
+    const result = await archiveDocumentRequestService(req.params.id, req.user);
+    return res.status(result.success ? 200 : 400).json(result);
+  } catch (error) {
+    console.error("Erreur handleArchiveDocumentRequest :", error);
+    return res.status(500).json({ success: false, error: "Erreur serveur lors de l'archivage de la demande." });
+  }
+}
+
+/**
+ * PATCH /api/document-requests/:id/unarchive
+ * Désarchiver / restaurer une demande de document
+ */
+export async function handleUnarchiveDocumentRequest(req, res) {
+  try {
+    const result = await unarchiveDocumentRequestService(req.params.id, req.user);
+    return res.status(result.success ? 200 : 400).json(result);
+  } catch (error) {
+    console.error("Erreur handleUnarchiveDocumentRequest :", error);
+    return res.status(500).json({ success: false, error: "Erreur serveur lors du désarchivage de la demande." });
+  }
+}
+
+/**
+ * GET /api/document-requests/:id/pdf
+ * Télécharger le document officiel généré au format PDF natif
+ */
+export async function handleDownloadDocumentRequestPdf(req, res) {
+  try {
+    const result = await getDocumentRequestByIdService(req.params.id, req.user);
+    if (!result.success) {
+      const statusCode = result.error?.includes("refusé") ? 403 : 404;
+      return res.status(statusCode).json(result);
+    }
+
+    const item = result.data;
+    const isStaff = ["admin", "rh", "manager", "employee"].includes(req.user?.role);
+    if (!isStaff && !item.transferredAt) {
+      return res.status(403).json({
+        success: false,
+        error: "Ce document n'est pas encore transféré au demandeur."
+      });
+    }
+    const pdfBuffer = await generateOfficialDocumentPdf(item);
+
+    const docType = (item.type || item.documentType || "Document").replace(/\s+/g, "_");
+    const filename = `${docType}_${item.id}.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    return res.end(pdfBuffer);
+  } catch (error) {
+    console.error("Erreur handleDownloadDocumentRequestPdf :", error);
+    return res.status(500).json({ success: false, error: "Erreur lors de la génération du PDF." });
   }
 }

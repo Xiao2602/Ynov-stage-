@@ -13,7 +13,12 @@ import {
   handleAssignDocumentRequest,
   handleApproveDocumentRequest,
   handleRejectDocumentRequest,
-  handleAttachDocument
+  handleAttachDocument,
+  handleTransferGeneratedDocument,
+  handleDeleteDocumentRequest,
+  handleArchiveDocumentRequest,
+  handleUnarchiveDocumentRequest,
+  handleDownloadDocumentRequestPdf
 } from "./documentRequestController.js";
 
 const router = Router();
@@ -42,6 +47,9 @@ router.get(
 
 // GET /api/document-requests/:id - Consulter le détail d'une demande
 router.get("/:id", handleGetDocumentRequestById);
+
+// GET /api/document-requests/:id/pdf - Télécharger le document en PDF
+router.get("/:id/pdf", handleDownloadDocumentRequestPdf);
 
 // PATCH /api/document-requests/:id/cancel - Annuler une demande
 router.patch("/:id/cancel", handleCancelDocumentRequest);
@@ -78,6 +86,31 @@ router.patch(
   "/:id/attach-document",
   authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
   handleAttachDocument
+);
+
+router.patch(
+  "/:id/transfer",
+  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  handleTransferGeneratedDocument
+);
+
+router.delete(
+  "/:id",
+  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  handleDeleteDocumentRequest
+);
+
+// PATCH /api/document-requests/:id/archive - Archiver une demande (propriétaire ou staff)
+router.patch(
+  "/:id/archive",
+  handleArchiveDocumentRequest
+);
+
+// PATCH /api/document-requests/:id/unarchive - Restaurer / désarchiver une demande
+router.patch(
+  "/:id/unarchive",
+  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  handleUnarchiveDocumentRequest
 );
 
 export default router;

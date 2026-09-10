@@ -216,7 +216,7 @@ app.patch(
 app.patch(
   "/api/users/:uid/suspend",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.RH),
+  authorizeRoles(ROLES.ADMIN),
   handleSuspendUser
 );
 

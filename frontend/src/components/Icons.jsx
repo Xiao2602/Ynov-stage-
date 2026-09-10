@@ -665,3 +665,38 @@ export const IconDownload = ({ size = 20, ...props }) => (
     <line x1="12" y1="15" x2="12" y2="3" />
   </svg>
 );
+
+// Icône : Sparkles (Générer)
+export const IconSparkles = ({ size = 20, ...props }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    width={size}
+    height={size}
+    {...props}
+  >
+    <path d="M12 2l2.4 6.2L21 11l-5.4 4.2L17 22l-5-4-5 4 1.4-6.8L3 11l6.6-2.8L12 2z" />
+  </svg>
+);
+
+// Icône : Forward / Transférer
+export const IconForward = ({ size = 20, ...props }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    width={size}
+    height={size}
+    {...props}
+  >
+    <polyline points="15 14 20 9 15 4" />
+    <path d="M4 20v-7a4 4 0 0 1 4-4h12" />
+  </svg>
+);
