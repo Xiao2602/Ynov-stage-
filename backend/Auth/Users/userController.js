@@ -5,11 +5,33 @@ import { logActivity } from "../../Services/activityLogService.js";
 
 export async function handleCreateUser(req, res) {
   try {
-    const { email, password, displayName, role, department } = req.body;
+    const { email, password, displayName, role, department, className, assignedClass, phone, dateOfBirth, placeOfBirth, academicYear, schoolYear, anneeScolaire } = req.body;
     if (!email || !password || !displayName) {
       return res.status(400).json({ success: false, error: "Veuillez fournir un email, un mot de passe et un nom." });
     }
-    const result = await createUserService({ email, password, displayName, role, department });
+    if (role === 'student' && !dateOfBirth) {
+      return res.status(400).json({ success: false, error: "La date de naissance est obligatoire pour un étudiant." });
+    }
+    if (role === 'student' && !placeOfBirth) {
+      return res.status(400).json({ success: false, error: "Le lieu de naissance est obligatoire pour un étudiant." });
+    }
+    const resolvedAcademicYear = (academicYear || schoolYear || anneeScolaire || "").trim();
+    if (role === 'student' && !resolvedAcademicYear) {
+      return res.status(400).json({ success: false, error: "L'année scolaire est obligatoire pour un étudiant." });
+    }
+    const result = await createUserService({
+      email,
+      password,
+      displayName,
+      role,
+      department,
+      className,
+      assignedClass,
+      phone,
+      dateOfBirth,
+      placeOfBirth,
+      academicYear: resolvedAcademicYear
+    });
     if (!result.success) return res.status(400).json(result);
     
     await logActivity(req.user.uid, 'create_user', { createdUid: result.data.uid, role }, req);
@@ -22,7 +44,18 @@ export async function handleCreateUser(req, res) {
 
 export async function handleGetAllUsers(req, res) {
   try {
-    const result = await getAllUsersService();
+    let requesterRole = req.user?.role;
+    if ((!requesterRole || requesterRole.toLowerCase() !== "rh") && req.user?.uid) {
+      try {
+        const userDoc = await adminDb.collection("users").doc(req.user.uid).get();
+        if (userDoc.exists && userDoc.data()?.role) {
+          requesterRole = userDoc.data().role;
+        }
+      } catch (e) {
+        console.warn("Erreur fallback Firestore role:", e.message);
+      }
+    }
+    const result = await getAllUsersService(requesterRole || "student");
     if (!result.success) return res.status(500).json(result);
     return res.status(200).json(result);
   } catch (error) {
@@ -219,10 +252,15 @@ export async function handleUpdateUser(req, res) {
     const doc = await userRef.get();
     if (!doc.exists) return res.status(404).json({ success: false, error: "Utilisateur introuvable." });
 
-    const allowedFields = ['displayName', 'email', 'department', 'className', 'assignedClasses', 'phone', 'level', 'field', 'speciality'];
+    const allowedFields = ['displayName', 'email', 'department', 'className', 'assignedClasses', 'phone', 'level', 'field', 'speciality', 'dateOfBirth', 'placeOfBirth', 'academicYear', 'schoolYear'];
     const filteredData = {};
     for (const key of allowedFields) {
       if (updateData[key] !== undefined) filteredData[key] = updateData[key];
+    }
+    if (updateData.academicYear) {
+      filteredData.schoolYear = updateData.academicYear;
+    } else if (updateData.schoolYear) {
+      filteredData.academicYear = updateData.schoolYear;
     }
     filteredData.updatedAt = admin.firestore.FieldValue.serverTimestamp();
 

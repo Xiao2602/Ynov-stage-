@@ -23,6 +23,7 @@ import NotificationsPage from './pages/NotificationsPage';
 import ArchivePage from "./pages/ArchivePage";
 import TeacherAbsencesList from './pages/TeacherAbsencesList';
 import ArchivedAbsencesPage from './pages/ArchivedAbsencesPage';
+import ArchivedDocumentsPage from './pages/ArchivedDocumentsPage';
 import TwoFactorLoginPage from './pages/TwoFactorLoginPage';
 import DataTermsPage from './pages/DataTermsPage';
 
@@ -44,6 +45,17 @@ function AdminRoute() {
   return <Outlet />;
 }
 
+// Garde pour la page Utilisateurs : accessible par admin ET rh
+function UsersRoute() {
+  const { role } = useAuth();
+
+  if (role !== 'admin' && role !== 'rh') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <Outlet />;
+}
+
 function TeacherRoute() {
   const { role } = useAuth();
 
@@ -54,26 +66,46 @@ function TeacherRoute() {
   return <Outlet />;
 }
 
-function AdministrativeDocumentsRoute() {
-  const { role, backendUser } = useAuth();
-  const isAdministrativeStaff = role === 'employee'
-    && ['administratif', 'administrative', 'administration'].includes(normalizeDepartment(backendUser?.department));
+function DocumentDashboardRoute() {
+  const { role } = useAuth();
+  const documentDashboardRoles = ['admin', 'rh', 'manager', 'employee'];
 
-  if (!isAdministrativeStaff) {
-    return <Navigate to="/dashboard" replace />;
+  if (!documentDashboardRoles.includes(role)) {
+    return <Navigate to="/documents" replace />;
   }
 
-  return <Outlet />;
+  return <DashboardOverview />;
 }
 
-function StudentParentRoute() {
+function DocumentArchivesRoute() {
   const { role } = useAuth();
+  const archiveRoles = ['admin', 'rh', 'manager', 'employee', 'parent'];
 
-  if (role !== 'student' && role !== 'parent') {
-    return <Navigate to="/dashboard" replace />;
+  if (!archiveRoles.includes(role)) {
+    return <Navigate to="/documents" replace />;
   }
 
-  return <Outlet />;
+  return <ArchivedDocumentsPage />;
+}
+
+// Composant répartiteur pour les demandes de documents
+function DocumentRequestsDispatcher({ initialTab = 'requests', generatedOnly = false, hideGeneratedTab = false }) {
+  const { role, backendUser } = useAuth();
+  const normalizedDept = normalizeDepartment(backendUser?.department);
+  const isAdministrativeStaff = role === 'employee'
+    && ['administratif', 'administrative', 'administration'].includes(normalizedDept);
+
+  // Pour RH, Admin, Manager et personnel administratif : file des demandes de documents des utilisateurs à traiter
+  if (role === 'rh' || role === 'admin' || role === 'manager' || isAdministrativeStaff) {
+    return <AdministrativeDocumentsPage initialTab={initialTab} generatedOnly={generatedOnly} hideGeneratedTab={hideGeneratedTab} />;
+  }
+
+  // Pour Étudiant et Parent : demandes personnelles et formulaire de demande
+  if (role === 'student' || role === 'parent') {
+    return <DocumentRequestsPage />;
+  }
+
+  return <Navigate to="/dashboard" replace />;
 }
 
 export default function App() {
@@ -99,12 +131,18 @@ export default function App() {
 
             {/* Documents */}
             <Route path="/documents" element={<DocumentsPage />} />
-            <Route path="/documents/dashboard" element={<DashboardOverview />} />
+            <Route path="/documents/dashboard" element={<DocumentDashboardRoute />} />
+            <Route path="/documents/archives" element={<DocumentArchivesRoute />} />
+            <Route path="/documents/generes" element={<DocumentRequestsDispatcher initialTab="generated" generatedOnly />} />
             
 
-            {/* Administration */}
-            <Route element={<AdminRoute />}>
+            {/* Administration - Admin + RH */}
+            <Route element={<UsersRoute />}>
               <Route path="/users" element={<UsersPage />} />
+            </Route>
+
+            {/* Administration - Admin uniquement */}
+            <Route element={<AdminRoute />}>
               <Route path="/activity-logs" element={<ActivityLogsPage />} />
               <Route path="/profile-requests" element={<ProfileRequestsPage />} />
               <Route path="/admin/archive" element={<ArchivePage />} />
@@ -116,12 +154,9 @@ export default function App() {
               <Route path="/pedagogie/appel" element={<TeacherAttendancePage />} />
               <Route path="/pedagogie/absences" element={<TeacherAbsencesList />} />
             </Route>
-            <Route element={<AdministrativeDocumentsRoute />}>
-              <Route path="/documents/traitement" element={<AdministrativeDocumentsPage />} />
-            </Route>
-            <Route element={<StudentParentRoute />}>
-              <Route path="/documents/demandes" element={<DocumentRequestsPage />} />
-            </Route>
+            {/* Demandes de documents (adapté selon le rôle : RH/Admin/Manager -> file à traiter, Étudiant/Parent -> mes demandes) */}
+            <Route path="/documents/demandes" element={<DocumentRequestsDispatcher hideGeneratedTab />} />
+            <Route path="/documents/traitement" element={<DocumentRequestsDispatcher hideGeneratedTab />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
           </Route>

@@ -1,11 +1,25 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { apiFetch } from '../api/api';
 import { useAuth } from '../auth/AuthContext';
 import '../components/DashboardLayout.css';
 
 export default function DashboardOverview() {
   const { role } = useAuth();
+  const location = useLocation();
+  const isDocumentDashboard = location.pathname === '/documents/dashboard';
   const [stats, setStats] = useState(null);
+  const [documentStats, setDocumentStats] = useState({
+    requests: 0,
+    generated: 0,
+    imported: 0,
+    received: 0,
+    transferred: 0
+  });
+  const [documentBreakdown, setDocumentBreakdown] = useState({
+    byType: {},
+    byStatus: {}
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -17,12 +31,72 @@ export default function DashboardOverview() {
       setLoading(true);
       setError('');
       try {
-        const data = await apiFetch('/absences/statistics');
-        if (data.success) {
-          setStats(data.stats);
+        const [absenceData, requestData, documentData] = await Promise.all([
+          apiFetch('/absences/statistics'),
+          apiFetch('/api/document-requests/queue?limit=500'),
+          apiFetch('/api/documents/my?archived=all')
+        ]);
+
+        if (absenceData.success) {
+          setStats(absenceData.stats);
         } else {
           setError('Impossible de charger les statistiques.');
         }
+
+        const requests = Array.isArray(requestData?.data)
+          ? requestData.data
+          : Array.isArray(requestData?.requests) ? requestData.requests : [];
+        const documents = Array.isArray(documentData?.documents)
+          ? documentData.documents
+          : Array.isArray(documentData?.data) ? documentData.data : [];
+        const generated = requests.filter((request) => (
+          request.generated === true ||
+          request.source === 'generated' ||
+          String(request.documentId || '').startsWith('generated-')
+        ));
+        const isReceived = (document) => (
+          document.received === true ||
+          document.source === 'received' ||
+          document.origin === 'received' ||
+          document.status === 'received' ||
+          Boolean(document.recipientUid)
+        );
+        const isTransferred = (document) => (
+          Boolean(document.transferredAt) || document.status === 'transferred'
+        );
+
+        setDocumentStats({
+          requests: requests.length,
+          generated: generated.length,
+          imported: documents.filter((document) => !isReceived(document) && !isTransferred(document) && document.source !== 'generated').length,
+          received: documents.filter(isReceived).length,
+          transferred: new Set([
+            ...requests.filter((request) => request.transferredAt).map((request) => request.id),
+            ...documents.filter(isTransferred).map((document) => document.id)
+          ]).size
+        });
+
+        const typeCounts = {};
+        requests.forEach((request) => {
+          const type = request.type || request.documentType || 'Autre';
+          typeCounts[type] = (typeCounts[type] || 0) + 1;
+        });
+        documents.forEach((document) => {
+          const type = document.category || document.documentType || 'Autre';
+          typeCounts[type] = (typeCounts[type] || 0) + 1;
+        });
+
+        const statusCounts = {};
+        requests.forEach((request) => {
+          const status = request.statusLabel || request.status || 'Inconnu';
+          statusCounts[status] = (statusCounts[status] || 0) + 1;
+        });
+        documents.forEach((document) => {
+          const status = document.statusLabel || document.status || 'Inconnu';
+          statusCounts[status] = (statusCounts[status] || 0) + 1;
+        });
+
+        setDocumentBreakdown({ byType: typeCounts, byStatus: statusCounts });
       } catch (err) {
         console.error('Erreur stats:', err);
         setError('Erreur de connexion au serveur. Vérifiez que le backend est démarré.');
@@ -158,96 +232,71 @@ export default function DashboardOverview() {
               Vue d'ensemble des absences et indicateurs clés
             </p>
           </div>
-          <div className="overview-actions" style={{ display: 'flex', gap: '12px' }}>
+          {!isDocumentDashboard && <div className="overview-actions" style={{ display: 'flex', gap: '12px' }}>
             <button className="ynov-btn-outline" onClick={() => window.location.href = '/absences/demandes'}>
               Gérer les demandes
             </button>
-          </div>
+          </div>}
         </div>
 
-        {/* Cartes statistiques */}
-        <div className="stats-grid" style={{
+        {!isDocumentDashboard && <div className="stats-grid" style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
           gap: '1.5rem',
           marginBottom: '2.5rem'
         }}>
-          <div className="stat-card" style={{
-            background: 'var(--ynov-card)',
-            border: '1px solid var(--ynov-border)',
-            borderRadius: '1rem',
-            padding: '1.5rem',
-            transition: 'transform 0.2s, box-shadow 0.2s',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.9rem', fontWeight: 500 }}>Total demandes</h4>
-              <span style={{ color: 'var(--ynov-cyan)', fontSize: '1.5rem' }}>📋</span>
+          {[
+            { label: 'Total demandes', value: stats.total, color: 'var(--ynov-cyan)', icon: '📋', badge: 'Global' },
+            { label: 'En attente', value: stats.pending, color: '#f59e0b', icon: '⏳', badge: 'À traiter' },
+            { label: 'Approuvées', value: stats.approved, color: '#10b981', icon: '✅', badge: 'Validées' },
+            { label: 'Refusées', value: stats.rejected, color: '#ef4444', icon: '❌', badge: 'Rejetées' }
+          ].map((card) => (
+            <div key={card.label} className="stat-card" style={{
+              background: 'var(--ynov-card)',
+              border: '1px solid var(--ynov-border)',
+              borderRadius: '1rem',
+              padding: '1.5rem'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.9rem', fontWeight: 500 }}>{card.label}</h4>
+                <span aria-hidden="true" style={{ color: card.color, fontSize: '1.5rem' }}>{card.icon}</span>
+              </div>
+              <div style={{ color: card.color, fontSize: '2.5rem', fontWeight: 700, marginTop: '0.5rem' }}>{card.value}</div>
+              <span style={{ background: `${card.color}20`, color: card.color, padding: '0.2rem 0.8rem', borderRadius: '9999px', fontSize: '0.75rem', display: 'inline-block', marginTop: '0.5rem' }}>{card.badge}</span>
             </div>
-            <div className="stat-value" style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--ynov-cyan)', marginTop: '0.5rem' }}>
-              {stats.total}
-            </div>
-            <span className="stat-badge info" style={{ background: 'var(--ynov-cyan)20', color: 'var(--ynov-cyan)', padding: '0.2rem 0.8rem', borderRadius: '9999px', fontSize: '0.75rem', display: 'inline-block', marginTop: '0.5rem' }}>
-              Global
-            </span>
-          </div>
+          ))}
+        </div>}
 
-          <div className="stat-card highlight" style={{
-            background: 'var(--ynov-card)',
-            border: '1px solid var(--ynov-border)',
-            borderRadius: '1rem',
-            padding: '1.5rem',
-            transition: 'transform 0.2s, box-shadow 0.2s',
+        {isDocumentDashboard && <section style={{ marginBottom: '2.5rem' }}>
+          <div className="stats-grid" style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+            gap: '1rem'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.9rem', fontWeight: 500 }}>En attente</h4>
-              <span style={{ color: '#f59e0b', fontSize: '1.5rem' }}>⏳</span>
-            </div>
-            <div className="stat-value" style={{ fontSize: '2.5rem', fontWeight: 700, color: '#f59e0b', marginTop: '0.5rem' }}>
-              {stats.pending}
-            </div>
-            <span className="stat-badge warning" style={{ background: '#f59e0b20', color: '#f59e0b', padding: '0.2rem 0.8rem', borderRadius: '9999px', fontSize: '0.75rem', display: 'inline-block', marginTop: '0.5rem' }}>
-              À traiter
-            </span>
+            {[
+              { label: 'Demandes de documents', value: documentStats.requests, color: 'var(--ynov-cyan)', icon: '📋' },
+              { label: 'Documents générés', value: documentStats.generated, color: '#6366f1', icon: '✨' },
+              { label: 'Documents importés', value: documentStats.imported, color: '#0ea5e9', icon: '📥' },
+              { label: 'Documents reçus', value: documentStats.received, color: '#10b981', icon: '📨' },
+              { label: 'Documents transférés', value: documentStats.transferred, color: '#f59e0b', icon: '↗' }
+            ].map((card) => (
+              <div key={card.label} className="stat-card" style={{
+                background: 'var(--ynov-card)',
+                border: '1px solid var(--ynov-border)',
+                borderRadius: '1rem',
+                padding: '1.25rem'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                  <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.82rem', fontWeight: 500 }}>{card.label}</h4>
+                  <span aria-hidden="true" style={{ color: card.color, fontSize: '1.35rem' }}>{card.icon}</span>
+                </div>
+                <div style={{ color: card.color, fontSize: '2.15rem', fontWeight: 700, marginTop: '0.45rem' }}>
+                  {card.value}
+                </div>
+              </div>
+            ))}
           </div>
-
-          <div className="stat-card" style={{
-            background: 'var(--ynov-card)',
-            border: '1px solid var(--ynov-border)',
-            borderRadius: '1rem',
-            padding: '1.5rem',
-            transition: 'transform 0.2s, box-shadow 0.2s',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.9rem', fontWeight: 500 }}>Approuvées</h4>
-              <span style={{ color: '#10b981', fontSize: '1.5rem' }}>✅</span>
-            </div>
-            <div className="stat-value" style={{ fontSize: '2.5rem', fontWeight: 700, color: '#10b981', marginTop: '0.5rem' }}>
-              {stats.approved}
-            </div>
-            <span className="stat-badge success" style={{ background: '#10b98120', color: '#10b981', padding: '0.2rem 0.8rem', borderRadius: '9999px', fontSize: '0.75rem', display: 'inline-block', marginTop: '0.5rem' }}>
-              Validées
-            </span>
-          </div>
-
-          <div className="stat-card" style={{
-            background: 'var(--ynov-card)',
-            border: '1px solid var(--ynov-border)',
-            borderRadius: '1rem',
-            padding: '1.5rem',
-            transition: 'transform 0.2s, box-shadow 0.2s',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h4 style={{ color: 'var(--ynov-text-muted)', fontSize: '0.9rem', fontWeight: 500 }}>Refusées</h4>
-              <span style={{ color: '#ef4444', fontSize: '1.5rem' }}>❌</span>
-            </div>
-            <div className="stat-value" style={{ fontSize: '2.5rem', fontWeight: 700, color: '#ef4444', marginTop: '0.5rem' }}>
-              {stats.rejected}
-            </div>
-            <span className="stat-badge danger" style={{ background: '#ef444420', color: '#ef4444', padding: '0.2rem 0.8rem', borderRadius: '9999px', fontSize: '0.75rem', display: 'inline-block', marginTop: '0.5rem' }}>
-              Rejetées
-            </span>
-          </div>
-        </div>
+        </section>}
 
         {/* Deux colonnes : Types et Départements */}
         <div style={{
@@ -263,11 +312,11 @@ export default function DashboardOverview() {
             padding: '1.5rem'
           }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--ynov-text-light)', marginBottom: '1rem' }}>
-              Répartition par type
+              {isDocumentDashboard ? 'Répartition par type de document' : 'Répartition par type'}
             </h3>
             <div className="card-list-item">
-              {Object.entries(stats.byType).length === 0 && <p style={{ color: 'var(--ynov-text-muted)' }}>Aucun type enregistré.</p>}
-              {Object.entries(stats.byType).map(([type, count]) => (
+              {Object.entries(isDocumentDashboard ? documentBreakdown.byType : stats.byType).length === 0 && <p style={{ color: 'var(--ynov-text-muted)' }}>Aucun type enregistré.</p>}
+              {Object.entries(isDocumentDashboard ? documentBreakdown.byType : stats.byType).map(([type, count]) => (
                 <div key={type} style={{
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -288,18 +337,18 @@ export default function DashboardOverview() {
             padding: '1.5rem'
           }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--ynov-text-light)', marginBottom: '1rem' }}>
-              Répartition par département
+              {isDocumentDashboard ? 'Répartition par statut' : 'Répartition par département'}
             </h3>
             <div className="card-list-item">
-              {Object.entries(stats.byDepartment).length === 0 && <p style={{ color: 'var(--ynov-text-muted)' }}>Aucun département enregistré.</p>}
-              {Object.entries(stats.byDepartment).map(([dept, count]) => (
-                <div key={dept} style={{
+              {Object.entries(isDocumentDashboard ? documentBreakdown.byStatus : stats.byDepartment).length === 0 && <p style={{ color: 'var(--ynov-text-muted)' }}>Aucune donnée enregistrée.</p>}
+              {Object.entries(isDocumentDashboard ? documentBreakdown.byStatus : stats.byDepartment).map(([label, count]) => (
+                <div key={label} style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   padding: '0.6rem 0',
                   borderBottom: '1px solid var(--ynov-border)'
                 }}>
-                  <span style={{ color: 'var(--ynov-text-muted)' }}>{dept}</span>
+                  <span style={{ color: 'var(--ynov-text-muted)' }}>{label}</span>
                   <strong style={{ color: 'var(--ynov-cyan)' }}>{count}</strong>
                 </div>
               ))}
@@ -307,8 +356,7 @@ export default function DashboardOverview() {
           </div>
         </div>
 
-        {/* Actions rapides */}
-        <div className="dashboard-section" style={{
+        {!isDocumentDashboard && <div className="dashboard-section" style={{
           background: 'var(--ynov-card)',
           border: '1px solid var(--ynov-border)',
           borderRadius: '1rem',
@@ -318,7 +366,7 @@ export default function DashboardOverview() {
             Actions rapides
           </h3>
           <div className="actions-group" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            <button
+            {!isDocumentDashboard && <button
               className="ynov-btn-outline"
               onClick={() => window.location.href = '/absences/demandes'}
               style={{
@@ -335,7 +383,7 @@ export default function DashboardOverview() {
               onMouseOut={(e) => e.target.style.background = 'transparent'}
             >
               📋 Gérer les demandes
-            </button>
+            </button>}
             <button
               className="ynov-btn-outline"
               onClick={() => window.location.href = '/users'}
@@ -373,7 +421,7 @@ export default function DashboardOverview() {
               📊 Exporter les données
             </button>
           </div>
-        </div>
+        </div>}
       </div>
     );
   }

@@ -1,7 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../auth/AuthContext';
-import { IconDocument, IconInbox, IconPlus, IconSearch, IconDownload, IconTrash } from '../components/Icons';
+import { IconDocument, IconInbox, IconPlus, IconSearch, IconDownload, IconTrash, IconArchive, IconSparkles, IconEye } from '../components/Icons';
 import { apiFetch, apiFetchBlob } from '../api/api';
+import {
+  isHtmlDocument,
+  buildOfficialDocumentHTML,
+  printHtmlDocument
+} from '../utils/documentTemplates';
 import './DocumentRequestsPage.css';
 
 const documentTypes = [
@@ -10,6 +15,7 @@ const documentTypes = [
   'Relevé de notes',
   'Convention de stage',
   'Attestation de réussite',
+  'Attestation de réussite sous réserve',
   'Autre document administratif',
 ];
 
@@ -24,6 +30,7 @@ export default function DocumentRequestsPage() {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState(null);
+  const [previewDoc, setPreviewDoc] = useState(null);
   const [type, setType] = useState(documentTypes[0]);
   const [urgency, setUrgency] = useState('normal');
   const [submitting, setSubmitting] = useState(false);
@@ -128,7 +135,55 @@ export default function DocumentRequestsPage() {
     }
   };
 
-  const handleDownloadDoc = async (documentId, filename = 'document') => {
+  const handleDownloadDoc = async (request, filename = 'document') => {
+    const isObj = typeof request === 'object' && request !== null;
+    const reqObj = isObj ? request : requests.find(r => r.id === request || r.documentId === request);
+    const documentId = isObj ? request.documentId : request;
+
+    if (!reqObj?.transferredAt) {
+      showToast('Le document sera disponible après son transfert par le service administratif.', 'info');
+      return;
+    }
+
+    // Si c'est un document officiel HTML (Attestation de réussite, Certificat de scolarité, etc.)
+    if (reqObj && isHtmlDocument(reqObj)) {
+      try {
+        showToast('Génération du PDF en cours...', 'info');
+        const blob = await apiFetchBlob(`/api/document-requests/${reqObj.id}/pdf`);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const safeName = (reqObj.type || reqObj.documentType || 'Document_Officiel').replace(/\s+/g, '_');
+        a.download = `${safeName}_${reqObj.id}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        showToast('Document PDF téléchargé avec succès.', 'success');
+        return;
+      } catch (err) {
+        console.error('Erreur téléchargement PDF :', err);
+        const htmlContent = buildOfficialDocumentHTML(reqObj);
+        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const safeName = (reqObj.type || reqObj.documentType || 'Document_Officiel').replace(/\s+/g, '_');
+        a.download = `${safeName}_${reqObj.id}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        showToast('Document téléchargé.', 'info');
+        return;
+      }
+    }
+
+    if (!documentId || String(documentId).startsWith('generated-')) {
+      showToast('Aucun fichier physique rattaché.', 'info');
+      return;
+    }
+
     try {
       showToast('Téléchargement en cours...', 'info');
       const blob = await apiFetchBlob(`/api/documents/${documentId}/download`);
@@ -147,7 +202,10 @@ export default function DocumentRequestsPage() {
     }
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status, request) => {
+    if (request?.transferredAt) {
+      return <span className="document-request-badge ready">Disponible</span>;
+    }
     switch (status) {
       case 'approved':
         return <span className="document-request-badge ready">Disponible</span>;
@@ -223,21 +281,10 @@ export default function DocumentRequestsPage() {
                   </small>
                 )}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {getStatusBadge(request.status)}
-                {request.documentId && (
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    style={{ padding: '4px 10px', fontSize: '0.8rem', borderRadius: '4px' }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDownloadDoc(request.documentId, `${request.type}.pdf`);
-                    }}
-                    title="Télécharger le document prêt"
-                  >
-                    <IconDownload size={14} /> Télécharger
-                  </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {getStatusBadge(request.status, request)}
+                {request.archived && (
+                  <span style={{ fontSize: '0.74rem', color: '#94a3b8', fontStyle: 'italic' }}>Archivée</span>
                 )}
               </div>
             </article>
@@ -406,14 +453,41 @@ export default function DocumentRequestsPage() {
                 </button>
               )}
 
-              {selectedDetail.documentId && (
-                <button
-                  type="button"
-                  className="document-request-primary"
-                  onClick={() => handleDownloadDoc(selectedDetail.documentId, `${selectedDetail.type}.pdf`)}
-                >
-                  Télécharger le document 📥
-                </button>
+              {Boolean(selectedDetail.transferredAt) && (
+                <div style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  background: '#ecfdf5',
+                  border: '1px solid #a7f3d0',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  color: '#065f46',
+                  fontSize: '0.88rem'
+                }}>
+                  <span style={{ fontSize: '1.2rem' }}>✅</span>
+                  <div>
+                    <strong>Document disponible</strong>
+                    <div style={{ color: '#047857', marginTop: '2px' }}>
+                      Votre document officiel est transféré et accessible dans votre espace <strong>Mes documents</strong> où vous pouvez le consulter et le télécharger.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedDetail.archived && (
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 16px',
+                  fontSize: '0.84rem',
+                  color: '#94a3b8',
+                  fontStyle: 'italic'
+                }}>
+                  <IconArchive size={14} /> Demande archivée
+                </span>
               )}
 
               <button
@@ -422,6 +496,73 @@ export default function DocumentRequestsPage() {
                 onClick={() => setSelectedDetail(null)}
               >
                 Fermer
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* MODAL PRÉVISUALISATION ÉTUDIANT */}
+      {previewDoc && (
+        <div className="document-request-modal-backdrop" role="presentation" onClick={() => setPreviewDoc(null)}>
+          <section
+            className="document-request-modal"
+            style={{ width: 'min(860px, 96%)', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="document-request-modal-header">
+              <div>
+                <p className="document-requests-kicker">Document officiel</p>
+                <h2 style={{ fontSize: '1.2rem', color: '#1e293b' }}>
+                  {previewDoc.title}
+                </h2>
+              </div>
+              <button type="button" className="document-request-close" onClick={() => setPreviewDoc(null)} aria-label="Fermer">×</button>
+            </div>
+
+            <iframe
+              srcDoc={previewDoc.content}
+              title="Aperçu du document officiel"
+              style={{
+                flex: 1,
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                width: '100%',
+                minHeight: '520px',
+                background: '#fff',
+                margin: '12px 0'
+              }}
+            />
+
+            <div className="document-request-modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button type="button" className="document-request-secondary" onClick={() => setPreviewDoc(null)}>Fermer</button>
+              <button
+                type="button"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: '1px solid #059669',
+                  background: '#059669',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
+                onClick={() => printHtmlDocument(previewDoc.content)}
+                title="Imprimer ou enregistrer au format PDF"
+              >
+                <IconSparkles size={15} /> Imprimer / PDF
+              </button>
+              <button
+                type="button"
+                className="document-request-primary"
+                onClick={() => handleDownloadDoc(previewDoc.request)}
+              >
+                <IconDownload size={15} /> Télécharger (PDF)
               </button>
             </div>
           </section>

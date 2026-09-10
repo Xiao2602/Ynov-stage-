@@ -3,17 +3,17 @@ import React, {
   useRef,
   useState
 } from "react";
+import { useAuth } from "../auth/AuthContext";
 
 import {
   IconDocument,
   IconSearch,
-  IconFileCheck,
-  IconFolder,
   IconEye,
   IconPlus,
   IconDownload,
   IconTrash,
-  IconArchive
+  IconArchive,
+  IconForward
 } from "../components/Icons";
 
 import {
@@ -94,13 +94,10 @@ function formatDate(value) {
 
   let date;
 
-  if (
-    value?.seconds
-  ) {
-    date =
-      new Date(
-        value.seconds * 1000
-      );
+  if (typeof value?.toDate === "function") {
+    date = value.toDate();
+  } else if (value?.seconds || value?._seconds) {
+    date = new Date((value.seconds || value._seconds) * 1000);
   } else {
     date =
       new Date(value);
@@ -125,6 +122,9 @@ function formatDate(value) {
 }
 
 export default function DocumentsPage() {
+  const { role, user } = useAuth();
+
+  const isStudentAccount = role === "student";
   /*
   |--------------------------------------------------------------------------
   | DOCUMENTS
@@ -161,6 +161,11 @@ export default function DocumentsPage() {
     archiveFilter,
     setArchiveFilter
   ] = useState("active");
+
+  const [
+    originFilter,
+    setOriginFilter
+  ] = useState("all");
 
   /*
   |--------------------------------------------------------------------------
@@ -223,6 +228,19 @@ export default function DocumentsPage() {
   ] = useState({ open: false, document: null, loading: false });
 
   const [toast, setToast] = useState({ message: "", type: "info" });
+
+  const [transferModal, setTransferModal] = useState({
+    open: false,
+    document: null,
+    recipientUid: "",
+    loading: false
+  });
+  const [recipients, setRecipients] = useState([]);
+  const [recipientsLoading, setRecipientsLoading] = useState(false);
+
+  /* Pagination (côté client) */
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   function showToast(message, type = "success") {
     setToast({ message, type });
@@ -304,7 +322,12 @@ export default function DocumentsPage() {
         Array.isArray(
           result.documents
         )
-          ? result.documents
+          ? result.documents.filter((document) => {
+            if (originFilter === "generated") return isGeneratedDocument(document);
+            if (originFilter === "received") return isReceivedDocument(document);
+            if (originFilter === "imported") return !isGeneratedDocument(document);
+            return true;
+          })
           : []
       );
 
@@ -329,8 +352,14 @@ export default function DocumentsPage() {
   }, [
     search,
     categoryFilter,
-    archiveFilter
+    archiveFilter,
+    originFilter
   ]);
+
+  // reset page when filters/search change
+  useEffect(() => {
+    setPage(1);
+  }, [search, categoryFilter, archiveFilter, originFilter]);
 
   /*
   |--------------------------------------------------------------------------
@@ -532,7 +561,10 @@ export default function DocumentsPage() {
     try {
       setActionMessage("Ouverture du document...");
 
-      const blob = await apiFetchBlob(`/api/documents/${document.id}/view`);
+      const viewEndpoint = document.generated && document.requestId
+        ? `/api/document-requests/${document.requestId}/pdf`
+        : `/api/documents/${document.id}/view`;
+      const blob = await apiFetchBlob(viewEndpoint);
       const url = URL.createObjectURL(blob);
 
       setPreviewModal({
@@ -559,7 +591,10 @@ export default function DocumentsPage() {
   async function handleDownload(document) {
     try {
       showToast(`Téléchargement de "${document.originalName}" en cours...`, "info");
-      const blob = await apiFetchBlob(`/api/documents/${document.id}/download`);
+      const downloadEndpoint = document.generated && document.requestId
+        ? `/api/document-requests/${document.requestId}/pdf`
+        : `/api/documents/${document.id}/download`;
+      const blob = await apiFetchBlob(downloadEndpoint);
       const url = URL.createObjectURL(blob);
       const a = window.document.createElement("a");
       a.href = url;
@@ -615,6 +650,40 @@ export default function DocumentsPage() {
     }
   }
 
+  async function openTransferModal(document) {
+    setTransferModal({ open: true, document, recipientUid: "", loading: false });
+    if (recipients.length > 0) return;
+
+    try {
+      setRecipientsLoading(true);
+      const result = await apiFetch("/api/users");
+      setRecipients(Array.isArray(result.data) ? result.data : []);
+    } catch (error) {
+      showToast(error.message || "Impossible de charger les destinataires.", "error");
+    } finally {
+      setRecipientsLoading(false);
+    }
+  }
+
+  async function handleTransfer(event) {
+    event.preventDefault();
+    if (!transferModal.document || !transferModal.recipientUid) return;
+
+    try {
+      setTransferModal((previous) => ({ ...previous, loading: true }));
+      await apiFetch(`/api/documents/${transferModal.document.id}/transfer`, {
+        method: "PATCH",
+        body: JSON.stringify({ recipientUid: transferModal.recipientUid })
+      });
+      showToast("Document transféré avec succès.", "success");
+      setTransferModal({ open: false, document: null, recipientUid: "", loading: false });
+      await loadDocuments();
+    } catch (error) {
+      showToast(error.message || "Impossible de transférer le document.", "error");
+      setTransferModal((previous) => ({ ...previous, loading: false }));
+    }
+  }
+
   /*
   |--------------------------------------------------------------------------
   | SUPPRIMER
@@ -653,20 +722,15 @@ export default function DocumentsPage() {
   |--------------------------------------------------------------------------
   */
 
-  const totalDocuments =
-    documents.length;
+  // Pagination derived values
+  const totalPages = Math.max(1, Math.ceil((documents.length || 0) / pageSize));
 
-  const archivedCount =
-    documents.filter(
-      (document) =>
-        document.archived
-    ).length;
+  // Ensure current page is within bounds
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
-  const activeCount =
-    documents.filter(
-      (document) =>
-        !document.archived
-    ).length;
+  const displayedDocuments = documents.slice((page - 1) * pageSize, page * pageSize);
 
   /*
   |--------------------------------------------------------------------------
@@ -706,31 +770,17 @@ export default function DocumentsPage() {
             Consultez, envoyez et gérez vos justificatifs.
           </p>
         </div>
-
-        <button
+        {!isStudentAccount && <button
           type="button"
           className="btn-primary"
-          onClick={
-            openUploadModal
-          }
-          style={{
-            display: "flex",
-            alignItems:
-              "center",
-            gap: "8px"
-          }}
+          onClick={openUploadModal}
+          style={{ display: "flex", alignItems: "center", gap: "8px" }}
         >
-          <div
-            style={{
-              width: "16px",
-              height: "16px"
-            }}
-          >
+          <div style={{ width: "16px", height: "16px" }}>
             <IconPlus />
           </div>
-
           Importer un document
-        </button>
+        </button>}
       </div>
 
       {/* MESSAGE */}
@@ -750,94 +800,6 @@ export default function DocumentsPage() {
           {actionMessage}
         </div>
       )}
-
-      {/* STATS */}
-
-      <div
-        className="stats-grid"
-        style={{
-          gridTemplateColumns:
-            "repeat(3, 1fr)"
-        }}
-      >
-        <div className="stat-card">
-          <div className="stat-header">
-            <span className="stat-title">
-              Documents validés
-            </span>
-
-            <div
-              className="stat-icon-wrapper"
-              style={{
-                width: "32px",
-                height: "32px",
-                color:
-                  "var(--ynov-teal)"
-              }}
-            >
-              <IconFileCheck />
-            </div>
-          </div>
-
-          <div className="stat-value-container">
-            <span className="stat-value">
-              {totalDocuments}
-            </span>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-header">
-            <span className="stat-title">
-              Documents actifs
-            </span>
-
-            <div
-              className="stat-icon-wrapper"
-              style={{
-                width: "32px",
-                height: "32px",
-                color:
-                  "var(--ynov-gray-500)"
-              }}
-            >
-              <IconFolder />
-            </div>
-          </div>
-
-          <div className="stat-value-container">
-            <span className="stat-value">
-              {activeCount}
-            </span>
-          </div>
-        </div>
-
-        <div className="stat-card highlight">
-          <div className="stat-header">
-            <span className="stat-title">
-              Archives
-            </span>
-
-            <div
-              className="stat-icon-wrapper"
-              style={{
-                width: "32px",
-                height: "32px",
-                color:
-                  "var(--status-pending)"
-              }}
-            >
-              <IconDocument />
-            </div>
-          </div>
-
-          <div className="stat-value-container">
-            <span className="stat-value">
-              {archivedCount}
-            </span>
-          </div>
-        </div>
-      </div>
 
       {/* PANEL */}
 
@@ -906,90 +868,20 @@ export default function DocumentsPage() {
               />
             </div>
 
-            <select
-              value={
-                categoryFilter
-              }
-              onChange={(event) =>
-                setCategoryFilter(
-                  event.target.value
-                )
-              }
-              style={{
-                padding:
-                  "8px 12px",
-                borderRadius:
-                  "8px",
-                border:
-                  "1px solid #e2e8f0",
-                background: "#fff",
-                color:
-                  "#334155",
-                fontSize:
-                  "0.85rem",
-                outline: "none",
-                cursor:
-                  "pointer"
-              }}
-            >
-              <option value="all">
-                Toutes les catégories
-              </option>
+            {!isStudentAccount && <>
+              <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="Filtrer par catégorie">
+                <option value="all">Toutes les catégories</option>
+                {CATEGORY_OPTIONS.map((category) => (
+                  <option key={category.value} value={category.value}>{category.label}</option>
+                ))}
+              </select>
+              <select value={originFilter} onChange={(event) => setOriginFilter(event.target.value)} aria-label="Filtrer par origine">
+                <option value="all">Tous les documents</option>
+                <option value="received">Documents reçus</option>
+                <option value="imported">Documents importés</option>
+              </select>
+            </>}
 
-              {CATEGORY_OPTIONS.map(
-                (category) => (
-                  <option
-                    key={
-                      category.value
-                    }
-                    value={
-                      category.value
-                    }
-                  >
-                    {category.label}
-                  </option>
-                )
-              )}
-            </select>
-
-            <select
-              value={
-                archiveFilter
-              }
-              onChange={(event) =>
-                setArchiveFilter(
-                  event.target.value
-                )
-              }
-              style={{
-                padding:
-                  "8px 12px",
-                borderRadius:
-                  "8px",
-                border:
-                  "1px solid #e2e8f0",
-                background: "#fff",
-                color:
-                  "#334155",
-                fontSize:
-                  "0.85rem",
-                outline: "none",
-                cursor:
-                  "pointer"
-              }}
-            >
-              <option value="active">
-                Documents actifs
-              </option>
-
-              <option value="archived">
-                Documents archivés
-              </option>
-
-              <option value="all">
-                Tous les documents
-              </option>
-            </select>
           </div>
         </div>
 
@@ -1012,17 +904,13 @@ export default function DocumentsPage() {
                 <th>
                   Document
                 </th>
-
+              
                 <th>
-                  Catégorie
+                  Type de document
                 </th>
 
                 <th>
-                  Taille
-                </th>
-
-                <th>
-                  Date
+                  Date de réception
                 </th>
 
                 <th>
@@ -1068,7 +956,7 @@ export default function DocumentsPage() {
                   </td>
                 </tr>
               ) : (
-                documents.map(
+                displayedDocuments.map(
                   (document) => (
                     <tr
                       key={
@@ -1155,26 +1043,17 @@ export default function DocumentsPage() {
                         }
                       </td>
 
-                      <td
-                        style={{
-                          color:
-                            "#64748b"
-                        }}
-                      >
-                        {formatSize(
-                          document.size
-                        )}
-                      </td>
-
                       <td>
                         {formatDate(
+                          document.receivedAt ||
+                          document.importedAt ||
                           document.createdAt
                         )}
                       </td>
 
                       <td>
-                        <span className="status-badge approved">
-                          Validé
+                        <span className={`status-badge ${document.status === "rejected" ? "rejected" : document.status === "transferred" ? "pending" : "approved"}`}>
+                          {formatStatus(document.status)}
                         </span>
                       </td>
 
@@ -1188,15 +1067,23 @@ export default function DocumentsPage() {
                             gap: "6px"
                           }}
                         >
-                          <button
-                            type="button"
-                            className="table-action-btn"
-                            title="Consulter"
-                            onClick={() => handleView(document)}
-                          >
-                            <IconEye size={18} />
-                          </button>
-
+                          {!isStudentAccount && <>
+                            <button type="button" className="table-action-btn" title="Transférer" onClick={() => openTransferModal(document)}>
+                              <IconForward size={18} />
+                            </button>
+                            <button type="button" className="table-action-btn" title="Consulter" onClick={() => handleView(document)}>
+                              <IconEye size={18} />
+                            </button>
+                            {document.archived ? (
+                              <button type="button" className="table-action-btn" title="Désarchiver" onClick={() => handleUnarchive(document)}>
+                                <IconArchive size={18} style={{ transform: "rotate(180deg)" }} />
+                              </button>
+                            ) : (
+                              <button type="button" className="table-action-btn" title="Archiver" onClick={() => handleArchive(document)}>
+                                <IconArchive size={18} />
+                              </button>
+                            )}
+                          </>}
                           <button
                             type="button"
                             className="table-action-btn"
@@ -1205,26 +1092,6 @@ export default function DocumentsPage() {
                           >
                             <IconDownload size={18} />
                           </button>
-
-                          {document.archived ? (
-                            <button
-                              type="button"
-                              className="table-action-btn"
-                              title="Désarchiver"
-                              onClick={() => handleUnarchive(document)}
-                            >
-                              <IconArchive size={18} style={{ transform: "rotate(180deg)" }} />
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="table-action-btn"
-                              title="Archiver"
-                              onClick={() => handleArchive(document)}
-                            >
-                              <IconArchive size={18} />
-                            </button>
-                          )}
 
                           <button
                             type="button"
@@ -1243,6 +1110,35 @@ export default function DocumentsPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination bottom */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+          <div style={{ color: '#64748b', fontSize: '0.9rem' }}>
+            {documents.length > 0 ? `Affichage ${Math.min((page-1)*pageSize+1, documents.length)}–${Math.min(page*pageSize, documents.length)} sur ${documents.length}` : ''}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button type="button" className="btn-secondary" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+              Préc
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPage(p)}
+                className={`btn-page ${p === page ? 'active' : ''}`}
+                style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: p === page ? '#0ea5e9' : '#fff', color: p === page ? '#fff' : '#334155', cursor: 'pointer' }}
+              >
+                {p}
+              </button>
+            ))}
+
+            <button type="button" className="btn-secondary" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+              Suiv
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1726,6 +1622,78 @@ export default function DocumentsPage() {
         </div>
       )}
 
+      {transferModal.open && transferModal.document && (
+        <div
+          className="modal-overlay"
+          onClick={() => {
+            if (!transferModal.loading) setTransferModal({ open: false, document: null, recipientUid: "", loading: false });
+          }}
+          style={{ zIndex: 1050 }}
+        >
+          <div
+            className="user-modal"
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: "520px", width: "90vw", padding: "24px" }}
+          >
+            <div className="modal-header">
+              <div>
+                <p className="modal-kicker">Partage du document</p>
+                <h3>Transférer le document</h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                disabled={transferModal.loading}
+                onClick={() => setTransferModal({ open: false, document: null, recipientUid: "", loading: false })}
+              >
+                ×
+              </button>
+            </div>
+
+            <form className="user-form" onSubmit={handleTransfer}>
+              <p style={{ color: "#64748b", marginTop: 0 }}>
+                Sélectionnez la personne qui recevra « {transferModal.document.originalName} ».
+              </p>
+              <div className="field-group">
+                <label className="field-label" htmlFor="document-recipient">Destinataire</label>
+                <select
+                  id="document-recipient"
+                  className="field-input"
+                  value={transferModal.recipientUid}
+                  onChange={(event) => setTransferModal((previous) => ({ ...previous, recipientUid: event.target.value }))}
+                  disabled={recipientsLoading || transferModal.loading}
+                  required
+                >
+                  <option value="">
+                    {recipientsLoading ? "Chargement..." : "Choisir un destinataire"}
+                  </option>
+                  {recipients
+                    .filter((recipient) => recipient.uid !== user?.uid && recipient.uid !== transferModal.document.uid)
+                    .map((recipient) => (
+                      <option key={recipient.uid} value={recipient.uid}>
+                        {recipient.displayName || recipient.email || recipient.uid} {recipient.role ? `(${recipient.role})` : ""}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={transferModal.loading}
+                  onClick={() => setTransferModal({ open: false, document: null, recipientUid: "", loading: false })}
+                >
+                  Annuler
+                </button>
+                <button type="submit" className="btn-primary" disabled={transferModal.loading || !transferModal.recipientUid}>
+                  {transferModal.loading ? "Transfert..." : "Transférer"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* NOTIFICATION TOAST FLOTTANTE */}
       {toast.message && (
         <div
@@ -1766,4 +1734,29 @@ export default function DocumentsPage() {
       )}
     </div>
   );
+}
+
+function formatStatus(status) {
+  const labels = {
+    transferred: "Transféré",
+    validated: "Validé",
+    rejected: "Refusé"
+  };
+  return labels[status] || "Validé";
+}
+
+function isGeneratedDocument(document) {
+  return document.generated === true ||
+    document.source === "generated" ||
+    document.origin === "generated" ||
+    String(document.id || "").startsWith("generated-") ||
+    String(document.documentId || "").startsWith("generated-");
+}
+
+function isReceivedDocument(document) {
+  return document.received === true ||
+    document.source === "received" ||
+    document.origin === "received" ||
+    document.status === "received" ||
+    Boolean(document.recipientUid);
 }
