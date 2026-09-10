@@ -19,7 +19,8 @@ import {
   IconUser, 
   IconLogOut,
   IconArchive, 
-  IconDots 
+  IconDots,
+  IconSparkles
 } from './Icons';
 
 
@@ -63,9 +64,11 @@ export default function DashboardLayout() {
     stats: ['admin', ...staffRoles],
   };
   const documentRoles = {
-    dashboard: ['admin', 'student', 'parent', ...staffRoles],
+    dashboard: [...staffRoles],
     myDocuments: ['admin', 'student', 'parent', ...staffRoles],
     requests: ['admin', 'student', 'parent', ...staffRoles],
+    generated: [...staffRoles],
+    archives: ['admin', 'parent', ...staffRoles],
   };
 
   function normalizeDepartment(value = '') {
@@ -137,6 +140,9 @@ export default function DashboardLayout() {
     if (path === '/absences/mes-absences') return 'Mes Absences';
     if (path === '/absences/demandes') return 'Demandes d\'absence';
     if (path === '/absences/stats') return 'Analyses / Statistiques';
+    if (path === '/documents/demandes' || path === '/documents/traitement') return 'Demandes de documents';
+    if (path === '/documents/generes') return 'Documents générés';
+    if (path === '/documents/archives') return 'Archives documentaires';
     if (path.startsWith('/documents')) return 'Gestion documentaire';
     if (path === '/users') return 'Utilisateurs';
     if (path === '/activity-logs') return 'Journaux d\'activité';
@@ -202,13 +208,19 @@ export default function DashboardLayout() {
                   {canAccess(documentRoles.myDocuments, role) && <NavLink to="/documents" end className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
                     <div className="nav-icon"><IconFolder /></div><span>{role === 'parent' ? parentDocumentsLabel : staffRoles.includes(role) ? 'Documents à gérer' : 'Mes Documents'}</span>
                   </NavLink>}
-                  {isAdministrativeStaff ? (
-                    <NavLink to="/documents/traitement" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
-                      <div className="nav-icon"><IconInbox /></div><span>Demandes à traiter</span>
-                    </NavLink>
-                  ) : canAccess(documentRoles.requests, role) && (
+                  {canAccess(documentRoles.requests, role) && (
                     <NavLink to="/documents/demandes" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
                       <div className="nav-icon"><IconInbox /></div><span>Demandes</span>
+                    </NavLink>
+                  )}
+                  {canAccess(documentRoles.generated, role) && (
+                    <NavLink to="/documents/generes" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
+                      <div className="nav-icon"><IconSparkles /></div><span>Documents générés</span>
+                    </NavLink>
+                  )}
+                  {canAccess(documentRoles.archives, role) && (
+                    <NavLink to="/documents/archives" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
+                      <div className="nav-icon"><IconArchive /></div><span>Archives</span>
                     </NavLink>
                   )}
                 </>
@@ -220,7 +232,7 @@ export default function DashboardLayout() {
           <div className="sidebar-group">
             <div className="sidebar-group-title">Configurations</div>
             <div className="sidebar-group-items">
-              {role === 'admin' && <NavLink to="/users" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
+              {(role === 'admin' || role === 'rh') && <NavLink to="/users" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
                 <div className="nav-icon"><IconUsers /></div><span>Utilisateurs</span>
               </NavLink>}
               {role === 'admin' && (

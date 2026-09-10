@@ -1,13 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  --ynov-dark: #0a0e17;
-  --ynov-card: #131b2e;
-  --ynov-border: #1e293b;
-  --ynov-cyan: #00d2b8;
-  --ynov-cyan-hover: #00b8a2;
-  --ynov-text-muted: #94a3b8;
-  --ynov-text-light: #f8fafc;
+  --ynov-dark: #1e293b;
+  --ynov-card: #ffffff;
+  --ynov-border: #e2e8f0;
+  --ynov-cyan: #00b4d8;
+  --ynov-cyan-hover: #0096c7;
+  --ynov-text-muted: #64748b;
+  --ynov-text-light: #334155;
 }
 
 * {
@@ -20,7 +20,7 @@
 }
 
 body {
-  background-color: var(--ynov-dark);
+  background-color: #f8fafc;
   color: var(--ynov-text-light);
   font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
@@ -43,7 +43,7 @@ body {
   left: -5rem;
   width: 24rem;
   height: 24rem;
-  background: rgba(0, 210, 184, 0.12);
+  background: rgba(0, 180, 216, 0.07);
   border-radius: 50%;
   filter: blur(80px);
   pointer-events: none;
@@ -55,7 +55,7 @@ body {
   right: -5rem;
   width: 24rem;
   height: 24rem;
-  background: rgba(99, 102, 241, 0.12);
+  background: rgba(99, 102, 241, 0.06);
   border-radius: 50%;
   filter: blur(80px);
   pointer-events: none;
@@ -69,7 +69,7 @@ body {
   border: 1px solid var(--ynov-border);
   border-radius: 1rem;
   padding: 2rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1);
   position: relative;
   z-index: 10;
 }
@@ -94,7 +94,7 @@ body {
   font-size: 1.75rem;
   font-weight: 800;
   letter-spacing: -0.025em;
-  color: #ffffff;
+  color: var(--ynov-dark);
 }
 
 .brand-title span {
@@ -142,7 +142,7 @@ body {
 .form-label {
   font-size: 0.875rem;
   font-weight: 500;
-  color: #cbd5e1;
+  color: var(--ynov-text-light);
 }
 
 .forgot-link {
@@ -171,7 +171,7 @@ body {
 .form-input {
   width: 100%;
   padding: 0.75rem 0.875rem 0.75rem 2.75rem;
-  background-color: var(--ynov-dark);
+  background-color: #f8fafc;
   border: 1px solid var(--ynov-border);
   border-radius: 0.75rem;
   color: var(--ynov-text-light);

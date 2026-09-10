@@ -4,7 +4,7 @@ import { adminAuth, adminDb } from "../../Shared/Firebase config/firebase.js";
 /**
  * Service pour la création d'utilisateurs par Admin / RH (avec support du rôle Parent et liaison Étudiant)
  */
-export async function createUserService({ email, password, displayName, role = "employee", department = "", childrenUids = [] }) {
+export async function createUserService({ email, password, displayName, role = "employee", department = "", childrenUids = [], phone = "", className = "", assignedClass = "", dateOfBirth = "", placeOfBirth = "", academicYear = "", schoolYear = "" }) {
   try {
     // 1. Créer le compte Firebase Authentication
     const userRecord = await adminAuth.createUser({
@@ -17,6 +17,8 @@ export async function createUserService({ email, password, displayName, role = "
     // 2. Assigner le rôle (Custom User Claims)
     await adminAuth.setCustomUserClaims(userRecord.uid, { role });
 
+    const finalAcademicYear = academicYear || schoolYear || "";
+
     // 3. Enregistrer dans la collection Firestore `users`
     const userData = {
       uid: userRecord.uid,
@@ -24,6 +26,12 @@ export async function createUserService({ email, password, displayName, role = "
       displayName,
       role,
       department,
+      phone,
+      ...(className && { className }),
+      ...(assignedClass && { assignedClass }),
+      ...(dateOfBirth && { dateOfBirth }),
+      ...(placeOfBirth && { placeOfBirth }),
+      ...(finalAcademicYear && { academicYear: finalAcademicYear, schoolYear: finalAcademicYear }),
       childrenUids: Array.isArray(childrenUids) ? childrenUids : [],
       parentUids: [],
       dataTermsAccepted: false,
@@ -55,6 +63,7 @@ export async function createUserService({ email, password, displayName, role = "
         displayName: userRecord.displayName,
         role,
         department,
+      
         childrenUids: userData.childrenUids
       }
     };
@@ -141,12 +150,20 @@ export async function getLinkedChildrenService(parentUid) {
 
 /**
  * Obtenir la liste de tous les utilisateurs (pour l'admin / RH)
+ * @param {string} requesterRole - Le rôle de l'utilisateur qui fait la requête
  */
-export async function getAllUsersService() {
+export async function getAllUsersService(requesterRole = "admin") {
   try {
     const snapshot = await adminDb.collection("users").get();
     const users = [];
-    snapshot.forEach(doc => users.push(doc.data()));
+    const normalizedRequester = String(requesterRole || "").trim().toLowerCase();
+    snapshot.forEach(doc => {
+      const userData = doc.data();
+      const userRole = String(userData.role || "").trim().toLowerCase();
+      // Le RH ne peut pas voir les comptes admin
+      if (normalizedRequester === "rh" && userRole === "admin") return;
+      users.push(userData);
+    });
     return { success: true, data: users };
   } catch (error) {
     return { success: false, error: error.message };

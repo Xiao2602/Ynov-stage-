@@ -6,7 +6,8 @@ import {
   getDocumentService,
   deleteDocumentService,
   archiveDocumentService,
-  unarchiveDocumentService
+  unarchiveDocumentService,
+  transferDocumentService
 } from "../Services/documentService.js";
 
 /*
@@ -287,6 +288,24 @@ export async function handleDeleteDocument(req, res) {
     return res.status(500).json({
       success: false,
       error: "Impossible de supprimer le document."
+    });
+  }
+}
+
+export async function handleTransferDocument(req, res) {
+  try {
+    const result = await transferDocumentService({
+      documentId: req.params.id,
+      recipientUid: req.body?.recipientUid,
+      user: req.user
+    });
+
+    return res.status(result.success ? 200 : 400).json(result);
+  } catch (error) {
+    console.error("Erreur transfert document :", error);
+    return res.status(500).json({
+      success: false,
+      error: "Impossible de transférer le document."
     });
   }
 }

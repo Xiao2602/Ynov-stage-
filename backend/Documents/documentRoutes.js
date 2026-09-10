@@ -9,7 +9,8 @@ import {
   handleDownloadDocument,
   handleDeleteDocument,
   handleArchiveDocument,
-  handleUnarchiveDocument
+  handleUnarchiveDocument,
+  handleTransferDocument
 } from "./Controllers/documentController.js";
 
 import {
@@ -141,6 +142,12 @@ router.patch(
   "/:id/unarchive",
   authenticateToken,
   handleUnarchiveDocument
+);
+
+router.patch(
+  "/:id/transfer",
+  authenticateToken,
+  handleTransferDocument
 );
 
 /*
