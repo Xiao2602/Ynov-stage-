@@ -303,11 +303,61 @@ describe("🧪 SUITE DE TESTS : Module Documents (Backend 1)", () => {
 
   /*
   |--------------------------------------------------------------------------
-  | 8. SUPPRESSION
+  | 8. TRANSFERT DE DOCUMENT & VALIDATION DES DROITS
   |--------------------------------------------------------------------------
   */
 
-  it("🗑️ 12. Suppression d'un document (DELETE /:id)", async () => {
+  it("📤 13. Transfert d'un document par le parent à son enfant lié et consultation par le destinataire", async () => {
+    // 1. Le parent transfère testPdfDocId à son enfant studentUid
+    const transferRes = await fetch(`${BASE_URL}/documents/${testPdfDocId}/transfer`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${parentToken}`
+      },
+      body: JSON.stringify({ recipientUid: studentUid })
+    });
+    const transferData = await transferRes.json();
+    assert.strictEqual(transferRes.status, 200);
+    assert.strictEqual(transferData.success, true);
+
+    // 2. L'enfant destinataire voit le document dans ses documents
+    const recipientListRes = await fetch(`${BASE_URL}/documents/my`, {
+      headers: { Authorization: `Bearer ${studentToken}` }
+    });
+    const recipientListData = await recipientListRes.json();
+    assert.strictEqual(recipientListRes.status, 200);
+    const transferredDoc = recipientListData.data.find(d => d.id === testPdfDocId);
+    assert.ok(transferredDoc, "Le document transféré doit apparaître dans la liste du destinataire");
+    assert.strictEqual(transferredDoc.status, "transferred");
+
+    // 3. L'enfant destinataire peut télécharger le document
+    const downloadRes = await fetch(`${BASE_URL}/documents/${testPdfDocId}/download`, {
+      headers: { Authorization: `Bearer ${studentToken}` }
+    });
+    assert.strictEqual(downloadRes.status, 200);
+  });
+
+  it("🚫 14. Rejet de transfert par le parent vers un destinataire non autorisé", async () => {
+    const res = await fetch(`${BASE_URL}/documents/${testPdfDocId}/transfer`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${parentToken}`
+      },
+      body: JSON.stringify({ recipientUid: otherStudentUid })
+    });
+    const data = await res.json();
+    assert.strictEqual(data.success, false);
+  });
+
+  /*
+  |--------------------------------------------------------------------------
+  | 9. SUPPRESSION
+  |--------------------------------------------------------------------------
+  */
+
+  it("🗑️ 15. Suppression d'un document (DELETE /:id)", async () => {
     const res = await fetch(`${BASE_URL}/documents/${testJpegDocId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${studentToken}` }
