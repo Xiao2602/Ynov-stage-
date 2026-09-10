@@ -488,6 +488,23 @@ export async function getDocumentRequestsQueueService(filters = {}, user) {
     );
   }
 
+  // Filtre Département / Filière
+  if (filters.department && filters.department !== "all") {
+    const targetDept = filters.department.toLowerCase().trim();
+    requests = requests.filter(r =>
+      String(r.department || "").toLowerCase().includes(targetDept) ||
+      String(r.className || "").toLowerCase().includes(targetDept)
+    );
+  }
+
+  // Filtre Classe / Promotion
+  if (filters.className && filters.className !== "all") {
+    const targetClass = filters.className.toLowerCase().trim();
+    requests = requests.filter(r =>
+      String(r.className || "").toLowerCase().includes(targetClass)
+    );
+  }
+
   // Calcul enrichi pour l'archivage automatique (1 semaine après validation ou refus)
   const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
   requests = requests.map(r => {

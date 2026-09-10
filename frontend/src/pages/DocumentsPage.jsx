@@ -238,6 +238,11 @@ export default function DocumentsPage() {
   const [recipients, setRecipients] = useState([]);
   const [recipientsLoading, setRecipientsLoading] = useState(false);
 
+  /* Profil Parent : Multi-enfants */
+  const [childrenList, setChildrenList] = useState([]);
+  const [selectedChildUid, setSelectedChildUid] = useState("all");
+  const [uploadTargetStudentUid, setUploadTargetStudentUid] = useState("");
+
   /* Pagination (côté client) */
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -249,7 +254,25 @@ export default function DocumentsPage() {
     }, 3500);
   }
 
-
+  /*
+  |--------------------------------------------------------------------------
+  | CHARGEMENT DES ENFANTS (PROFIL PARENT)
+  |--------------------------------------------------------------------------
+  */
+  useEffect(() => {
+    if (role === "parent") {
+      apiFetch("/api/users/my-children")
+        .then((res) => {
+          if (res?.success && Array.isArray(res.children)) {
+            setChildrenList(res.children);
+            if (res.children.length > 0) {
+              setUploadTargetStudentUid(res.children[0].uid);
+            }
+          }
+        })
+        .catch((err) => console.error("Erreur chargement enfants :", err));
+    }
+  }, [role]);
 
   /*
   |--------------------------------------------------------------------------
@@ -299,6 +322,10 @@ export default function DocumentsPage() {
           "archived",
           "true"
         );
+      }
+
+      if (role === "parent" && selectedChildUid && selectedChildUid !== "all") {
+        params.set("studentUid", selectedChildUid);
       }
 
       const query =
@@ -353,13 +380,14 @@ export default function DocumentsPage() {
     search,
     categoryFilter,
     archiveFilter,
-    originFilter
+    originFilter,
+    selectedChildUid
   ]);
 
   // reset page when filters/search change
   useEffect(() => {
     setPage(1);
-  }, [search, categoryFilter, archiveFilter, originFilter]);
+  }, [search, categoryFilter, archiveFilter, originFilter, selectedChildUid]);
 
   /*
   |--------------------------------------------------------------------------
@@ -372,6 +400,9 @@ export default function DocumentsPage() {
     setSelectedCategory("");
     setUploadError("");
     setUploadSuccess("");
+    if (role === "parent" && childrenList.length > 0) {
+      setUploadTargetStudentUid(selectedChildUid !== "all" ? selectedChildUid : childrenList[0].uid);
+    }
     setUploadOpen(true);
 
     if (fileInputRef.current) {
@@ -493,6 +524,10 @@ export default function DocumentsPage() {
         "category",
         selectedCategory
       );
+
+      if (role === "parent" && uploadTargetStudentUid) {
+        formData.append("studentUid", uploadTargetStudentUid);
+      }
 
       const result =
         await apiFetch(
@@ -782,6 +817,80 @@ export default function DocumentsPage() {
           Importer un document
         </button>
       </div>
+
+      {/* SÉLECTEUR MULTI-ENFANTS POUR LE PROFIL PARENT */}
+      {role === "parent" && childrenList.length > 0 && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          marginBottom: "20px",
+          padding: "12px 16px",
+          background: "#ffffff",
+          border: "1px solid #e2e8f0",
+          borderRadius: "12px",
+          boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
+          flexWrap: "wrap"
+        }}>
+          <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#334155", display: "flex", alignItems: "center", gap: "6px" }}>
+            👨‍👦 Consulter pour :
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedChildUid("all")}
+            style={{
+              padding: "6px 14px",
+              borderRadius: "20px",
+              border: selectedChildUid === "all" ? "1px solid #0ea5e9" : "1px solid #e2e8f0",
+              background: selectedChildUid === "all" ? "#0ea5e9" : "#f8fafc",
+              color: selectedChildUid === "all" ? "#ffffff" : "#475569",
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              cursor: "pointer",
+              transition: "all 0.15s ease-in-out"
+            }}
+          >
+            Tous mes enfants ({childrenList.length})
+          </button>
+          {childrenList.map((child) => {
+            const isSelected = selectedChildUid === child.uid;
+            return (
+              <button
+                key={child.uid}
+                type="button"
+                onClick={() => setSelectedChildUid(child.uid)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "6px 14px",
+                  borderRadius: "20px",
+                  border: isSelected ? "1px solid #0ea5e9" : "1px solid #e2e8f0",
+                  background: isSelected ? "#0ea5e9" : "#f8fafc",
+                  color: isSelected ? "#ffffff" : "#475569",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.15s ease-in-out"
+                }}
+              >
+                <span>🎓 {child.displayName || child.email?.split("@")[0]}</span>
+                {child.className && (
+                  <span style={{
+                    fontSize: "0.72rem",
+                    padding: "2px 6px",
+                    borderRadius: "10px",
+                    background: isSelected ? "rgba(255,255,255,0.25)" : "#e2e8f0",
+                    color: isSelected ? "#ffffff" : "#64748b"
+                  }}>
+                    {child.className}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* MESSAGE */}
 
@@ -1272,6 +1381,29 @@ export default function DocumentsPage() {
                   </div>
                 )}
               </div>
+
+              {/* CHOIX DE L'ENFANT (PROFIL PARENT) */}
+              {role === "parent" && childrenList.length > 0 && (
+                <div className="field-group">
+                  <label className="field-label" htmlFor="upload-target-child">
+                    Document pour l'enfant :
+                  </label>
+                  <select
+                    id="upload-target-child"
+                    className="field-input"
+                    value={uploadTargetStudentUid}
+                    onChange={(e) => setUploadTargetStudentUid(e.target.value)}
+                    disabled={uploadLoading}
+                    required
+                  >
+                    {childrenList.map((child) => (
+                      <option key={child.uid} value={child.uid}>
+                        {child.displayName || child.email?.split("@")[0]} {child.className ? `(${child.className})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* CATÉGORIE */}
 

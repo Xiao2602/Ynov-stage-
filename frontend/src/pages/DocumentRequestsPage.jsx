@@ -24,7 +24,7 @@ function buildFormalMessage(type, userName) {
 }
 
 export default function DocumentRequestsPage() {
-  const { user, backendUser } = useAuth();
+  const { user, backendUser, role } = useAuth();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -36,7 +36,12 @@ export default function DocumentRequestsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'info' });
 
-  const userName = user?.displayName || backendUser?.displayName || user?.email || 'Étudiant';
+  /* Profil Parent : Multi-enfants */
+  const [childrenList, setChildrenList] = useState([]);
+  const [selectedChildUid, setSelectedChildUid] = useState('all');
+  const [targetStudentUid, setTargetStudentUid] = useState('');
+
+  const userName = user?.displayName || backendUser?.displayName || user?.email?.split('@')[0] || 'Étudiant';
   const [message, setMessage] = useState(buildFormalMessage(documentTypes[0], userName));
 
   const showToast = (msg, toastType = 'success') => {
@@ -44,10 +49,30 @@ export default function DocumentRequestsPage() {
     setTimeout(() => setToast({ message: '', type: 'info' }), 3500);
   };
 
+  useEffect(() => {
+    if (role === 'parent') {
+      apiFetch('/api/users/my-children')
+        .then((res) => {
+          if (res?.success && Array.isArray(res.children)) {
+            setChildrenList(res.children);
+            if (res.children.length > 0) {
+              setTargetStudentUid(res.children[0].uid);
+            }
+          }
+        })
+        .catch((err) => console.error('Erreur chargement enfants :', err));
+    }
+  }, [role]);
+
   const loadRequests = async () => {
     try {
       setLoading(true);
-      const res = await apiFetch('/api/document-requests/my');
+      const params = new URLSearchParams();
+      if (role === 'parent' && selectedChildUid && selectedChildUid !== 'all') {
+        params.set('studentUid', selectedChildUid);
+      }
+      const query = params.toString();
+      const res = await apiFetch(`/api/document-requests/my${query ? `?${query}` : ''}`);
       if (res && res.success) {
         setRequests(res.data || res.requests || []);
       }
@@ -61,7 +86,7 @@ export default function DocumentRequestsPage() {
 
   useEffect(() => {
     loadRequests();
-  }, []);
+  }, [selectedChildUid]);
 
   const filteredRequests = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -69,13 +94,17 @@ export default function DocumentRequestsPage() {
       const typeStr = request.type || request.documentType || '';
       const statusStr = request.statusLabel || request.status || '';
       const msgStr = request.message || '';
-      return `${request.id} ${typeStr} ${statusStr} ${msgStr}`.toLowerCase().includes(query);
+      const studentStr = request.studentName || request.requesterName || '';
+      return `${request.id} ${typeStr} ${statusStr} ${msgStr} ${studentStr}`.toLowerCase().includes(query);
     });
   }, [requests, search]);
 
   const openModal = () => {
     setType(documentTypes[0]);
     setUrgency('normal');
+    if (role === 'parent' && childrenList.length > 0) {
+      setTargetStudentUid(selectedChildUid !== 'all' ? selectedChildUid : childrenList[0].uid);
+    }
     setMessage(buildFormalMessage(documentTypes[0], userName));
     setIsModalOpen(true);
   };
@@ -90,14 +119,19 @@ export default function DocumentRequestsPage() {
 
     try {
       setSubmitting(true);
+      const payload = {
+        type,
+        documentType: type,
+        message,
+        urgency
+      };
+      if (role === 'parent' && targetStudentUid) {
+        payload.studentUid = targetStudentUid;
+      }
+
       const res = await apiFetch('/api/document-requests', {
         method: 'POST',
-        body: JSON.stringify({
-          type,
-          documentType: type,
-          message,
-          urgency
-        })
+        body: JSON.stringify(payload)
       });
 
       if (res && res.success) {
@@ -233,6 +267,80 @@ export default function DocumentRequestsPage() {
         </button>
       </header>
 
+      {/* SÉLECTEUR MULTI-ENFANTS POUR LE PROFIL PARENT */}
+      {role === 'parent' && childrenList.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          marginBottom: '20px',
+          padding: '12px 16px',
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '12px',
+          boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)',
+          flexWrap: 'wrap'
+        }}>
+          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            👨‍👦 Demandes pour :
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedChildUid('all')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              border: selectedChildUid === 'all' ? '1px solid #0ea5e9' : '1px solid #e2e8f0',
+              background: selectedChildUid === 'all' ? '#0ea5e9' : '#f8fafc',
+              color: selectedChildUid === 'all' ? '#ffffff' : '#475569',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease-in-out'
+            }}
+          >
+            Tous mes enfants ({childrenList.length})
+          </button>
+          {childrenList.map((child) => {
+            const isSelected = selectedChildUid === child.uid;
+            return (
+              <button
+                key={child.uid}
+                type="button"
+                onClick={() => setSelectedChildUid(child.uid)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  border: isSelected ? '1px solid #0ea5e9' : '1px solid #e2e8f0',
+                  background: isSelected ? '#0ea5e9' : '#f8fafc',
+                  color: isSelected ? '#ffffff' : '#475569',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease-in-out'
+                }}
+              >
+                <span>🎓 {child.displayName || child.email?.split('@')[0]}</span>
+                {child.className && (
+                  <span style={{
+                    fontSize: '0.72rem',
+                    padding: '2px 6px',
+                    borderRadius: '10px',
+                    background: isSelected ? 'rgba(255,255,255,0.25)' : '#e2e8f0',
+                    color: isSelected ? '#ffffff' : '#64748b'
+                  }}>
+                    {child.className}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="document-requests-toolbar">
         <span>
           <IconInbox /> {filteredRequests.length} demande{filteredRequests.length > 1 ? 's' : ''}
@@ -270,6 +378,11 @@ export default function DocumentRequestsPage() {
                 <small>{request.id} · {dateStr}</small>
                 <h2>{request.type || request.documentType}</h2>
                 <p>{request.message}</p>
+                {request.studentName && role === 'parent' && (
+                  <small style={{ color: '#0ea5e9', display: 'block', marginTop: '2px', fontWeight: 600 }}>
+                    🎓 Étudiant : {request.studentName} {request.className ? `(${request.className})` : ''}
+                  </small>
+                )}
                 {request.rejectionReason && (
                   <p style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: '4px' }}>
                     Motif du refus : {request.rejectionReason}
@@ -315,6 +428,23 @@ export default function DocumentRequestsPage() {
               </button>
             </div>
             <form onSubmit={handleSubmit}>
+              {role === 'parent' && childrenList.length > 0 && (
+                <label style={{ marginBottom: '12px' }}>
+                  Demande pour l'enfant
+                  <select
+                    value={targetStudentUid}
+                    onChange={(e) => setTargetStudentUid(e.target.value)}
+                    required
+                  >
+                    {childrenList.map((child) => (
+                      <option key={child.uid} value={child.uid}>
+                        {child.displayName || child.email?.split('@')[0]} {child.className ? `(${child.className})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
               <label>
                 Type de document
                 <select

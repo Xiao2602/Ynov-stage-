@@ -32,6 +32,7 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
   const [typeFilter, setTypeFilter]       = useState('all');
   const [statusFilter, setStatusFilter]   = useState('all');
   const [archiveFilter, setArchiveFilter] = useState('all');
+  const [departmentFilter, setDepartmentFilter] = useState('all');
   const [activeTab, setActiveTab]           = useState(generatedOnly ? 'generated' : initialTab);
 
   // Modals
@@ -47,6 +48,16 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
   useEffect(() => {
     setActiveTab(generatedOnly ? 'generated' : initialTab);
   }, [generatedOnly, initialTab]);
+
+  // Si le compte connecté est un manager/employé avec un département spécifique, pré-sélectionner sa filière
+  useEffect(() => {
+    if (backendUser?.department) {
+      const dept = backendUser.department.trim();
+      if (dept && !['direction', 'administration', 'rh', 'global'].includes(dept.toLowerCase())) {
+        setDepartmentFilter(dept);
+      }
+    }
+  }, [backendUser]);
 
   // Documents générés localement (cache temporaire par requestId)
   const [generatedDocs, setGeneratedDocs] = useState({});
@@ -87,25 +98,36 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
     [requests]
   );
 
+  const departmentOptions = useMemo(() => {
+    const standard = ['Informatique', '3D / Animation', 'Création & Design', 'Marketing & Communication', 'Audiovisuel'];
+    const fromRequests = requests.map((r) => r.department || r.className).filter(Boolean);
+    return [...new Set([...standard, ...fromRequests])].sort();
+  }, [requests]);
+
   const filteredRequests = useMemo(() => {
     const query = search.trim().toLowerCase();
     return requests.filter((request) => {
       const typeStr   = request.type || request.documentType || '';
-      const nameStr   = request.requesterName || request.student || '';
+      const nameStr   = request.studentName || request.requesterName || request.student || '';
       const idStr     = request.id || '';
       const statusStr = request.status || '';
+      const deptStr   = request.department || '';
+      const classStr  = request.className || '';
 
-      const matchesSearch  = `${nameStr} ${typeStr} ${idStr}`.toLowerCase().includes(query);
+      const matchesSearch  = `${nameStr} ${typeStr} ${idStr} ${deptStr} ${classStr}`.toLowerCase().includes(query);
       const matchesType    = typeFilter === 'all' || typeStr === typeFilter;
       const matchesStatus  = statusFilter === 'all' || statusStr === statusFilter;
+      const matchesDept    = departmentFilter === 'all' ||
+        deptStr.toLowerCase().includes(departmentFilter.toLowerCase()) ||
+        classStr.toLowerCase().includes(departmentFilter.toLowerCase());
       const matchesArchive = archiveFilter === 'all'
         ? true
         : archiveFilter === 'archived'
           ? Boolean(request.archived)
           : !request.archived;
-      return matchesSearch && matchesType && matchesStatus && matchesArchive;
+      return matchesSearch && matchesType && matchesStatus && matchesDept && matchesArchive;
     });
-  }, [requests, search, statusFilter, typeFilter, archiveFilter]);
+  }, [requests, search, statusFilter, typeFilter, archiveFilter, departmentFilter]);
 
   const generatedRequests = useMemo(() => requests.filter((request) => (
     request.generated === true ||
@@ -423,6 +445,11 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
           />
         </label>
 
+        <select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value)} aria-label="Filtrer par filière / département">
+          <option value="all">Toutes les filières / départements</option>
+          {departmentOptions.map((dept) => <option key={dept} value={dept}>{dept}</option>)}
+        </select>
+
         <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} aria-label="Filtrer par type de document">
           <option value="all">Tous les types de document</option>
           {typeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -469,8 +496,25 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
                 <div>
                   <p className="document-request-id">{request.id}</p>
                   <h2>{request.type || request.documentType}</h2>
-                  <p className="document-request-student">
-                    <strong>{request.requesterName}</strong> ({request.requesterEmail})
+                  <p className="document-request-student" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                    <strong>{request.studentName || request.requesterName}</strong>
+                    {request.requesterEmail && <span style={{ color: '#64748b', fontSize: '0.74rem' }}>({request.requesterEmail})</span>}
+                    {(request.department || request.className) && (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        background: '#e0f2fe',
+                        color: '#0369a1',
+                        border: '1px solid #bae6fd',
+                        fontSize: '0.68rem',
+                        fontWeight: 700
+                      }}>
+                        🎓 {request.department ? `${request.department} ` : ''}{request.className ? `· ${request.className}` : ''}
+                      </span>
+                    )}
                   </p>
                   <p className="document-request-dates">
                     Reçu le {submittedStr}

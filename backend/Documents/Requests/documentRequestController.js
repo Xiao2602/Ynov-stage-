@@ -68,6 +68,11 @@ export async function handleGetDocumentRequestsQueue(req, res) {
       assignedTo: req.query.assignedTo,
       type: req.query.type,
       search: req.query.search,
+      department: req.query.department,
+      className: req.query.className,
+      from: req.query.from,
+      to: req.query.to,
+      archived: req.query.archived,
       page: req.query.page,
       limit: req.query.limit
     };
