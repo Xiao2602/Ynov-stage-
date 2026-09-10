@@ -582,11 +582,6 @@ export async function assignDocumentRequestService(requestId, body, user) {
  * 7. APPROUVER UNE DEMANDE (AVEC DOCUMENT ASSOCIÉ)
  */
 export async function approveDocumentRequestService(requestId, body, user) {
-  return {
-    success: false,
-    error: "La demande est validée uniquement lors du transfert du document."
-  };
-
   const validation = validateApproveDocumentRequest(body);
   if (!validation.valid) {
     return { success: false, error: validation.error };
