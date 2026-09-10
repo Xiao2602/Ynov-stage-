@@ -57,7 +57,7 @@ export async function authenticateToken(req, res, next) {
 
       customClaims = {
         role: decodedToken.role || inferredRole,
-        childrenUids: inferredRole === "parent" ? ["WSNKoWoLQgRCpp43tfQDx9sVrOy2"] : []
+        childrenUids: decodedToken.childrenUids || (inferredRole === "parent" ? ["WSNKoWoLQgRCpp43tfQDx9sVrOy2"] : [])
       };
     }
 
