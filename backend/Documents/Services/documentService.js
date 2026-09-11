@@ -130,8 +130,16 @@ export async function getUserChildrenUids(user) {
 
 export async function canUserAccessDocument(user, document) {
   if (!user || !document) return false;
-  if (user.role === ROLES.ADMIN || user.role === ROLES.RH || user.role === ROLES.MANAGER) return true;
-  if (document.uid === user.uid || document.recipientUid === user.uid || document.uploadedBy === user.uid) return true;
+  if (user.role === ROLES.ADMIN || user.role === "super_admin") return true;
+  if (
+    document.uid === user.uid ||
+    document.recipientUid === user.uid ||
+    document.uploadedBy === user.uid ||
+    document.transferredBy === user.uid ||
+    document.transferredTo === user.uid
+  ) {
+    return true;
+  }
 
   if (user.role === ROLES.PARENT) {
     const childrenUids = await getUserChildrenUids(user);
@@ -316,8 +324,8 @@ export async function getMyDocumentsService(
     }
   }
 
-  const isStaff = (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.RH) && !filters.studentUid;
-  if ((currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.RH) && filters.studentUid) {
+  const isAdmin = (currentUser.role === ROLES.ADMIN || currentUser.role === "super_admin") && !filters.studentUid;
+  if ((currentUser.role === ROLES.ADMIN || currentUser.role === "super_admin") && filters.studentUid) {
     allowedOwnerUids = [filters.studentUid];
   }
 
@@ -331,8 +339,9 @@ export async function getMyDocumentsService(
         try {
           const content = await fs.readFile(path.join(META_DIR, file), "utf8");
           const parsed = JSON.parse(content);
-          const isOwner = allowedOwnerUids.includes(parsed.uid) || (parsed.studentUid && allowedOwnerUids.includes(parsed.studentUid)) || parsed.uploadedBy === uid;
-          if (isStaff || isOwner || parsed.recipientUid === uid) {
+          const isOwner = allowedOwnerUids.includes(parsed.uid) || (parsed.studentUid && allowedOwnerUids.includes(parsed.studentUid)) || parsed.uploadedBy === uid || parsed.transferredBy === uid;
+          const isRecipient = parsed.recipientUid === uid || parsed.transferredTo === uid;
+          if (isAdmin || isOwner || isRecipient) {
             docMap.set(parsed.id, parsed);
           }
         } catch (e) {}
@@ -392,9 +401,9 @@ export async function getMyDocumentsService(
           const isTransferredRecipient = Boolean(request.transferredAt) && (request.transferredTo === uid || isOwner);
           const isGenerated = request.generated === true || String(request.documentId || "").startsWith("generated-");
 
-          // Pour un non-staff (étudiant / parent) : le document DOIT avoir été transféré (transferredAt)
-          if (!isStaff && (!request.transferredAt || !isTransferredRecipient)) continue;
-          if (isStaff && !isOwner && !isTransferredRecipient) continue;
+          // Pour un non-admin (étudiant / parent / staff sans transfert) : le document DOIT avoir été transféré
+          if (!isAdmin && (!request.transferredAt || !isTransferredRecipient)) continue;
+          if (isAdmin && !isOwner && !isTransferredRecipient) continue;
           if (!isGenerated || !request.documentId) continue;
 
           // Si le document est déjà dans docMap (via META_DIR pour les docs importés réels),
@@ -430,12 +439,13 @@ export async function getMyDocumentsService(
   // 4. Firestore
   if (adminDb) {
     try {
-      const isStaffWithoutStudent = (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.RH) && !filters.studentUid;
-      const snapshotsPromise = isStaffWithoutStudent
+      const isAdminWithoutStudent = (currentUser.role === ROLES.ADMIN || currentUser.role === "super_admin") && !filters.studentUid;
+      const snapshotsPromise = isAdminWithoutStudent
         ? Promise.all([adminDb.collection("documents").get()])
         : Promise.all([
           adminDb.collection("documents").where("uid", "in", allowedOwnerUids.slice(0, 10)).get(),
-          adminDb.collection("documents").where("recipientUid", "==", uid).get()
+          adminDb.collection("documents").where("recipientUid", "==", uid).get(),
+          adminDb.collection("documents").where("transferredBy", "==", uid).get()
         ]);
 
       const snapshots = await Promise.race([
@@ -445,7 +455,7 @@ export async function getMyDocumentsService(
       for (const snapshot of snapshots || []) {
         for (const doc of snapshot?.docs || []) {
           const data = doc.data();
-          if (isStaffWithoutStudent || data.uid === uid || data.recipientUid === uid) {
+          if (isAdminWithoutStudent || allowedOwnerUids.includes(data.uid) || data.recipientUid === uid || data.transferredBy === uid || data.uploadedBy === uid) {
             docMap.set(doc.id, { id: doc.id, ...data });
           }
         }
