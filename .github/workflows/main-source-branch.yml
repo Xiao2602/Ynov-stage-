@@ -1,0 +1,24 @@
+name: Validate release source
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  only-develop-can-release:
+    name: Only develop can target main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate source branch
+        env:
+          SOURCE_BRANCH: ${{ github.head_ref }}
+        run: |
+          if [ "$SOURCE_BRANCH" != "develop" ]; then
+            echo "A Pull Request to main must come from develop. Current source: $SOURCE_BRANCH"
+            exit 1
+          fi
+          echo "Release source is valid: develop"

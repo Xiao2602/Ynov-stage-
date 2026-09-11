@@ -87,3 +87,14 @@ VITE_API_URL=http://localhost:5000/api
 - Les clés privées, `.env`, comptes de service Firebase, documents locaux et `node_modules` sont ignorés par Git.
 - Les permissions ne doivent jamais être accordées uniquement par le frontend : le backend applique les rôles et contrôles d’accès.
 - En cas de partage accidentel d’une clé secrète, révoquez-la puis créez-en une nouvelle immédiatement.
+
+## Flux Git de l’équipe
+
+```text
+feature/...  →  develop  →  main
+```
+
+- Chaque membre travaille dans sa branche `feature/...` et ouvre une Pull Request vers `develop`.
+- `main` représente uniquement la version stable. Une Pull Request vers `main` doit obligatoirement venir de `develop` ; le contrôle GitHub `Validate release source` bloque toute autre branche.
+- La fusion de `develop` vers `main` doit être revue et approuvée par au moins un membre de l’équipe avant fusion.
+- Pour annuler une livraison instable, utilisez le bouton **Revert** de la Pull Request fusionnée dans GitHub : cela crée une nouvelle Pull Request de retour arrière, traçable et soumise à la même revue.
