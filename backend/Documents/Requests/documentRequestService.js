@@ -169,16 +169,78 @@ export async function createDocumentRequestService({ user, body }) {
     ]).catch(() => {});
   }
 
-  // Création d'une notification pour l'utilisateur
+  // 1. Notification de confirmation pour l'étudiant / parent
   try {
     await createNotificationService({
       userId: user.uid,
       title: "Demande de document enregistrée",
-      message: `Votre demande (${type}) a bien été transmise sous la référence ${requestId}.`,
+      message: `Votre demande (${type}) a bien été transmise aux services RH / Managers sous la référence ${requestId}.`,
       type: "document_request",
       relatedId: requestId
     });
   } catch (e) {}
+
+  // 2. Notification ciblée pour les RH et Managers (l'Admin n'est pas notifié directement car son rôle est la supervision globale)
+  if (adminDb) {
+    try {
+      const usersSnapshot = await Promise.race([
+        adminDb.collection("users").get(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 1500))
+      ]);
+
+      if (usersSnapshot?.docs) {
+        const rhUsers = [];
+        const managerUsers = [];
+
+        usersSnapshot.docs.forEach((doc) => {
+          const uData = doc.data();
+          const uRole = uData.role;
+          const uDept = String(uData.department || "").toLowerCase().trim();
+
+          // RH : rôle RH ou employé du département RH / Administration
+          if (uRole === ROLES.RH || (uRole === ROLES.EMPLOYEE && (uDept.includes("rh") || uDept.includes("ressources humaines") || uDept.includes("administration")))) {
+            rhUsers.push({ uid: doc.id, ...uData });
+          }
+
+          // Manager : rôle Manager
+          if (uRole === ROLES.MANAGER) {
+            managerUsers.push({ uid: doc.id, ...uData });
+          }
+        });
+
+        // Notifications aux agents RH
+        for (const rh of rhUsers) {
+          createNotificationService({
+            userId: rh.uid,
+            title: `Nouvelle demande de document : ${type}`,
+            message: `${studentName} (${className || department || 'Étudiant'}) a soumis une demande de document administratif : ${type} (${requestId}).`,
+            type: "document_request_pending",
+            relatedId: requestId
+          }).catch(() => {});
+        }
+
+        // Notifications aux Managers (priorité à la filière de l'étudiant, sinon tous les managers)
+        const studentDeptLower = String(department || "").toLowerCase();
+        const studentClassLower = String(className || "").toLowerCase();
+        const matchingManagers = managerUsers.filter(m => {
+          const mDept = String(m.department || "").toLowerCase();
+          return mDept && (studentDeptLower.includes(mDept) || studentClassLower.includes(mDept) || mDept.includes(studentDeptLower));
+        });
+
+        const targetManagers = matchingManagers.length > 0 ? matchingManagers : managerUsers;
+
+        for (const mgr of targetManagers) {
+          createNotificationService({
+            userId: mgr.uid,
+            title: `Demande de document — Filière ${department || 'Générale'}`,
+            message: `${studentName} (${className || department || 'Étudiant'}) a demandé : ${type} (${requestId}).`,
+            type: "document_request_pending",
+            relatedId: requestId
+          }).catch(() => {});
+        }
+      }
+    } catch (err) {}
+  }
 
   return {
     success: true,
@@ -570,7 +632,7 @@ export async function assignDocumentRequestService(requestId, body, user) {
   const nowIso = new Date().toISOString();
 
   item.assignedTo = assignedTo;
-  item.assignedToName = assignedToName || user.displayName || "Agent RH";
+  item.assignedToName = assignedToName || user.displayName || (user.role === ROLES.MANAGER ? "Manager Filière" : user.role === ROLES.ADMIN ? "Superviseur Admin" : "Agent RH");
   item.status = DOCUMENT_REQUEST_STATUSES.IN_PROGRESS;
   item.statusLabel = "En cours";
   item.updatedAt = nowIso;

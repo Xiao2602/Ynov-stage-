@@ -210,7 +210,7 @@ export default function DashboardLayout() {
                   </NavLink>}
                   {canAccess(documentRoles.requests, role) && (
                     <NavLink to="/documents/demandes" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
-                      <div className="nav-icon"><IconInbox /></div><span>Demandes</span>
+                      <div className="nav-icon"><IconInbox /></div><span>{role === 'admin' ? 'Supervision des demandes' : (role === 'rh' || role === 'manager' || isAdministrativeStaff) ? 'Demandes à traiter' : 'Demandes'}</span>
                     </NavLink>
                   )}
                   {canAccess(documentRoles.generated, role) && (
