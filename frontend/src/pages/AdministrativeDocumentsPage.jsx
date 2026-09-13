@@ -23,7 +23,10 @@ import {
 import './AdministrativeDocumentsPage.css';
 
 export default function AdministrativeDocumentsPage({ initialTab = 'requests', generatedOnly = false, hideGeneratedTab = false }) {
-  const { user, backendUser } = useAuth();
+  const { user, backendUser, role } = useAuth();
+  const isAdmin = role === 'admin';
+  const isRh = role === 'rh';
+  const isManager = role === 'manager';
 
   /* ---- ÉTAT ---- */
   const [requests, setRequests]           = useState([]);
@@ -139,7 +142,8 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
   /* ---- ACTIONS PRISE EN CHARGE ---- */
   const handleAssign = async (requestId) => {
     try {
-      const agentName = user?.displayName || backendUser?.displayName || user?.email?.split('@')[0] || 'Agent RH';
+      const defaultLabel = isManager ? 'Manager Filière' : isAdmin ? 'Superviseur Admin' : 'Agent RH';
+      const agentName = user?.displayName || backendUser?.displayName || user?.email?.split('@')[0] || defaultLabel;
       const res = await apiFetch(`/api/document-requests/${requestId}/assign`, {
         method: 'PATCH',
         body: JSON.stringify({ assignedTo: user.uid, assignedToName: agentName })
@@ -398,19 +402,100 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
   /* ================================================================
      RENDU
      ================================================================ */
+  const headerKicker = isAdmin
+    ? 'Supervision & Audit Documentaire'
+    : isManager
+      ? `Pédagogie & Filière · ${backendUser?.department || 'Manager'}`
+      : 'Ressources Humaines & Secrétariat';
+
+  const headerTitle = activeTab === 'generated'
+    ? 'Documents générés'
+    : isAdmin
+      ? 'Supervision des demandes de documents'
+      : isManager
+        ? `Demandes de documents — ${backendUser?.department || 'Ma filière'}`
+        : 'Demandes à traiter (RH)';
+
+  const headerDesc = activeTab === 'generated'
+    ? 'Consultez les documents générés et leur état de transmission.'
+    : isAdmin
+      ? 'Vue globale de supervision — Contrôle et audit des flux documentaires traités par les RH et Managers de filière.'
+      : isManager
+        ? 'File d\'attente pédagogique — Validation et émission des documents pour les étudiants de votre filière.'
+        : 'File d\'attente opérationnelle — Traitement, génération et transmission des attestations et documents administratifs.';
+
   return (
     <section className="administrative-page">
       <header className="administrative-header">
         <div>
-          <p className="administrative-kicker">Gestion documentaire</p>
-          <h1>{activeTab === 'generated' ? 'Documents générés' : 'Demandes à traiter'}</h1>
-          <p>{activeTab === 'generated' ? 'Consultez les documents générés et leur état de transfert.' : 'File d\'attente des demandes de documents administratifs soumises par les étudiants.'}</p>
+          <p className="administrative-kicker">{headerKicker}</p>
+          <h1>{headerTitle}</h1>
+          <p>{headerDesc}</p>
         </div>
         <div className="administrative-summary">
           <strong>{activeTab === 'generated' ? generatedRequests.length : filteredRequests.length}</strong>
           <span>{activeTab === 'generated' ? 'document(s) généré(s)' : `demande${filteredRequests.length > 1 ? 's' : ''} affichée${filteredRequests.length > 1 ? 's' : ''}`}</span>
         </div>
       </header>
+
+      {/* BANDEAU DE SUPERVISION ADMIN */}
+      {isAdmin && activeTab === 'requests' && (
+        <div style={{
+          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          marginBottom: '20px',
+          color: '#ffffff',
+          border: '1px solid #334155',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.06)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '1.25rem' }}>🛡️</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc' }}>
+                  Tableau de Supervision Documentaire
+                </h3>
+                <p style={{ margin: 0, fontSize: '0.78rem', color: '#94a3b8' }}>
+                  Rôle superviseur : Les demandes sont traitées opérationnellement par les RH et Managers de filière.
+                </p>
+              </div>
+            </div>
+            <span style={{
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              padding: '3px 10px',
+              borderRadius: '20px',
+              background: 'rgba(6, 182, 212, 0.15)',
+              color: '#38bdf8',
+              border: '1px solid rgba(6, 182, 212, 0.3)'
+            }}>
+              Mode Superviseur Global
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
+            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Total demandes</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#ffffff', marginTop: '2px' }}>{requests.length}</div>
+            </div>
+            <div style={{ background: 'rgba(234, 179, 8, 0.1)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
+              <div style={{ fontSize: '0.72rem', color: '#fde047' }}>En attente d'agent</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fde047', marginTop: '2px' }}>{requests.filter(r => !r.assignedTo && r.status === 'pending').length}</div>
+            </div>
+            <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
+              <div style={{ fontSize: '0.72rem', color: '#7dd3fc' }}>En cours RH / Manager</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#7dd3fc', marginTop: '2px' }}>{requests.filter(r => r.status === 'in_progress').length}</div>
+            </div>
+            <div style={{ background: 'rgba(34, 197, 94, 0.1)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+              <div style={{ fontSize: '0.72rem', color: '#86efac' }}>Validées &amp; Prêtes</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#86efac', marginTop: '2px' }}>{requests.filter(r => r.status === 'approved').length}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!generatedOnly && !hideGeneratedTab && <div className="administrative-tabs" role="tablist" aria-label="Vues documentaires">
         <button
@@ -420,7 +505,7 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
           className={activeTab === 'requests' ? 'administrative-tab active' : 'administrative-tab'}
           onClick={() => setActiveTab('requests')}
         >
-          Demandes à traiter
+          {isAdmin ? 'Supervision des demandes' : 'Demandes à traiter'}
         </button>
         <button
           type="button"
