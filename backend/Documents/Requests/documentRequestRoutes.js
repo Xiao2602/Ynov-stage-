@@ -38,10 +38,10 @@ router.post("/", handleCreateDocumentRequest);
 // GET /api/document-requests/my - Lister ses demandes
 router.get("/my", handleGetMyDocumentRequests);
 
-// GET /api/document-requests/queue - File d'attente administrative (Admin / RH / Manager)
+// GET /api/document-requests/queue - File d'attente administrative (Admin / RH / Manager / Employé)
 router.get(
   "/queue",
-  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER, ROLES.EMPLOYEE),
   handleGetDocumentRequestsQueue
 );
 
@@ -56,47 +56,47 @@ router.patch("/:id/cancel", handleCancelDocumentRequest);
 
 /*
 |--------------------------------------------------------------------------
-| ROUTES GESTION ADMINISTRATIVE (ADMIN / RH / MANAGER)
+| ROUTES GESTION ADMINISTRATIVE (ADMIN / RH / MANAGER / EMPLOYÉ)
 |--------------------------------------------------------------------------
 */
 
 // PATCH /api/document-requests/:id/assign - Affecter une demande
 router.patch(
   "/:id/assign",
-  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER, ROLES.EMPLOYEE),
   handleAssignDocumentRequest
 );
 
 // PATCH /api/document-requests/:id/approve - Approuver une demande
 router.patch(
   "/:id/approve",
-  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER, ROLES.EMPLOYEE),
   handleApproveDocumentRequest
 );
 
 // PATCH /api/document-requests/:id/reject - Refuser une demande
 router.patch(
   "/:id/reject",
-  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER, ROLES.EMPLOYEE),
   handleRejectDocumentRequest
 );
 
 // PATCH /api/document-requests/:id/attach-document - Associer un document
 router.patch(
   "/:id/attach-document",
-  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER, ROLES.EMPLOYEE),
   handleAttachDocument
 );
 
 router.patch(
   "/:id/transfer",
-  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER, ROLES.EMPLOYEE),
   handleTransferGeneratedDocument
 );
 
 router.delete(
   "/:id",
-  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER, ROLES.EMPLOYEE),
   handleDeleteDocumentRequest
 );
 
@@ -109,7 +109,7 @@ router.patch(
 // PATCH /api/document-requests/:id/unarchive - Restaurer / désarchiver une demande
 router.patch(
   "/:id/unarchive",
-  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER),
+  authorizeRoles(ROLES.ADMIN, ROLES.RH, ROLES.MANAGER, ROLES.EMPLOYEE),
   handleUnarchiveDocumentRequest
 );
 

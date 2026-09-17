@@ -1,67 +1,123 @@
-import React, { useState } from 'react';
-import { IconBell, IconCheckCircle, IconAlertTriangle, IconInbox, IconClock } from '../components/Icons';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
+import { apiFetch } from '../api/api';
+import { IconBell, IconCheckCircle, IconAlertTriangle, IconInbox, IconClock, IconCheck, IconTrash } from '../components/Icons';
 
-const MOCK_NOTIFICATIONS = [
-  {
-    id: 1,
-    type: 'info',
-    title: 'Nouvelle absence enregistrée',
-    message: 'Votre absence du 18/08/2026 a bien été enregistrée et transmise au service pédagogique.',
-    date: 'Il y a 2 heures',
-    read: false,
-  },
-  {
-    id: 2,
-    type: 'success',
-    title: 'Demande approuvée',
-    message: 'Votre justificatif pour l\'absence du 12/08 a été validé par l\'administration.',
-    date: 'Il y a 5 heures',
-    read: false,
-  },
-  {
-    id: 3,
-    type: 'warning',
-    title: 'Document en attente',
-    message: 'Un document nécessite votre signature avant le 25/08/2026.',
-    date: 'Hier',
-    read: true,
-  },
-  {
-    id: 4,
-    type: 'info',
-    title: 'Mise à jour du planning',
-    message: 'Le planning de la semaine du 25/08 a été mis à jour. Consultez vos nouveaux horaires.',
-    date: 'Il y a 2 jours',
-    read: true,
-  },
-  {
-    id: 5,
-    type: 'success',
-    title: 'Profil mis à jour',
-    message: 'Vos informations personnelles ont été mises à jour avec succès.',
-    date: 'Il y a 3 jours',
-    read: true,
-  },
-];
-
-const typeConfig = {
-  info: { color: 'var(--ynov-teal)', bg: 'rgba(0, 180, 216, 0.1)', Icon: IconBell },
-  success: { color: '#059669', bg: 'rgba(5, 150, 105, 0.1)', Icon: IconCheckCircle },
-  warning: { color: '#d97706', bg: 'rgba(217, 119, 6, 0.1)', Icon: IconAlertTriangle },
+const formatDate = (timestamp) => {
+  if (!timestamp) return 'Date inconnue';
+  try {
+    if (typeof timestamp === 'object' && timestamp.seconds !== undefined) {
+      return new Date(timestamp.seconds * 1000).toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+      return new Date(timestamp).toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    if (timestamp?.toDate) {
+      return timestamp.toDate().toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    return 'Date inconnue';
+  } catch {
+    return 'Date inconnue';
+  }
 };
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const { role } = useAuth();
+  const navigate = useNavigate();
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // 'all' | 'unread'
 
-  const markAsRead = (id) => {
-    setNotifications(prev =>
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const data = await apiFetch('/notifications/my');
+      if (data?.success && Array.isArray(data.notifications)) {
+        const sorted = data.notifications.sort((a, b) => {
+          const dateA = a.createdAt?.seconds || 0;
+          const dateB = b.createdAt?.seconds || 0;
+          return dateB - dateA;
+        });
+        setNotifications(sorted);
+      }
+    } catch (err) {
+      console.error('Erreur chargement notifications :', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const markAsRead = async (id) => {
+    try {
+      const data = await apiFetch(`/notifications/${id}/read`, { method: 'PATCH' });
+      if (data?.success) {
+        setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+      }
+    } catch (e) {}
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      const data = await apiFetch('/notifications/read-all', { method: 'POST' });
+      if (data?.success) {
+        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      }
+    } catch (e) {}
+  };
+
+  const deleteNotification = async (id, e) => {
+    if (e) e.stopPropagation();
+    try {
+      const data = await apiFetch(`/notifications/${id}`, { method: 'DELETE' });
+      if (data?.success) {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+      }
+    } catch (e) {}
+  };
+
+  const handleNotificationClick = async (notif) => {
+    if (!notif.read) {
+      await markAsRead(notif.id);
+    }
+    const type = notif.type || '';
+    const relatedId = notif.relatedId || '';
+
+    if (type.includes('document_request') || type.includes('document')) {
+      navigate(`/documents/demandes${relatedId ? `?search=${encodeURIComponent(relatedId)}` : ''}`);
+    } else if (type.includes('absence')) {
+      if (['admin', 'rh', 'manager', 'employee'].includes(role)) {
+        navigate('/absences/demandes');
+      } else if (role === 'teacher') {
+        navigate('/pedagogie/absences');
+      } else {
+        navigate('/absences/mes-absences');
+      }
+    } else {
+      navigate('/dashboard');
+    }
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -184,7 +240,11 @@ export default function NotificationsPage() {
 
         {/* Notifications list */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {displayed.length === 0 ? (
+          {loading ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--ynov-text-muted)' }}>
+              Chargement des notifications...
+            </div>
+          ) : displayed.length === 0 ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--ynov-text-muted)' }}>
               <div style={{ width: '40px', height: '40px', margin: '0 auto 12px', opacity: 0.4 }}><IconBell /></div>
               <div style={{ fontWeight: '500' }}>Aucune notification</div>
@@ -194,12 +254,15 @@ export default function NotificationsPage() {
             </div>
           ) : (
             displayed.map((notif) => {
-              const config = typeConfig[notif.type] || typeConfig.info;
-              const { Icon } = config;
+              const isUrgent = String(notif.title || '').includes('URGENT');
+              const isAbsence = String(notif.type || '').includes('absence');
+              const iconColor = isUrgent ? '#ef4444' : isAbsence ? '#f59e0b' : '#0284c7';
+              const iconBg = isUrgent ? 'rgba(239, 68, 68, 0.1)' : isAbsence ? 'rgba(245, 158, 11, 0.1)' : 'rgba(2, 132, 199, 0.1)';
+
               return (
                 <div
                   key={notif.id}
-                  onClick={() => markAsRead(notif.id)}
+                  onClick={() => handleNotificationClick(notif)}
                   style={{
                     display: 'flex',
                     alignItems: 'flex-start',
@@ -208,7 +271,7 @@ export default function NotificationsPage() {
                     borderBottom: '1px solid var(--border-color)',
                     cursor: 'pointer',
                     background: notif.read ? 'transparent' : 'var(--bg-card-hover)',
-                    transition: 'background 0.15s ease',
+                    transition: 'all 0.15s ease',
                   }}
                   onMouseOver={(e) => e.currentTarget.style.background = 'var(--bg-card-hover)'}
                   onMouseOut={(e) => e.currentTarget.style.background = notif.read ? 'transparent' : 'var(--bg-card-hover)'}
@@ -219,29 +282,29 @@ export default function NotificationsPage() {
                     height: '36px',
                     minWidth: '36px',
                     borderRadius: '10px',
-                    background: config.bg,
-                    color: config.color,
+                    background: iconBg,
+                    color: iconColor,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     padding: '8px',
                     marginTop: '2px',
                   }}>
-                    <Icon />
+                    {isUrgent ? <IconAlertTriangle /> : isAbsence ? <IconClock /> : <IconBell />}
                   </div>
 
                   {/* Content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
                       <span style={{
-                        fontWeight: notif.read ? '500' : '600',
+                        fontWeight: notif.read ? '500' : '700',
                         fontSize: '0.88rem',
                         color: 'var(--ynov-dark)',
                       }}>
                         {notif.title}
                       </span>
                       <span style={{ fontSize: '0.72rem', color: 'var(--ynov-text-muted)', whiteSpace: 'nowrap' }}>
-                        {notif.date}
+                        {formatDate(notif.createdAt)}
                       </span>
                     </div>
                     <p style={{
@@ -252,6 +315,28 @@ export default function NotificationsPage() {
                     }}>
                       {notif.message}
                     </p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: '600' }}>
+                        Accéder à l'action &rarr;
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => deleteNotification(notif.id, e)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#94a3b8',
+                          cursor: 'pointer',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                        onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+                        title="Supprimer"
+                      >
+                        <IconTrash width={14} height={14} />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Unread dot */}

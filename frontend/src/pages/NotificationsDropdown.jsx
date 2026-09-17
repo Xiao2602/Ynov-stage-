@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 import { apiFetch } from '../api/api';
 import { IconBell, IconX, IconCheck, IconTrash } from '../components/Icons';
 import '../components/Icons';
@@ -41,6 +43,8 @@ const formatDate = (timestamp) => {
 };
 
 export default function NotificationsDropdown() {
+  const { role } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -137,6 +141,34 @@ export default function NotificationsDropdown() {
       }
     } catch (error) {
       console.error('Erreur suppression notifications lues:', error);
+    }
+  };
+
+  // 🔥 NOUVEAU : Clic sur une notification pour naviguer vers la page cible
+  const handleNotificationClick = async (notif) => {
+    // 1. Marquer comme lu
+    if (!notif.read) {
+      await markAsRead(notif.id);
+    }
+    // 2. Fermer le menu
+    setIsOpen(false);
+
+    const type = notif.type || '';
+    const relatedId = notif.relatedId || '';
+
+    // 3. Redirection intelligente selon le type de notification et le rôle
+    if (type.includes('document_request') || type.includes('document')) {
+      navigate(`/documents/demandes${relatedId ? `?search=${encodeURIComponent(relatedId)}` : ''}`);
+    } else if (type.includes('absence')) {
+      if (['admin', 'rh', 'manager', 'employee'].includes(role)) {
+        navigate('/absences/demandes');
+      } else if (role === 'teacher') {
+        navigate('/pedagogie/absences');
+      } else {
+        navigate('/absences/mes-absences');
+      }
+    } else {
+      navigate('/dashboard');
     }
   };
 
@@ -277,32 +309,68 @@ export default function NotificationsDropdown() {
               {notifications.map((notif) => (
                 <div
                   key={notif.id}
+                  onClick={() => handleNotificationClick(notif)}
                   style={{
                     padding: '12px 16px',
                     borderBottom: '1px solid #f1f5f9',
                     background: notif.read ? 'white' : '#f0fdf4',
-                    transition: 'background 0.2s',
+                    transition: 'all 0.15s ease',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'start',
                     gap: '12px',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = notif.read ? '#f8fafc' : '#e2f7ea';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = notif.read ? 'white' : '#f0fdf4';
                   }}
                 >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: notif.read ? '400' : '600', fontSize: '0.85rem', color: '#0f172a' }}>
-                      {notif.title}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontWeight: notif.read ? '500' : '700',
+                      fontSize: '0.85rem',
+                      color: notif.read ? '#334155' : '#0f172a',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      {!notif.read && (
+                        <span style={{
+                          width: '7px',
+                          height: '7px',
+                          borderRadius: '50%',
+                          background: '#10b981',
+                          display: 'inline-block',
+                          flexShrink: 0
+                        }} />
+                      )}
+                      <span>{notif.title}</span>
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '3px', lineHeight: '1.4' }}>
                       {notif.message}
                     </div>
-                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '4px' }}>
-                      {formatDate(notif.createdAt)}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
+                      <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                        {formatDate(notif.createdAt)}
+                      </span>
+                      <span style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: '600' }}>
+                        Accéder &rarr;
+                      </span>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+                  <div
+                    style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {!notif.read && (
                       <button
-                        onClick={() => markAsRead(notif.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          markAsRead(notif.id);
+                        }}
                         style={{
                           background: 'none',
                           border: 'none',
@@ -317,7 +385,10 @@ export default function NotificationsDropdown() {
                       </button>
                     )}
                     <button
-                      onClick={() => deleteNotification(notif.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteNotification(notif.id);
+                      }}
                       style={{
                         background: 'none',
                         border: 'none',
