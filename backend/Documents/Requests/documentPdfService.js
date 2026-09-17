@@ -90,6 +90,10 @@ export function generateOfficialDocumentPdf(request) {
         titleText = "ATTESTATION DE REUSSITE SOUS RESERVE";
       } else if (isReussite || typeLower.includes("réussite") || typeLower.includes("reussite")) {
         titleText = "ATTESTATION DE REUSSITE";
+      } else if (typeLower.includes("stage") || typeLower.includes("convention")) {
+        titleText = (request.type || request.documentType || "CONVENTION DE STAGE").toUpperCase();
+      } else if (request.type || request.documentType) {
+        titleText = (request.type || request.documentType).toUpperCase();
       }
 
       doc.y = 140;
@@ -138,10 +142,23 @@ export function generateOfficialDocumentPdf(request) {
           doc.font("Times-Roman").text(" et a obtenu les résultats requis pour le passage en ", { continued: true });
           doc.font("Times-Bold").text(`${nxtYear} année.`, { continued: false });
         }
+      } else if (typeLower.includes("stage") || typeLower.includes("convention")) {
+        const enrolledWord = isFemale ? "Est inscrite" : isMale ? "Est inscrit" : "Est inscrit(e)";
+        const company = request.companyName || "l'organisme d'accueil";
+        const period = request.internshipPeriod || "l'année académique en cours";
+        doc.text(`${enrolledWord} en ${curYear} année au sein de notre établissement (Filière ${request.department || 'Informatique & Numérique'}) pour l'année académique ${anneeAcad}, et est autorisé(e) à réaliser son stage d'immersion professionnelle auprès de `, { continued: true, lineGap: 6, align: "justify" });
+        doc.font("Times-Bold").text(`${company}`, { continued: true });
+        doc.font("Times-Roman").text(` durant la période suivante : ${period}.`, { continued: false });
       } else {
-        // Certificat de scolarité
+        // Certificat de scolarité ou Document officiel standard
         const enrolledWord = isFemale ? "Est inscrite" : isMale ? "Est inscrit" : "Est inscrit(e)";
         doc.text(`${enrolledWord} en ${curYear} année au sein de notre établissement pour l'année académique ${anneeAcad}.`, { lineGap: 6, align: "justify" });
+      }
+
+      if (request.customNote) {
+        doc.moveDown(0.8);
+        doc.font("Times-Italic").fontSize(10).fillColor("#334155").text(`Mention spécifique : ${request.customNote}`, { lineGap: 4, align: "justify" });
+        doc.font("Times-Roman").fontSize(11.5).fillColor("#000000");
       }
 
       doc.moveDown(1.3);

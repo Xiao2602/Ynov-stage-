@@ -778,12 +778,24 @@ export async function rejectDocumentRequestService(requestId, body, user) {
 }
 
 /**
- * 9. ASSOCIER UN DOCUMENT À UNE DEMANDE
+ * 9. ASSOCIER / GÉNÉRER UN DOCUMENT AVEC INFORMATIONS PERSONNALISÉES
  */
-export async function attachDocumentToRequestService(requestId, { documentId, documentUrl }, user) {
-  if (!documentId && !documentUrl) {
-    return { success: false, error: "Veuillez fournir un documentId ou documentUrl." };
-  }
+export async function attachDocumentToRequestService(requestId, body = {}, user) {
+  const {
+    documentId,
+    documentUrl,
+    studentName,
+    dateOfBirth,
+    placeOfBirth,
+    genre,
+    className,
+    department,
+    academicYear,
+    customNote,
+    companyName,
+    internshipPeriod,
+    customContent
+  } = body;
 
   const result = await getDocumentRequestByIdService(requestId, user);
   if (!result.success) return result;
@@ -792,9 +804,23 @@ export async function attachDocumentToRequestService(requestId, { documentId, do
   const nowIso = new Date().toISOString();
 
   if (documentId) item.documentId = documentId;
-  if (documentUrl) item.documentUrl = documentUrl;
+  if (!item.documentId && !documentUrl) item.documentId = `generated-${requestId}`;
+  if (documentUrl !== undefined) item.documentUrl = documentUrl;
+
+  if (studentName) item.studentName = studentName;
+  if (dateOfBirth) item.dateOfBirth = dateOfBirth;
+  if (placeOfBirth) item.placeOfBirth = placeOfBirth;
+  if (genre) item.genre = genre;
+  if (className) item.className = className;
+  if (department) item.department = department;
+  if (academicYear) item.academicYear = academicYear;
+  if (customNote !== undefined) item.customNote = customNote;
+  if (companyName !== undefined) item.companyName = companyName;
+  if (internshipPeriod !== undefined) item.internshipPeriod = internshipPeriod;
+  if (customContent !== undefined) item.customContent = customContent;
+
   item.generated = true;
-  item.source = String(documentId || "").startsWith("generated-") ? "generated" : "imported";
+  item.source = String(item.documentId || "").startsWith("generated-") ? "generated" : "imported";
   item.generatedAt = nowIso;
   item.updatedAt = nowIso;
 
@@ -802,19 +828,12 @@ export async function attachDocumentToRequestService(requestId, { documentId, do
   await fs.writeFile(filePath, JSON.stringify(item, null, 2));
 
   if (adminDb) {
-    adminDb.collection("document_requests").doc(requestId).update({
-      documentId: item.documentId,
-      documentUrl: item.documentUrl,
-      generated: true,
-      source: item.source,
-      generatedAt: item.generatedAt,
-      updatedAt: nowIso
-    }).catch(() => {});
+    adminDb.collection("document_requests").doc(requestId).set(item, { merge: true }).catch(() => {});
   }
 
   return {
     success: true,
-    message: "Document associé à la demande.",
+    message: "Document officiel généré et associé à la demande.",
     data: item
   };
 }
