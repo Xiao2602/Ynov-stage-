@@ -208,12 +208,14 @@ export async function createDocumentRequestService({ user, body }) {
           }
         });
 
-        // Notifications aux agents RH
+        const isUrgent = urgency === "urgent";
+
+        // Notifications aux agents RH (quel que soit le niveau de demande)
         for (const rh of rhUsers) {
           createNotificationService({
             userId: rh.uid,
-            title: `Nouvelle demande de document : ${type}`,
-            message: `${studentName} (${className || department || 'Étudiant'}) a soumis une demande de document administratif : ${type} (${requestId}).`,
+            title: isUrgent ? `🚨 [URGENT] Demande de document : ${type}` : `📄 Demande de document : ${type}`,
+            message: `${isUrgent ? '[URGENT] ' : ''}${studentName} (${className || department || 'Étudiant'}) a soumis une demande de document : ${type} (${requestId}).`,
             type: "document_request_pending",
             relatedId: requestId
           }).catch(() => {});
@@ -232,8 +234,8 @@ export async function createDocumentRequestService({ user, body }) {
         for (const mgr of targetManagers) {
           createNotificationService({
             userId: mgr.uid,
-            title: `Demande de document — Filière ${department || 'Générale'}`,
-            message: `${studentName} (${className || department || 'Étudiant'}) a demandé : ${type} (${requestId}).`,
+            title: isUrgent ? `🚨 [URGENT] Demande de document — Filière ${department || 'Générale'}` : `Demande de document — Filière ${department || 'Générale'}`,
+            message: `${isUrgent ? '[URGENT] ' : ''}${studentName} (${className || department || 'Étudiant'}) a demandé : ${type} (${requestId}).`,
             type: "document_request_pending",
             relatedId: requestId
           }).catch(() => {});

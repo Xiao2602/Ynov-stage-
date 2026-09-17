@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import {
   IconDocument,
@@ -28,10 +29,13 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
   const isRh = role === 'rh';
   const isManager = role === 'manager';
 
+  const [searchParams] = useSearchParams();
+  const querySearch = searchParams.get('search') || searchParams.get('id') || '';
+
   /* ---- ÉTAT ---- */
   const [requests, setRequests]           = useState([]);
   const [loading, setLoading]             = useState(true);
-  const [search, setSearch]               = useState('');
+  const [search, setSearch]               = useState(querySearch);
   const [typeFilter, setTypeFilter]       = useState('all');
   const [statusFilter, setStatusFilter]   = useState('all');
   const [archiveFilter, setArchiveFilter] = useState('all');
@@ -52,15 +56,22 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
     setActiveTab(generatedOnly ? 'generated' : initialTab);
   }, [generatedOnly, initialTab]);
 
-  // Si le compte connecté est un manager/employé avec un département spécifique, pré-sélectionner sa filière
   useEffect(() => {
-    if (backendUser?.department) {
+    const q = searchParams.get('search') || searchParams.get('id') || '';
+    if (q) setSearch(q);
+  }, [searchParams]);
+
+  // Si le compte connecté est un manager d'une filière pédagogique spécifique, pré-sélectionner sa filière
+  // (Les RH et Admins traitent/supervisent l'ensemble des filières et gardent 'all' par défaut)
+  useEffect(() => {
+    if (isManager && backendUser?.department) {
       const dept = backendUser.department.trim();
-      if (dept && !['direction', 'administration', 'rh', 'global'].includes(dept.toLowerCase())) {
+      const lower = dept.toLowerCase();
+      if (dept && !['direction', 'administration', 'rh', 'ressources humaines', 'global', 'famille'].includes(lower)) {
         setDepartmentFilter(dept);
       }
     }
-  }, [backendUser]);
+  }, [isManager, backendUser]);
 
   // Documents générés localement (cache temporaire par requestId)
   const [generatedDocs, setGeneratedDocs] = useState({});
