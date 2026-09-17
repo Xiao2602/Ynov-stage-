@@ -326,3 +326,75 @@ body {
   flex-shrink: 0;
   color: #94a3b8;
 }
+
+/* ============================================
+   STYLE GLOBAL & AESTHETIC DES LISTES DÉROULANTES / SELECT
+   ============================================ */
+
+select,
+select.field-input,
+.filter-select,
+.custom-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23475569' stroke-width='2.2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px 14px;
+  padding: 9px 36px 9px 12px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  color: #1e293b;
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+select:hover,
+select.field-input:hover,
+.filter-select:hover,
+.custom-select:hover {
+  border-color: #94a3b8;
+  background-color: #f8fafc;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2300b4d8' stroke-width='2.4'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+}
+
+select:focus,
+select.field-input:focus,
+.filter-select:focus,
+.custom-select:focus {
+  border-color: #00b4d8;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.18);
+}
+
+select:disabled,
+select.field-input:disabled {
+  background-color: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #94a3b8;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+optgroup {
+  font-weight: 700;
+  color: #334155;
+  background: #f1f5f9;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+}
+
+option {
+  font-weight: 500;
+  color: #1e293b;
+  background: #ffffff;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+}
