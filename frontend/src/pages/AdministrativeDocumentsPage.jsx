@@ -8,11 +8,15 @@ import {
   IconX,
   IconEye,
   IconArchive,
-  IconSparkles,
   IconDownload,
   IconUpload,
   IconForward,
-  IconTrash
+  IconTrash,
+  IconFileSignature,
+  IconFileText,
+  IconFileEdit,
+  IconEdit,
+  IconSave
 } from '../components/Icons';
 import { apiFetch, apiFetchBlob } from '../api/api';
 import {
@@ -42,7 +46,22 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [activeTab, setActiveTab]           = useState(generatedOnly ? 'generated' : initialTab);
 
-  // Modals
+  // Modals de génération & édition
+  const [generateModalRequest, setGenerateModalRequest] = useState(null);
+  const [modalTab, setModalTab]                         = useState('edit'); // 'edit' | 'preview'
+  const [editFields, setEditFields]                     = useState({
+    studentName: '',
+    genre: 'homme',
+    dateOfBirth: '',
+    placeOfBirth: '',
+    className: '',
+    department: '',
+    academicYear: '',
+    customNote: '',
+    companyName: '',
+    internshipPeriod: '',
+    issueDate: ''
+  });
 
   const [refusalRequest, setRefusalRequest]   = useState(null);
   const [refusalMessage, setRefusalMessage]   = useState('');
@@ -213,26 +232,107 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
     } catch (err) { showToast(err.message || 'Erreur lors du refus.', 'error'); }
   };
 
-  /* ---- GÉNÉRER ---- */
-  const handleGenerate = async (request) => {
-    const docType     = request.type || request.documentType || 'Attestation';
-    const studentName = request.studentName || request.requesterName || 'Étudiant';
-    const isHtml      = isHtmlDocument(request);
-    const content     = isHtml ? buildOfficialDocumentHTML(request) : buildGenericDocument(request);
+  /* ---- OUVERTURE DU MODAL D'ÉDITION & DE GÉNÉRATION ---- */
+  const openGenerateModal = (request) => {
+    const defaultAcademicYear = request.academicYear || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+    setGenerateModalRequest(request);
+    setModalTab('edit');
+    setEditFields({
+      studentName: request.studentName || request.requesterName || 'Étudiant',
+      genre: request.genre || request.gender || 'homme',
+      dateOfBirth: request.dateOfBirth || '',
+      placeOfBirth: request.placeOfBirth || '',
+      className: request.className || '',
+      department: request.department || '',
+      academicYear: defaultAcademicYear,
+      customNote: request.customNote || '',
+      companyName: request.companyName || '',
+      internshipPeriod: request.internshipPeriod || '',
+      issueDate: new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    });
+  };
 
-    // Sauvegarder localement
-    setGeneratedDocs((prev) => ({ ...prev, [request.id]: { docType, studentName, content, request, isHtml } }));
+  /* ---- APERÇU EN TEMPS RÉEL DANS LE MODAL ---- */
+  const previewCustomHtml = useMemo(() => {
+    if (!generateModalRequest) return '';
+    const tempRequest = {
+      ...generateModalRequest,
+      ...editFields
+    };
+    return isHtmlDocument(tempRequest)
+      ? buildOfficialDocumentHTML(tempRequest)
+      : buildGenericDocument(tempRequest);
+  }, [generateModalRequest, editFields]);
 
-    // Tenter d'associer un documentId fictif au backend
+  /* ---- VALIDATION DE LA GÉNÉRATION & ENREGISTREMENT ---- */
+  const confirmGenerate = async (shouldTransfer = false) => {
+    if (!generateModalRequest) return;
+    const request = generateModalRequest;
+    const docType = request.type || request.documentType || 'Document officiel';
+
     try {
-      await apiFetch(`/api/document-requests/${request.id}/attach-document`, {
-        method: 'PATCH',
-        body: JSON.stringify({ documentId: `generated-${request.id}`, documentUrl: null })
-      });
-      await loadQueue();
-    } catch (_) { /* ignore */ }
+      showToast(`Production du document « ${docType} » en cours...`, 'info');
 
-    showToast(`Document « ${docType} » généré avec succès !`, 'success');
+      // 1. Envoyer les champs personnalisés au backend et associer le document
+      const attachRes = await apiFetch(`/api/document-requests/${request.id}/attach-document`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          documentId: `generated-${request.id}`,
+          documentUrl: null,
+          studentName: editFields.studentName,
+          genre: editFields.genre,
+          dateOfBirth: editFields.dateOfBirth,
+          placeOfBirth: editFields.placeOfBirth,
+          className: editFields.className,
+          department: editFields.department,
+          academicYear: editFields.academicYear,
+          customNote: editFields.customNote,
+          companyName: editFields.companyName,
+          internshipPeriod: editFields.internshipPeriod
+        })
+      });
+
+      if (!attachRes?.success) {
+        throw new Error(attachRes?.error || 'Erreur lors de la génération du document.');
+      }
+
+      // 2. Mettre en cache local avec les nouvelles données
+      const updatedReq = { ...request, ...editFields, generated: true, documentId: `generated-${request.id}` };
+      const isHtml = isHtmlDocument(updatedReq);
+      const content = isHtml ? buildOfficialDocumentHTML(updatedReq) : buildGenericDocument(updatedReq);
+      setGeneratedDocs((prev) => ({
+        ...prev,
+        [request.id]: {
+          docType,
+          studentName: editFields.studentName,
+          content,
+          request: updatedReq,
+          isHtml
+        }
+      }));
+
+      // 3. Si l'agent choisit de transmettre immédiatement à l'étudiant
+      if (shouldTransfer) {
+        const transferRes = await apiFetch(`/api/document-requests/${request.id}/transfer`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            message: `Bonjour ${editFields.studentName},\n\nVotre document officiel « ${docType} » a été généré, validé et mis à votre disposition.\n\nCordialement,\nLe service administratif YNOV.`
+          })
+        });
+        if (!transferRes?.success) {
+          throw new Error(transferRes?.error || 'Erreur lors de la transmission.');
+        }
+        showToast(`Document « ${docType} » généré et transmis avec succès à ${editFields.studentName} !`, 'success');
+      } else {
+        showToast(`Document « ${docType} » généré et enregistré avec succès !`, 'success');
+      }
+
+      setGenerateModalRequest(null);
+      await loadQueue();
+    } catch (err) {
+      console.error('Erreur génération :', err);
+      showToast(err.message || 'Erreur lors de la génération du document.', 'error');
+    }
   };
 
   /* ---- PRÉVISUALISER ---- */
@@ -666,15 +766,15 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
                     </button>
                   )}
 
-                  {/* GÉNÉRER (cyan YNOV) */}
+                  {/* GÉNÉRER & ÉDITER (icône professionnelle IconFileSignature) */}
                   <button
                     type="button"
                     className="table-action-btn"
-                    style={isGenerated ? { color: 'var(--ynov-cyan, #00b4d8)', borderColor: 'var(--ynov-cyan, #00b4d8)' } : {}}
-                    onClick={() => handleGenerate(request)}
-                    title={isGenerated ? 'Régénérer le document officiel' : 'Générer le document officiel'}
+                    style={isGenerated ? { color: 'var(--ynov-cyan, #00b4d8)', borderColor: 'var(--ynov-cyan, #00b4d8)', background: '#f0fdfa' } : { color: '#0284c7', borderColor: '#bae6fd' }}
+                    onClick={() => openGenerateModal(request)}
+                    title={isGenerated ? 'Éditer les informations et régénérer le document' : 'Remplir les informations et générer le document officiel'}
                   >
-                    <IconSparkles />
+                    <IconFileSignature size={17} />
                   </button>
 
                   {/* VOIR / TÉLÉCHARGER / IMPORTER / TRANSFÉRER — si document généré */}
@@ -798,6 +898,14 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
                           <button
                             type="button"
                             className="table-action-btn"
+                            title="Modifier les données et régénérer le document"
+                            onClick={() => openGenerateModal(request)}
+                          >
+                            <IconFileSignature size={17} />
+                          </button>
+                          <button
+                            type="button"
+                            className="table-action-btn"
                             title={`Transférer le document à ${request.requesterName || request.studentName || 'l\'étudiant'}`}
                             onClick={() => openTransferModal(request)}
                           >
@@ -844,6 +952,394 @@ export default function AdministrativeDocumentsPage({ initialTab = 'requests', g
         style={{ display: 'none' }}
         accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
       />
+
+      {/* MODAL GÉNÉRATION ET PERSONNALISATION DE DOCUMENT */}
+      {generateModalRequest && (
+        <div className="refusal-modal-backdrop" role="presentation" onClick={() => setGenerateModalRequest(null)}>
+          <section
+            className="refusal-modal"
+            style={{ width: 'min(940px, 96%)', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* EN-TÊTE MODAL */}
+            <div className="refusal-modal-header" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '14px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '8px',
+                    background: '#e0f2fe',
+                    color: '#0284c7'
+                  }}>
+                    <IconFileSignature size={16} />
+                  </span>
+                  <p className="administrative-kicker" style={{ margin: 0 }}>Édition &amp; Production de Document Officiel</p>
+                </div>
+                <h2 style={{ fontSize: '1.2rem', color: '#0f172a', margin: '4px 0 0 0' }}>
+                  {generateModalRequest.type || generateModalRequest.documentType}
+                  <span style={{ fontSize: '0.8rem', fontWeight: '500', color: '#64748b', marginLeft: '10px' }}>
+                    ({generateModalRequest.id})
+                  </span>
+                </h2>
+              </div>
+              <button type="button" className="refusal-close" onClick={() => setGenerateModalRequest(null)} aria-label="Fermer">×</button>
+            </div>
+
+            {/* ONGLETS FORMULAIRE VS APERÇU */}
+            <div style={{
+              display: 'flex',
+              gap: '8px',
+              padding: '10px 0',
+              borderBottom: '1px solid #f1f5f9'
+            }}>
+              <button
+                type="button"
+                onClick={() => setModalTab('edit')}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: '6px',
+                  border: '1px solid',
+                  borderColor: modalTab === 'edit' ? '#0284c7' : '#cbd5e1',
+                  background: modalTab === 'edit' ? '#0284c7' : '#ffffff',
+                  color: modalTab === 'edit' ? '#ffffff' : '#475569',
+                  fontSize: '0.84rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <IconEdit size={14} /> Informations du document
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('preview')}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: '6px',
+                  border: '1px solid',
+                  borderColor: modalTab === 'preview' ? '#0284c7' : '#cbd5e1',
+                  background: modalTab === 'preview' ? '#0284c7' : '#ffffff',
+                  color: modalTab === 'preview' ? '#ffffff' : '#475569',
+                  fontSize: '0.84rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <IconEye size={14} /> Aperçu officiel en direct
+              </button>
+            </div>
+
+            {/* CONTENU DU MODAL */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 4px' }}>
+              {modalTab === 'edit' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    fontSize: '0.82rem',
+                    color: '#475569'
+                  }}>
+                    💡 <strong>Consignes :</strong> Remplissez ou modifiez les champs nécessaires ci-dessous. Toutes les modifications seront prises en compte dans le document officiel, la prévisualisation et le fichier PDF.
+                  </div>
+
+                  {/* SECTION 1 : IDENTITÉ */}
+                  <div>
+                    <h3 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e293b', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      1. Identité de l'apprenant
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                          Nom et Prénom *
+                        </label>
+                        <input
+                          type="text"
+                          value={editFields.studentName}
+                          onChange={(e) => setEditFields({ ...editFields, studentName: e.target.value })}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.85rem'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                          Civilité / Genre
+                        </label>
+                        <select
+                          value={editFields.genre}
+                          onChange={(e) => setEditFields({ ...editFields, genre: e.target.value })}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.85rem',
+                            background: '#fff'
+                          }}
+                        >
+                          <option value="homme">Masculin (L'étudiant, né)</option>
+                          <option value="femme">Féminin (L'étudiante, née)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                          Date de naissance
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: 15/04/2003 ou 2003-04-15"
+                          value={editFields.dateOfBirth}
+                          onChange={(e) => setEditFields({ ...editFields, dateOfBirth: e.target.value })}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.85rem'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                          Lieu de naissance
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Casablanca"
+                          value={editFields.placeOfBirth}
+                          onChange={(e) => setEditFields({ ...editFields, placeOfBirth: e.target.value })}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.85rem'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECTION 2 : SCOLARITÉ & FILIÈRE */}
+                  <div style={{ marginTop: '8px' }}>
+                    <h3 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e293b', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      2. Parcours &amp; Scolarité
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                          Classe / Promotion *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Bachelor 3 Informatique"
+                          value={editFields.className}
+                          onChange={(e) => setEditFields({ ...editFields, className: e.target.value })}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.85rem'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                          Filière / Département
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Informatique"
+                          value={editFields.department}
+                          onChange={(e) => setEditFields({ ...editFields, department: e.target.value })}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.85rem'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                          Année universitaire *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: 2025-2026"
+                          value={editFields.academicYear}
+                          onChange={(e) => setEditFields({ ...editFields, academicYear: e.target.value })}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.85rem'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECTION 3 : CONVENTION OU MENTIONS */}
+                  {(String(generateModalRequest.type || '').toLowerCase().includes('stage') ||
+                    String(generateModalRequest.documentType || '').toLowerCase().includes('stage')) && (
+                    <div style={{ marginTop: '8px' }}>
+                      <h3 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e293b', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        3. Données du stage (Convention)
+                      </h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                            Entreprise d'accueil
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Nom de l'entreprise"
+                            value={editFields.companyName}
+                            onChange={(e) => setEditFields({ ...editFields, companyName: e.target.value })}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              borderRadius: '6px',
+                              border: '1px solid #cbd5e1',
+                              fontSize: '0.85rem'
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                            Période de stage
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Ex: Du 01/06/2026 au 31/08/2026"
+                            value={editFields.internshipPeriod}
+                            onChange={(e) => setEditFields({ ...editFields, internshipPeriod: e.target.value })}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              borderRadius: '6px',
+                              border: '1px solid #cbd5e1',
+                              fontSize: '0.85rem'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: '4px' }}>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Mention / Note particulière (Optionnel)
+                    </label>
+                    <textarea
+                      placeholder="Ajouter une mention spécifique sur le document officiel..."
+                      value={editFields.customNote}
+                      onChange={(e) => setEditFields({ ...editFields, customNote: e.target.value })}
+                      rows="3"
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '0.85rem',
+                        resize: 'vertical'
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div style={{ minHeight: '480px', display: 'flex', flexDirection: 'column' }}>
+                  <iframe
+                    srcDoc={previewCustomHtml}
+                    title="Aperçu du document édité"
+                    style={{
+                      flex: 1,
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      width: '100%',
+                      minHeight: '480px',
+                      background: '#fff'
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* ACTIONS DU BAS */}
+            <div className="refusal-modal-actions" style={{ borderTop: '1px solid #e2e8f0', paddingTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                {modalTab === 'edit' ? (
+                  <button
+                    type="button"
+                    className="document-action"
+                    style={{ background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    onClick={() => setModalTab('preview')}
+                  >
+                    <IconEye size={15} /> Voir l'aperçu avant émission
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="document-action"
+                    style={{ background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    onClick={() => setModalTab('edit')}
+                  >
+                    <IconEdit size={15} /> Revenir à l'édition des champs
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="document-action"
+                  onClick={() => setGenerateModalRequest(null)}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  className="document-action"
+                  style={{ background: '#0284c7', color: '#ffffff', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  onClick={() => confirmGenerate(false)}
+                >
+                  <IconSave size={15} /> Générer &amp; Enregistrer
+                </button>
+                <button
+                  type="button"
+                  className="document-action approve"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  onClick={() => confirmGenerate(true)}
+                  title="Générer et transmettre directement le document à l'apprenant"
+                >
+                  <IconForward size={15} /> Générer &amp; Transmettre
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* MODAL VALIDATION */}
       {approvalRequest && (

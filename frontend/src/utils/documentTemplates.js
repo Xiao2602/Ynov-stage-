@@ -604,6 +604,215 @@ ${OFFICIAL_DOC_CSS}
 }
 
 /**
+ * 4. CONVENTION DE STAGE / ATTESTATION DE STAGE (Modèle officiel)
+ */
+export function buildStageDocumentHTML(request) {
+  const student = request?.studentName || request?.requesterName || '';
+  const genderRaw = String(request?.genre || request?.gender || '').toLowerCase().trim();
+
+  const isFemale = genderRaw === 'femme' || genderRaw === 'f' || genderRaw === 'female';
+  const isMale = genderRaw === 'homme' || genderRaw === 'm' || genderRaw === 'male';
+
+  const genrePrefix = isFemale ? "L'étudiante" : isMale ? "L'étudiant" : "L'étudiant(e)";
+  const bornWord = isFemale ? 'née' : isMale ? 'né' : 'né(e)';
+  const enrolledWord = isFemale ? 'Est inscrite' : isMale ? 'Est inscrit' : 'Est inscrit(e)';
+  const interestPronom = isFemale ? "l'intéressée" : isMale ? "l'intéressé" : "l'intéressé(e)";
+
+  const dateOfBirth = formatDateFR(request?.dateOfBirth) || '../../...';
+  const placeOfBirth = request?.placeOfBirth || '.....';
+  const studentDisplay = student ? student : '.....';
+
+  const years = getYearsFromClass(request?.className || request?.department || request?.class);
+  const anneeAcad = request?.academicYear || '2025-2026';
+  const company = request?.companyName || 'l\'organisme d\'accueil';
+  const period = request?.internshipPeriod || 'l\'année en cours';
+
+  const docTitle = String(request?.type || request?.documentType || 'CONVENTION DE STAGE').toUpperCase();
+
+  const dateEmission = formatDateFR(new Date()) ||
+    new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>${docTitle}</title>
+<style>
+${OFFICIAL_DOC_CSS}
+</style>
+</head>
+<body>
+
+  <div class="content-wrap">
+    <div class="logo-top">
+      <div class="maroc">MAROC</div>
+      <div class="ynov">ynov</div>
+      <div class="campus">CAMPUS</div>
+    </div>
+
+    <h1 class="doc-title">${docTitle}</h1>
+
+    <div class="doc-body">
+      <p>
+        Je soussigné <span class="bold">M. Amine ZNIBER</span> – Directeur Général de IDG – YNOV CAMPUS, sise au 8, rue Ibnou Khatima – Quartier des Hôpitaux – Casablanca, atteste et certifie par la présente que :
+      </p>
+
+      <p>
+        ${genrePrefix} <span class="bold">${studentDisplay}</span>, ${bornWord} le <span class="bold">${dateOfBirth}</span> à <span class="bold">${placeOfBirth}</span>,
+      </p>
+
+      <p>
+        ${enrolledWord} en <span class="bold">${years.current} année</span> au sein de notre établissement (Filière <span class="bold">${request?.department || 'Informatique & Numérique'}</span>) pour l'année académique <span class="bold">${anneeAcad}</span>.
+      </p>
+
+      <p>
+        Est autorisé(e) à réaliser son stage d'immersion professionnelle auprès de <span class="bold">${company}</span> durant la période suivante : <span class="bold">${period}</span>.
+      </p>
+
+      ${request?.customNote ? `<p style="font-style: italic; font-size: 10pt; margin-top: 6px; color: #334155;"><span class="bold">Mention spécifique :</span> ${request.customNote}</p>` : ''}
+
+      <p>
+        Cette attestation / convention est délivrée à ${interestPronom}, à sa demande, pour servir et valoir ce que de droit.
+      </p>
+    </div>
+
+    <div class="signature-area">
+      <div class="date-line">Fait à Casablanca, le ${dateEmission}</div>
+      <div class="role-line">DIRECTEUR GENERAL</div>
+      <div class="name-line">Amine ZNIBER</div>
+    </div>
+  </div>
+
+  <div class="doc-footer">
+    <div class="doc-footer-left">
+      <div class="doc-footer-brand">IDG Maroc – YNOV CAMPUS</div>
+      <div class="doc-footer-legal">
+        <div>Société Anonyme au capital de 6.400.000 DH – 8, Rue Ibnou Khatima – Casablanca</div>
+        <div>CNSS : 7164833 – IF : 1023591 – RC : 144155 – Patente : 36330905 – ICE : 001645521000037</div>
+      </div>
+      <div class="doc-footer-notice">
+        Ce document est la propriété exclusive de la société IDG et ne peut être diffusé sans accord préalable
+      </div>
+    </div>
+
+    <div class="doc-footer-right">
+      <div class="logo-footer">
+        <div class="maroc-sm">MAROC</div>
+        <div class="ynov-sm">ynov</div>
+        <div class="campus-sm">CAMPUS</div>
+      </div>
+      <div>IDG, représentant de la</div>
+      <div>Marque YNOV CAMPUS</div>
+      <div>au Maroc</div>
+    </div>
+  </div>
+
+</body>
+</html>`;
+}
+
+/**
+ * 5. DOCUMENT ADMINISTRATIF OFFICIEL GÉNÉRIQUE
+ */
+export function buildGenericOfficialHTML(request) {
+  const student = request?.studentName || request?.requesterName || '';
+  const genderRaw = String(request?.genre || request?.gender || '').toLowerCase().trim();
+
+  const isFemale = genderRaw === 'femme' || genderRaw === 'f' || genderRaw === 'female';
+  const isMale = genderRaw === 'homme' || genderRaw === 'm' || genderRaw === 'male';
+
+  const genrePrefix = isFemale ? "L'étudiante" : isMale ? "L'étudiant" : "L'étudiant(e)";
+  const bornWord = isFemale ? 'née' : isMale ? 'né' : 'né(e)';
+  const enrolledWord = isFemale ? 'Est inscrite' : isMale ? 'Est inscrit' : 'Est inscrit(e)';
+  const interestPronom = isFemale ? "l'intéressée" : isMale ? "l'intéressé" : "l'intéressé(e)";
+
+  const dateOfBirth = formatDateFR(request?.dateOfBirth) || '../../...';
+  const placeOfBirth = request?.placeOfBirth || '.....';
+  const studentDisplay = student ? student : '.....';
+
+  const years = getYearsFromClass(request?.className || request?.department || request?.class);
+  const anneeAcad = request?.academicYear || '2025-2026';
+  const docTitle = String(request?.type || request?.documentType || 'DOCUMENT ADMINISTRATIF OFFICIEL').toUpperCase();
+
+  const dateEmission = formatDateFR(new Date()) ||
+    new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>${docTitle}</title>
+<style>
+${OFFICIAL_DOC_CSS}
+</style>
+</head>
+<body>
+
+  <div class="content-wrap">
+    <div class="logo-top">
+      <div class="maroc">MAROC</div>
+      <div class="ynov">ynov</div>
+      <div class="campus">CAMPUS</div>
+    </div>
+
+    <h1 class="doc-title">${docTitle}</h1>
+
+    <div class="doc-body">
+      <p>
+        Je soussigné <span class="bold">M. Amine ZNIBER</span> – Directeur Général de IDG – YNOV CAMPUS, sise au 8, rue Ibnou Khatima – Quartier des Hôpitaux – Casablanca, atteste et certifie par la présente que :
+      </p>
+
+      <p>
+        ${genrePrefix} <span class="bold">${studentDisplay}</span>, ${bornWord} le <span class="bold">${dateOfBirth}</span> à <span class="bold">${placeOfBirth}</span>,
+      </p>
+
+      <p>
+        ${enrolledWord} en <span class="bold">${years.current} année</span> au sein de notre établissement pour l'année académique <span class="bold">${anneeAcad}</span>.
+      </p>
+
+      ${request?.customNote ? `<p style="font-style: italic; font-size: 10pt; margin-top: 6px; color: #334155;"><span class="bold">Mention / Remarque :</span> ${request.customNote}</p>` : ''}
+
+      <p>
+        Ce document administratif officiel est délivré à ${interestPronom}, à sa demande, pour servir et valoir ce que de droit.
+      </p>
+    </div>
+
+    <div class="signature-area">
+      <div class="date-line">Fait à Casablanca, le ${dateEmission}</div>
+      <div class="role-line">DIRECTEUR GENERAL</div>
+      <div class="name-line">Amine ZNIBER</div>
+    </div>
+  </div>
+
+  <div class="doc-footer">
+    <div class="doc-footer-left">
+      <div class="doc-footer-brand">IDG Maroc – YNOV CAMPUS</div>
+      <div class="doc-footer-legal">
+        <div>Société Anonyme au capital de 6.400.000 DH – 8, Rue Ibnou Khatima – Casablanca</div>
+        <div>CNSS : 7164833 – IF : 1023591 – RC : 144155 – Patente : 36330905 – ICE : 001645521000037</div>
+      </div>
+      <div class="doc-footer-notice">
+        Ce document est la propriété exclusive de la société IDG et ne peut être diffusé sans accord préalable
+      </div>
+    </div>
+
+    <div class="doc-footer-right">
+      <div class="logo-footer">
+        <div class="maroc-sm">MAROC</div>
+        <div class="ynov-sm">ynov</div>
+        <div class="campus-sm">CAMPUS</div>
+      </div>
+      <div>IDG, représentant de la</div>
+      <div>Marque YNOV CAMPUS</div>
+      <div>au Maroc</div>
+    </div>
+  </div>
+
+</body>
+</html>`;
+}
+
+/**
  * Routeur principal vers le bon gabarit HTML officiel
  */
 export function buildOfficialDocumentHTML(request) {
@@ -616,7 +825,11 @@ export function buildOfficialDocumentHTML(request) {
   if (isAttestationReussite(request)) {
     return buildAttestationReussiteSimpleHTML(request);
   }
-  return null;
+  const typeLower = String(request?.type || request?.documentType || '').toLowerCase();
+  if (typeLower.includes('stage') || typeLower.includes('convention')) {
+    return buildStageDocumentHTML(request);
+  }
+  return buildGenericOfficialHTML(request);
 }
 
 /**
