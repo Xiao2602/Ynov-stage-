@@ -18,7 +18,7 @@ import * as XLSX from 'xlsx';
 import './AssignPlanningPage.css';
 
 // Dictionnaire des classes disponibles
-const classOptions = [
+const DEFAULT_CLASS_OPTIONS = [
   'Bachelor 1',
   'Bachelor 2',
   'Bachelor 3 - Cybersécurité',
@@ -166,6 +166,7 @@ function validatePlanningConflicts(courses) {
 
 export default function AssignPlanningPage() {
   const { role } = useAuth();
+  const [classOptions, setClassOptions] = useState(DEFAULT_CLASS_OPTIONS);
   const [teachers, setTeachers] = useState([]);
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [courses, setCourses] = useState([]);
@@ -185,7 +186,7 @@ export default function AssignPlanningPage() {
   const [showRecurrenceModal, setShowRecurrenceModal] = useState(false);
   const [recurrenceForm, setRecurrenceForm] = useState({
     title: '',
-    group: classOptions[0],
+    group: DEFAULT_CLASS_OPTIONS[0],
     startDate: new Date().toISOString().split('T')[0],
     start: '09:00',
     duration: 2,
@@ -207,6 +208,20 @@ export default function AssignPlanningPage() {
       }
     };
     fetchTeachers();
+  }, []);
+
+  useEffect(() => {
+    const fetchClasses = async () => {
+      try {
+        const data = await apiFetch('/classes');
+        if (!data?.success) return;
+        const customClasses = (data.classes || []).filter((item) => item.active !== false).map((item) => item.name).filter(Boolean);
+        setClassOptions([...new Set([...DEFAULT_CLASS_OPTIONS, ...customClasses])].sort((a, b) => a.localeCompare(b, 'fr')));
+      } catch (err) {
+        console.warn('Erreur chargement classes:', err.message);
+      }
+    };
+    fetchClasses();
   }, []);
 
   // 2. Charger le planning existant du professeur sélectionné

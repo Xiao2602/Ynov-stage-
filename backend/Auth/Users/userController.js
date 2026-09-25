@@ -2,10 +2,11 @@ import admin from "firebase-admin";
 import { adminAuth, adminDb } from "../../Shared/Firebase config/firebase.js";
 import { createUserService, getAllUsersService } from "./userService.js";
 import { logActivity } from "../../Services/activityLogService.js";
+import { getActiveTemporaryClasses } from "../../Classes/classController.js";
 
 export async function handleCreateUser(req, res) {
   try {
-    const { email, password, displayName, role, department, className, assignedClass, assignedClasses, phone } = req.body;
+    const { email, password, displayName, role, department, className, studentClasses, assignedClass, assignedClasses, phone } = req.body;
     if (!email || !password || !displayName) {
       return res.status(400).json({ success: false, error: "Veuillez fournir un email, un mot de passe et un nom." });
     }
@@ -16,6 +17,7 @@ export async function handleCreateUser(req, res) {
       role,
       department,
       className,
+      studentClasses,
       assignedClass,
       assignedClasses,
       phone
@@ -160,24 +162,28 @@ export async function handleGetMyStudents(req, res) {
     const teacherDoc = await adminDb.collection("users").doc(teacherUid).get();
     if (!teacherDoc.exists) return res.status(404).json({ success: false, error: "Professeur introuvable." });
     const teacherData = teacherDoc.data();
-    const assignedClasses = teacherData.assignedClasses || [];
+    const planningDoc = await adminDb.collection("plannings").doc(teacherUid).get();
+    const planningClasses = planningDoc.exists
+      ? (planningDoc.data().courses || []).map((course) => String(course.group || '').trim()).filter(Boolean)
+      : [];
+    // Le planning est la source effective des séances : ses groupes donnent aussi accès à l'appel.
+    const temporaryClasses = await getActiveTemporaryClasses(teacherUid);
+    const assignedClasses = [...new Set([...(teacherData.assignedClasses || []), ...planningClasses, ...temporaryClasses])];
+
+    // Un professeur sans classe explicitement attribuée ne doit voir aucun étudiant.
+    if (!assignedClasses.length) {
+      return res.status(200).json({ success: true, students: [] });
+    }
 
     const snapshot = await adminDb.collection("users").where("role", "==", "student").get();
     const students = [];
     snapshot.forEach(doc => {
       const studentData = doc.data();
-      const studentClass = studentData.className || studentData.department || "";
-      if (assignedClasses.length === 0) {
-        students.push({ uid: doc.id, ...studentData });
-        return;
-      }
-      const match = assignedClasses.some(cls => 
-        studentClass.toLowerCase().includes(cls.toLowerCase()) ||
-        cls.toLowerCase().includes(studentClass.toLowerCase())
-      );
+      const studentClasses = Array.isArray(studentData.studentClasses) && studentData.studentClasses.length ? studentData.studentClasses : [studentData.className || studentData.department || ''];
+      const match = assignedClasses.some(cls => studentClasses.some(studentClass => String(studentClass).toLowerCase() === String(cls).toLowerCase()));
       if (match) students.push({ uid: doc.id, ...studentData });
     });
-    return res.status(200).json({ success: true, students });
+    return res.status(200).json({ success: true, students, classes: assignedClasses });
   } catch (error) {
     console.error("Erreur handleGetMyStudents:", error);
     return res.status(500).json({ success: false, error: error.message });

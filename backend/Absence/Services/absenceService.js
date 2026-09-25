@@ -899,6 +899,7 @@ export async function teacherDeclareAbsenceService(teacherUser, {
   endDate, 
   reason, 
   courseName,
+  className,
   type = 'unjustified',  // 🔥 nouveau paramètre
   isLate = false         // 🔥 nouveau paramètre
 }) {
@@ -939,6 +940,7 @@ export async function teacherDeclareAbsenceService(teacherUser, {
       displayName: studentData.displayName || "Étudiant",
       role: studentData.role || "student",
       department: studentData.department || "",
+      className: className || studentData.className || studentData.department || "",
       type: type, // "unjustified" ou "late"
       startDate,
       endDate,
