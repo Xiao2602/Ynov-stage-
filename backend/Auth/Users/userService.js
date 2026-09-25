@@ -12,6 +12,7 @@ export async function createUserService({
   role = "employee",
   department = "",
   className = "",
+  studentClasses = [],
   assignedClass = "",
   assignedClasses = [],
   phone = ""
@@ -74,9 +75,12 @@ export async function createUserService({
     if (normalizedRole === 'parent') {
       userData.childrenUids = [];
     }
-    if (normalizedRole === 'student' && className) {
-      userData.className = className;
-      userData.department = className; // pour compatibilité
+    if (normalizedRole === 'student') {
+      const finalStudentClasses = [...new Set([...(Array.isArray(studentClasses) ? studentClasses : []), className].map((value) => String(value || '').trim()).filter(Boolean))];
+      if (!finalStudentClasses.length) return { success: false, error: 'Un étudiant doit être assigné à au moins une classe.' };
+      userData.studentClasses = finalStudentClasses;
+      userData.className = finalStudentClasses[0];
+      userData.department = finalStudentClasses[0]; // compatibilité
     }
     if (role === 'teacher') {
       if (finalAssignedClasses.length > 0) {

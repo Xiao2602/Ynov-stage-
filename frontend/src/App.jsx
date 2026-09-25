@@ -72,9 +72,9 @@ function NonHrRoute() {
 }
 
 function TeacherRoute() {
-  const { role } = useAuth();
+  const { role, backendUser } = useAuth();
 
-  if (role !== 'teacher') {
+  if (role !== 'teacher' && !(Array.isArray(backendUser?.activeTemporaryClasses) && backendUser.activeTemporaryClasses.length > 0)) {
     return <Navigate to="/dashboard" replace />;
   }
 

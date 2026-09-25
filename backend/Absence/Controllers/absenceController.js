@@ -22,6 +22,7 @@ import {
   archiveAbsencesService,
   transformLatesToAbsenceService
 } from "../Services/absenceService.js";
+import { getActiveTemporaryClasses } from "../../Classes/classController.js";
 
 export async function handleSubmitAbsence(req, res) {
   try {
@@ -218,6 +219,12 @@ export async function handleTeacherDeclareAbsence(req, res) {
   console.log("📦 Body:", req.body);
 
   try {
+    if (req.user.role !== 'teacher') {
+      const allowedClasses = await getActiveTemporaryClasses(req.user.uid);
+      if (!allowedClasses.includes(String(req.body?.className || '').trim())) {
+        return res.status(403).json({ success: false, error: "Vous n'avez pas de délégation active pour cette classe." });
+      }
+    }
     const validation = validateTeacherDeclareAbsence(req.body);
     if (!validation.valid) {
       return res.status(400).json({ success: false, error: validation.error });
@@ -283,7 +290,14 @@ export async function handleGetAbsencesByCourse(req, res) {
       return res.status(404).json({ success: false, error: "Professeur introuvable." });
     }
     const teacherData = teacherDoc.data();
-    const assignedClasses = teacherData.assignedClasses || [];
+    const planningDoc = await adminDb.collection("plannings").doc(teacherUid).get();
+    const planningClasses = planningDoc.exists
+      ? (planningDoc.data().courses || []).map((course) => String(course.group || '').trim()).filter(Boolean)
+      : [];
+    const assignedClasses = [...new Set([...(teacherData.assignedClasses || []), ...planningClasses])];
+    if (!assignedClasses.length) {
+      return res.status(200).json({ success: true, count: 0, absences: [] });
+    }
 
     // Récupérer les étudiants
     const studentsSnapshot = await adminDb.collection("users").where("role", "==", "student").get();
@@ -293,16 +307,19 @@ export async function handleGetAbsencesByCourse(req, res) {
 
     studentsSnapshot.forEach(doc => {
       const studentData = doc.data();
-      const studentClass = String(studentData.className || studentData.department || "").trim();
+      const studentClasses = Array.isArray(studentData.studentClasses) && studentData.studentClasses.length
+        ? studentData.studentClasses.map((value) => String(value || '').trim()).filter(Boolean)
+        : [String(studentData.className || studentData.department || "").trim()].filter(Boolean);
+      const studentClass = studentClasses[0] || '';
 
-      const classMatch = assignedClasses.length === 0 || assignedClasses.some(cls => {
+      const classMatch = assignedClasses.some(cls => studentClasses.some((studentGroup) => {
         const cNorm = String(cls).toLowerCase().trim();
-        const sNorm = studentClass.toLowerCase().trim();
-        return sNorm.includes(cNorm) || cNorm.includes(sNorm);
-      });
+        const sNorm = studentGroup.toLowerCase().trim();
+        return sNorm === cNorm;
+      }));
 
       if (classMatch) {
-        if (!className || className === 'all' || studentClass.toLowerCase() === className.toLowerCase() || studentClass.toLowerCase().includes(className.toLowerCase())) {
+        if (!className || className === 'all' || studentClasses.some((studentGroup) => studentGroup.toLowerCase() === className.toLowerCase())) {
           studentUids.add(doc.id);
           studentMap[doc.id] = {
             displayName: studentData.displayName || "Étudiant",

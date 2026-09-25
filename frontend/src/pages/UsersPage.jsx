@@ -105,7 +105,7 @@ const roleOptions = [
   { key: 'teacher', label: 'Professeur', description: 'Enseignement' },
 ];
 
-const classOptions = [
+const DEFAULT_CLASS_OPTIONS = [
   'Bachelor 1',
   'Bachelor 2',
   'Bachelor 3 - Cybersécurité',
@@ -160,6 +160,18 @@ export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [usersError, setUsersError] = useState('');
+  const [classOptions, setClassOptions] = useState(DEFAULT_CLASS_OPTIONS);
+  const [managedClasses, setManagedClasses] = useState([]);
+  const [showClassesModal, setShowClassesModal] = useState(false);
+  const [showCreateClassModal, setShowCreateClassModal] = useState(false);
+  const [newClassName, setNewClassName] = useState('');
+  const [newClassType, setNewClassType] = useState('exceptional');
+  const [newClassStudentUids, setNewClassStudentUids] = useState([]);
+  const [newClassTeacherUid, setNewClassTeacherUid] = useState('');
+  const [newClassTemporarySupervisorUid, setNewClassTemporarySupervisorUid] = useState('');
+  const [temporaryStartDate, setTemporaryStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [temporaryEndDate, setTemporaryEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const [isCreatingClass, setIsCreatingClass] = useState(false);
 
   // ----------------------------------------------------------
   // RECHERCHE / FILTRE
@@ -216,7 +228,7 @@ export default function UsersPage() {
   // MODAL DE CHANGEMENT DE CLASSE (POUR ÉTUDIANTS - SÉPARÉ)
   const [showStudentClassModal, setShowStudentClassModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
-  const [targetStudentClass, setTargetStudentClass] = useState('');
+  const [targetStudentClasses, setTargetStudentClasses] = useState([]);
   const [isUpdatingStudentClass, setIsUpdatingStudentClass] = useState(false);
 
   // ----------------------------------------------------------
@@ -359,8 +371,87 @@ export default function UsersPage() {
     }
   };
 
+  const loadClasses = async () => {
+    try {
+      const result = await apiFetch('/classes');
+      if (!result?.success) return;
+      const customClasses = (result.classes || [])
+        .filter((item) => item.active !== false)
+        .map((item) => item.name)
+        .filter(Boolean);
+      setClassOptions([...new Set([...DEFAULT_CLASS_OPTIONS, ...customClasses])].sort((a, b) => a.localeCompare(b, 'fr')));
+      setManagedClasses(result.classes || []);
+    } catch (error) {
+      console.warn('Impossible de charger les classes personnalisées :', error.message);
+    }
+  };
+
+  const handleDeleteClass = async (item) => {
+    if (!window.confirm(`Supprimer définitivement « ${item.name} » ? Les délégations et séances liées seront aussi retirées.`)) return;
+    try {
+      const result = await apiFetch(`/classes/${item.id}`, { method: 'DELETE' });
+      if (!result?.success) throw new Error(result?.error || 'Suppression impossible.');
+      await loadClasses(); await loadUsers();
+    } catch (error) { alert(error.message || 'Suppression impossible.'); }
+  };
+
+  const handleCreateClass = async (event) => {
+    event.preventDefault();
+    const name = newClassName.trim();
+    if (name.length < 2) {
+      alert('Saisissez un nom de classe ou de groupe valide.');
+      return;
+    }
+    setIsCreatingClass(true);
+    try {
+      const result = await apiFetch('/classes', {
+        method: 'POST',
+        body: JSON.stringify({ name, type: newClassType }),
+      });
+      if (!result?.success) throw new Error(result?.error || 'Création impossible.');
+      const className = result.class?.name || name;
+      await Promise.all(newClassStudentUids.map(async (studentUid) => {
+        const student = users.find((user) => (user.uid || user.id) === studentUid);
+        const existing = Array.isArray(student?.studentClasses) && student.studentClasses.length
+          ? student.studentClasses
+          : [student?.className || student?.department || ''].filter(Boolean);
+        const update = await apiFetch(`/users/${studentUid}/classes`, {
+          method: 'PATCH', body: JSON.stringify({ studentClasses: [...new Set([...existing, className])] })
+        });
+        if (!update?.success) throw new Error(update?.error || "Impossible d'affecter un étudiant.");
+      }));
+      if (newClassTeacherUid) {
+        const teacher = users.find((user) => (user.uid || user.id) === newClassTeacherUid);
+        const assignedClasses = [...new Set([...(teacher?.assignedClasses || []), teacher?.assignedClass, className].filter(Boolean))];
+        const update = await apiFetch('/users/assign-teacher', {
+          method: 'POST', body: JSON.stringify({ teacherUid: newClassTeacherUid, assignedClasses })
+        });
+        if (!update?.success) throw new Error(update?.error || 'Impossible d’affecter le professeur.');
+      }
+      if (newClassTemporarySupervisorUid) {
+        const delegation = await apiFetch('/temporary-supervisions', {
+          method: 'POST', body: JSON.stringify({ className, supervisorUid: newClassTemporarySupervisorUid, startDate: temporaryStartDate, endDate: temporaryEndDate })
+        });
+        if (!delegation?.success) throw new Error(delegation?.error || 'Impossible de créer la délégation temporaire.');
+      }
+      setNewClassName('');
+      setNewClassStudentUids([]);
+      setNewClassTeacherUid('');
+      setNewClassTemporarySupervisorUid('');
+      setShowCreateClassModal(false);
+      await loadClasses();
+      await loadUsers();
+      alert(`Classe « ${name} » créée.`);
+    } catch (error) {
+      alert(error.message || 'Création impossible.');
+    } finally {
+      setIsCreatingClass(false);
+    }
+  };
+
   useEffect(() => {
     loadUsers();
+    loadClasses();
   }, []);
 
   // ==========================================================
@@ -503,6 +594,7 @@ export default function UsersPage() {
       if (selectedRole === 'student') {
         payload.className = formData.className;
         payload.department = formData.className;
+        payload.studentClasses = [formData.className];
       } else if (selectedRole === 'teacher') {
         payload.assignedClass = formData.assignedClass;
         payload.department = formData.assignedClass;
@@ -669,30 +761,32 @@ export default function UsersPage() {
   const openStudentClassModal = (student) => {
     const uid = student.uid || student.id;
     setSelectedStudent({ ...student, uid });
-    setTargetStudentClass(student.className || student.department || '');
+    const currentClasses = Array.isArray(student.studentClasses) && student.studentClasses.length
+      ? student.studentClasses
+      : [student.className || student.department || ''].filter(Boolean);
+    setTargetStudentClasses(currentClasses);
     setShowStudentClassModal(true);
   };
 
   const handleUpdateStudentClass = async () => {
     const studentUid = selectedStudent?.uid || selectedStudent?.id;
-    if (!studentUid || !targetStudentClass) {
+    if (!studentUid || targetStudentClasses.length === 0) {
       alert("Veuillez sélectionner une classe.");
       return;
     }
     setIsUpdatingStudentClass(true);
     try {
-      const result = await apiFetch(`/users/${studentUid}`, {
+      const result = await apiFetch(`/users/${studentUid}/classes`, {
         method: 'PATCH',
         body: JSON.stringify({
-          className: targetStudentClass,
-          department: targetStudentClass
+          studentClasses: targetStudentClasses
         }),
       });
       if (!result.success) throw new Error(result.error || 'Erreur');
       alert(result.message || "Classe de l'étudiant modifiée avec succès.");
       setShowStudentClassModal(false);
       setSelectedStudent(null);
-      setTargetStudentClass('');
+      setTargetStudentClasses([]);
       await loadUsers();
     } catch (error) {
       alert('Erreur : ' + error.message);
@@ -925,6 +1019,10 @@ export default function UsersPage() {
           <button className="btn-primary" onClick={openModal} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <IconPlus className="icon-sm" /> Ajouter un utilisateur
           </button>
+          <button className="btn-secondary" onClick={() => setShowCreateClassModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <IconPlus className="icon-sm" /> Créer une classe
+          </button>
+          <button className="btn-secondary" onClick={() => setShowClassesModal(true)}>Gérer les classes</button>
           <button className="btn-secondary" onClick={() => setShowImportModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <IconUpload className="icon-sm" /> Importer (.xlsx)
           </button>
@@ -1367,6 +1465,67 @@ export default function UsersPage() {
       </div>
 
       {/* MODAL CREATION (inchangée) */}
+      {showClassesModal && <div className="modal-overlay" onClick={() => setShowClassesModal(false)}><div className="user-modal" style={{ maxWidth: '620px' }} onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="modal-kicker">Organisation pédagogique</p><h3>Classes créées</h3></div><button className="modal-close" onClick={() => setShowClassesModal(false)}>×</button></div><div style={{ padding: '0 24px 24px', maxHeight: '60vh', overflowY: 'auto' }}>{managedClasses.length === 0 ? <p>Aucune classe personnalisée.</p> : managedClasses.map((item) => <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '12px 0', borderBottom: '1px solid #e2e8f0' }}><div><strong>{item.name}</strong><small style={{ display: 'block', color: '#64748b' }}>{item.type === 'exceptional' ? 'Groupe exceptionnel' : 'Classe académique'}</small></div><button className="btn-secondary" onClick={() => handleDeleteClass(item)} style={{ color: '#b91c1c' }}>Supprimer</button></div>)}</div></div></div>}
+
+      {showCreateClassModal && (
+        <div className="modal-overlay" onClick={() => !isCreatingClass && setShowCreateClassModal(false)}>
+          <div className="user-modal" style={{ maxWidth: '480px' }} onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div><p className="modal-kicker">Organisation pédagogique</p><h3>Créer une classe</h3></div>
+              <button className="modal-close" onClick={() => setShowCreateClassModal(false)} disabled={isCreatingClass}>×</button>
+            </div>
+            <form className="user-form" onSubmit={handleCreateClass}>
+              <div className="field-group">
+                <label className="field-label">Nom de la classe ou du groupe *</label>
+                <input autoFocus className="field-input" value={newClassName} onChange={(event) => setNewClassName(event.target.value)} placeholder="Ex. Stage été 2026" disabled={isCreatingClass} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Type</label>
+                <div className="field-group">
+                  <label className="field-label">Professeur référent (facultatif)</label>
+                  <select className="field-input" value={newClassTeacherUid} onChange={(event) => setNewClassTeacherUid(event.target.value)} disabled={isCreatingClass}>
+                    <option value="">-- Aucun professeur pour le moment --</option>
+                    {users.filter((user) => user.role === 'teacher').map((teacher) => <option key={teacher.uid || teacher.id} value={teacher.uid || teacher.id}>{teacher.displayName || teacher.email}</option>)}
+                  </select>
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Étudiants à inscrire ({newClassStudentUids.length})</label>
+                  <div style={{ maxHeight: '190px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px', display: 'grid', gap: '5px' }}>
+                    {users.filter((user) => user.role === 'student').map((student) => {
+                      const uid = student.uid || student.id;
+                      const checked = newClassStudentUids.includes(uid);
+                      return <label key={uid} style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '5px', cursor: 'pointer', background: checked ? '#e0f2fe' : 'transparent', borderRadius: '5px' }}>
+                        <input type="checkbox" checked={checked} disabled={isCreatingClass} onChange={() => setNewClassStudentUids((current) => checked ? current.filter((id) => id !== uid) : [...current, uid])} />
+                        <span>{student.displayName || student.email}</span>
+                      </label>;
+                    })}
+                  </div>
+                  <small style={{ color: '#64748b' }}>Les étudiants conservent aussi leur classe principale.</small>
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Responsable temporaire (facultatif)</label>
+                  <select className="field-input" value={newClassTemporarySupervisorUid} onChange={(event) => setNewClassTemporarySupervisorUid(event.target.value)} disabled={isCreatingClass}>
+                    <option value="">-- Aucun suivi temporaire --</option>
+                    {users.filter((user) => user.role === 'employee' || user.role === 'student').map((person) => <option key={person.uid || person.id} value={person.uid || person.id}>{person.displayName || person.email} — {person.role === 'employee' ? 'Personnel' : 'Étudiant'}</option>)}
+                  </select>
+                  {newClassTemporarySupervisorUid && <div className="form-grid" style={{ marginTop: '8px' }}><div><label className="field-label">Début</label><input className="field-input" type="date" value={temporaryStartDate} onChange={(event) => setTemporaryStartDate(event.target.value)} /></div><div><label className="field-label">Fin</label><input className="field-input" type="date" min={temporaryStartDate} value={temporaryEndDate} onChange={(event) => setTemporaryEndDate(event.target.value)} /></div></div>}
+                  <small style={{ color: '#64748b' }}>Pendant cette période uniquement, la personne verra « Mes élèves » et « Appel » pour ce groupe. L'accès disparaît automatiquement à la date de fin.</small>
+                </div>
+                <select className="field-input" value={newClassType} onChange={(event) => setNewClassType(event.target.value)} disabled={isCreatingClass}>
+                  <option value="exceptional">Groupe exceptionnel (stage, vacances, atelier)</option>
+                  <option value="academic">Classe académique</option>
+                </select>
+              </div>
+              <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>Une fois créée, cette classe peut être attribuée à plusieurs étudiants et à un professeur, puis utilisée dans son planning pour l'appel.</p>
+              <div className="modal-actions">
+                <button type="button" className="btn-secondary" onClick={() => setShowCreateClassModal(false)} disabled={isCreatingClass}>Annuler</button>
+                <button type="submit" className="btn-primary" disabled={isCreatingClass}>{isCreatingClass ? 'Création...' : 'Créer la classe'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {isModalOpen && (
         <div className="modal-overlay" onClick={closeModal}>
           <div className="user-modal" onClick={(e) => e.stopPropagation()}>
@@ -1502,8 +1661,9 @@ export default function UsersPage() {
                 <label className="field-label">Nouvelle classe (sélectionnez pour remplacer)</label>
                 <select
                   className="field-input"
-                  value={targetStudentClass}
-                  onChange={(e) => setTargetStudentClass(e.target.value)}
+                  multiple
+                  value={targetStudentClasses}
+                  onChange={(e) => setTargetStudentClasses(Array.from(e.target.selectedOptions, (option) => option.value))}
                   disabled={isUpdatingStudentClass}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.9rem', outline: 'none' }}
                 >
@@ -1521,7 +1681,7 @@ export default function UsersPage() {
                 <button
                   className="btn-primary"
                   onClick={handleUpdateStudentClass}
-                  disabled={isUpdatingStudentClass || !targetStudentClass}
+                  disabled={isUpdatingStudentClass || targetStudentClasses.length === 0}
                 >
                   {isUpdatingStudentClass ? 'Mise à jour...' : 'Changer la classe'}
                 </button>

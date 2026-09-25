@@ -83,6 +83,7 @@ export default function DashboardLayout() {
   const childCount = Array.isArray(backendUser?.children) && backendUser.children.length > 0
     ? backendUser.children.length
     : (Array.isArray(backendUser?.childrenUids) ? backendUser.childrenUids.length : 0);
+  const hasTemporaryAttendance = Array.isArray(backendUser?.activeTemporaryClasses) && backendUser.activeTemporaryClasses.length > 0;
   const parentAbsenceLabel = childCount === 1 ? 'Absence de mon enfant' : 'Absences de mes enfants';
   const parentDocumentsLabel = childCount === 1 ? 'Documents de mon enfant' : 'Documents de mes enfants';
 
@@ -178,19 +179,23 @@ export default function DashboardLayout() {
                   <NavLink to="/pedagogie/eleves" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
                     <div className="nav-icon"><IconUsers /></div><span>Mes élèves</span>
                   </NavLink>
-                  <NavLink to="/pedagogie/planning" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
+                  {role === 'teacher' && <NavLink to="/pedagogie/planning" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
                     <div className="nav-icon"><IconClock /></div><span>Mon planning</span>
-                  </NavLink>
+                  </NavLink>}
                   <NavLink to="/pedagogie/appel" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
                     <div className="nav-icon"><IconCalendar /></div><span>Appel</span>
                   </NavLink>
-                  <NavLink to="/pedagogie/absences" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
+                  {role === 'teacher' && <NavLink to="/pedagogie/absences" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
                     <div className="nav-icon"><IconCalendar /></div>
                     <span>Absences par classe</span>
-                  </NavLink>
+                  </NavLink>}
                 </>
               ) : (
                 <>
+                  {hasTemporaryAttendance && <>
+                    <NavLink to="/pedagogie/eleves" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}><div className="nav-icon"><IconUsers /></div><span>Mes élèves suivis</span></NavLink>
+                    <NavLink to="/pedagogie/appel" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}><div className="nav-icon"><IconCalendar /></div><span>Appel temporaire</span></NavLink>
+                  </>}
                   {canAccess(documentRoles.dashboard, role) && <NavLink to="/documents/dashboard" className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}>
                     <div className="nav-icon"><IconDashboard /></div><span>Dashboard</span>
                   </NavLink>}

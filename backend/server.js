@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { handleCreateClass, handleListClasses, handleUpdateStudentClasses, handleCreateTemporarySupervision, handleGetMyTemporarySupervisions, handleDeleteClass } from "./Classes/classController.js";
 import express from "express";
 import cors from "cors";
 import { join, dirname } from "path";
@@ -169,6 +170,13 @@ app.post("/api/auth/2fa/verify-login", handleTwoFactorVerifyLogin);
 // UTILISATEURS
 // ============================================================
 
+app.get("/api/classes", authenticateToken, handleListClasses);
+app.post("/api/classes", authenticateToken, authorizeRoles(ROLES.ADMIN, ROLES.SUPER_ADMIN), handleCreateClass);
+app.patch("/api/users/:uid/classes", authenticateToken, authorizeRoles(ROLES.ADMIN, ROLES.SUPER_ADMIN), handleUpdateStudentClasses);
+app.delete("/api/classes/:classId", authenticateToken, authorizeRoles(ROLES.ADMIN, ROLES.SUPER_ADMIN), handleDeleteClass);
+app.post("/api/temporary-supervisions", authenticateToken, authorizeRoles(ROLES.ADMIN, ROLES.SUPER_ADMIN), handleCreateTemporarySupervision);
+app.get("/api/temporary-supervisions/my", authenticateToken, handleGetMyTemporarySupervisions);
+
 app.get("/api/users", authenticateToken, authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE), handleGetAllUsers);
 
 app.post(
@@ -196,14 +204,14 @@ app.get(
 app.get(
   "/api/users/my-students",
   authenticateToken,
-  authorizeRoles(ROLES.TEACHER),
+  authorizeRoles(ROLES.TEACHER, ROLES.EMPLOYEE, ROLES.STUDENT),
   handleGetMyStudents
 );
 
 app.get(
   "/api/users/my-courses",
   authenticateToken,
-  authorizeRoles(ROLES.TEACHER),
+  authorizeRoles(ROLES.TEACHER, ROLES.EMPLOYEE, ROLES.STUDENT),
   handleGetMyCourses
 );
 
