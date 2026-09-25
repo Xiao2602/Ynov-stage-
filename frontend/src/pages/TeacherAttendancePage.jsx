@@ -9,7 +9,7 @@ function getInitials(name = '') {
 }
 
 export default function TeacherAttendancePage() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [students, setStudents] = useState([]);
   const [planning, setPlanning] = useState(null);
   const [selectedCourseId, setSelectedCourseId] = useState(null);
@@ -39,14 +39,22 @@ export default function TeacherAttendancePage() {
     const fetchPlanning = async () => {
       if (!user?.uid) return;
       try {
-        const data = await apiFetch(`/plannings/${user.uid}`);
+        const [data, temporary] = await Promise.all([
+          apiFetch(`/plannings/${user.uid}`),
+          apiFetch('/temporary-supervisions/my')
+        ]);
         if (data && data.success) {
           const rawPlanning = data.planning || (Array.isArray(data.plannings) && data.plannings[0]) || null;
-          if (rawPlanning && Array.isArray(rawPlanning.courses) && rawPlanning.courses.length > 0) {
-            setPlanning(rawPlanning);
-            setSelectedCourseId(rawPlanning.courses[0].id || `${rawPlanning.courses[0].day}-${rawPlanning.courses[0].start}`);
+          const temporaryCourses = (temporary?.supervisions || []).map((item) => ({
+            id: `temporary-${item.id}`, date: new Date().toISOString().slice(0, 10), day: 'Aujourd’hui', start: '09:00', duration: 1,
+            title: 'Suivi temporaire', group: item.className, room: 'Suivi délégué', temporary: true
+          }));
+          const mergedPlanning = { ...(rawPlanning || {}), courses: [...(rawPlanning?.courses || []), ...temporaryCourses] };
+          if (mergedPlanning.courses.length > 0) {
+            setPlanning(mergedPlanning);
+            setSelectedCourseId(mergedPlanning.courses[0].id || `${mergedPlanning.courses[0].day}-${mergedPlanning.courses[0].start}`);
           } else {
-            setPlanning(rawPlanning || null);
+            setPlanning(null);
           }
         } else {
           setPlanning(null);
@@ -57,7 +65,7 @@ export default function TeacherAttendancePage() {
       }
     };
     fetchPlanning();
-  }, [user]);
+  }, [user, role]);
 
   // 2. Charger les étudiants du professeur
   useEffect(() => {
@@ -87,8 +95,10 @@ export default function TeacherAttendancePage() {
     let studentsList = students;
     if (className) {
       studentsList = studentsList.filter(s => {
-        const studentClass = s.className || s.department || '';
-        return studentClass === className;
+        const studentClasses = Array.isArray(s.studentClasses) && s.studentClasses.length
+          ? s.studentClasses
+          : [s.className || s.department || ''];
+        return studentClasses.some((studentClass) => studentClass === className);
       });
     }
 
@@ -152,6 +162,7 @@ export default function TeacherAttendancePage() {
           endDate: today,
           reason: isLate ? 'Retard en cours - ' + selectedCourse.title : 'Absence en cours - ' + selectedCourse.title,
           courseName: selectedCourse.title,
+          className: selectedCourse.group,
           isLate
         };
         return apiFetch('/absences/teacher/declare', {

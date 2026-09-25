@@ -216,6 +216,12 @@ export async function handleGetMe(req, res) {
       }
     }
 
+    const today = new Date().toISOString().slice(0, 10);
+    const supervisionSnapshot = await adminDb.collection('temporarySupervisions').where('supervisorUid', '==', user.uid).get();
+    const activeTemporaryClasses = supervisionSnapshot.docs.map((doc) => doc.data())
+      .filter((item) => item.active !== false && item.startDate <= today && item.endDate >= today)
+      .map((item) => item.className);
+
     return res.status(200).json({
       success: true,
       user: {
@@ -226,6 +232,7 @@ export async function handleGetMe(req, res) {
         department: user.department || userData.department || "",
         mustChangePassword: userData.mustChangePassword || false,
         twoFactorEnabled: userData.twoFactorEnabled || false,
+        activeTemporaryClasses,
         ...userData,
         children
       }
