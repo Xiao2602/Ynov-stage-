@@ -2,7 +2,7 @@ import "dotenv/config";
 import { handleCreateClass, handleListClasses, handleUpdateStudentClasses, handleCreateTemporarySupervision, handleGetMyTemporarySupervisions, handleDeleteClass } from "./Classes/classController.js";
 import express from "express";
 import cors from "cors";
-import { join, dirname } from "path";
+import { dirname } from "path";
 import { fileURLToPath } from "url";
 
 import { adminDb } from "./firebaseAdmin.js";
@@ -145,7 +145,6 @@ app.use(cors({
 app.options('*', cors());
 
 app.use(express.json());
-app.use("/uploads", express.static(join(__dirname, "uploads")));
 
 // ============================================================
 // AUTHENTIFICATION
