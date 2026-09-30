@@ -27,6 +27,7 @@ uploads/
 # ==========================================
 
 .env
+.env_example
 .env.local
 .env.*.local
 backend-91067-firebase-adminsdk-fbsvc-48572794b4.json
@@ -39,6 +40,8 @@ backend-91067-firebase-adminsdk-fbsvc-48572794b4.json
 *-firebase-adminsdk-*.json
 firebase-service-account.json
 firebase-service-account*
+Ynov-stage-backup.git/
+Ynov-stage-cleanup.git/
 
 
 # ==========================================

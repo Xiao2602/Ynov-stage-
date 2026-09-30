@@ -6,7 +6,7 @@ async function runDemo() {
 
   // 1. Création d'un utilisateur par un Admin / RH (Pas d'auto-inscription / registration publique)
   const newUserEmail = "etudiant.ynov@example.com";
-  const newUserPassword = "Password123!";
+  const newUserPassword = process.env.EXAMPLE_USER_PASSWORD;
 
   console.log(`\n1. Création du compte par l'administrateur pour: ${newUserEmail}...`);
   const createResult = await createUserByAdmin({
