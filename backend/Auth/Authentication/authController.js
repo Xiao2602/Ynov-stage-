@@ -29,7 +29,8 @@ export async function handleLogin(req, res) {
 
       const userDoc = await adminDb.collection("users").doc(userRecord.uid).get();
       const userData = userDoc.exists ? userDoc.data() : {};
-      const role = userData.role || userRecord.customClaims?.role || 'employee';
+      const role = userData.role || userRecord.customClaims?.role;
+      if (!role) return res.status(403).json({ success: false, error: 'Aucun rôle valide n’est attribué à ce compte.' });
       const isStudent = role === 'student';
 
       if (!isStudent) {
@@ -191,8 +192,10 @@ export async function handleGetMe(req, res) {
     }
 
     const userDoc = await adminDb.collection("users").doc(user.uid).get();
-    const userData = userDoc.exists ? userDoc.data() : {};
-    const effectiveRole = user.role || userData.role || "employee";
+    if (!userDoc.exists) return res.status(403).json({ success: false, error: 'Profil utilisateur introuvable.' });
+    const userData = userDoc.data();
+    const effectiveRole = user.role || userData.role;
+    if (!effectiveRole) return res.status(403).json({ success: false, error: 'Aucun rôle valide n’est attribué à ce compte.' });
 
     let children = [];
     if (effectiveRole === "parent" && Array.isArray(userData.childrenUids) && userData.childrenUids.length > 0) {
@@ -237,7 +240,9 @@ export async function handleGetMe(req, res) {
 export async function handleAcceptConsent(req, res) {
   const version = String(req.body?.version || '').slice(0, 30);
   if (!version) return res.status(400).json({ success: false, error: 'Version de consentement requise.' });
-  await adminDb.collection('users').doc(req.user.uid).set({ consentVersion: version, consentAcceptedAt: new Date().toISOString() }, { merge: true });
+  const userRef = adminDb.collection('users').doc(req.user.uid);
+  if (!(await userRef.get()).exists) return res.status(403).json({ success: false, error: 'Profil utilisateur introuvable.' });
+  await userRef.update({ consentVersion: version, consentAcceptedAt: new Date().toISOString() });
   return res.json({ success: true });
 }
 

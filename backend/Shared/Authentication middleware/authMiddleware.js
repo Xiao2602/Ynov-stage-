@@ -29,7 +29,11 @@ export async function authenticateToken(req, res, next) {
     const userRecord = await adminAuth.getUser(decodedToken.uid);
     const customClaims = userRecord.customClaims || {};
     const userDoc = await adminDb.collection("users").doc(decodedToken.uid).get();
-    const userData = userDoc.exists ? userDoc.data() : {};
+    if (!userDoc.exists) return res.status(403).json({ success: false, error: 'Profil utilisateur introuvable.' });
+    const userData = userDoc.data();
+    const role = customClaims.role || userData.role;
+    const validRoles = new Set(['super_admin', 'admin', 'rh', 'employee', 'teacher', 'student', 'parent']);
+    if (!validRoles.has(role)) return res.status(403).json({ success: false, error: 'Aucun rôle valide n’est attribué à ce compte.' });
 
     // Une session Firebase créée après le mot de passe ne suffit pas pour un
     // compte protégé par 2FA. La validation doit appartenir à cette connexion.
@@ -49,7 +53,7 @@ export async function authenticateToken(req, res, next) {
       uid: decodedToken.uid,
       email: decodedToken.email,
       displayName: decodedToken.name || userRecord.displayName,
-      role: customClaims.role || userData.role || "employee",
+      role,
       ...customClaims
     };
 
