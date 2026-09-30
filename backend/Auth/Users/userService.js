@@ -1,4 +1,5 @@
 import admin from "firebase-admin";
+import { serializeUser } from "../../Shared/Serializers/userSerializer.js";
 import { adminAuth, adminDb } from "../../Shared/Firebase config/firebase.js";
 import { sendWelcomeEmail } from "../../Services/emailService.js"; // ✅ AJOUT
 
@@ -215,12 +216,7 @@ export async function getAllUsersService() {
     const users = [];
     snapshot.forEach(doc => {
       const data = doc.data() || {};
-      users.push({
-        uid: doc.id,
-        id: doc.id,
-        ...data,
-        uid: data.uid || doc.id
-      });
+      users.push(serializeUser(data, doc.id));
     });
     return { success: true, data: users };
   } catch (error) {

@@ -1,5 +1,5 @@
 import { existsSync, unlinkSync, mkdirSync, writeFileSync } from "fs";
-import { resolve, dirname, join } from "path";
+import { resolve, dirname, relative, sep } from "path";
 import { fileURLToPath } from "url";
 import admin from "firebase-admin";
 import PDFDocument from "pdfkit";
@@ -262,7 +262,7 @@ export async function handleViewDocument(req, res) {
 
     const storagePath = String(result.document.storagePath || "").replace(/^[\\/]+/, "");
     const filePath = resolve(BACKEND_DIR, storagePath);
-    if (!storagePath || !filePath.startsWith(`${UPLOADS_DIR}\\`) || !existsSync(filePath)) {
+    if (!storagePath || relative(UPLOADS_DIR, filePath).startsWith(`..${sep}`) || relative(UPLOADS_DIR, filePath) === '..' || !existsSync(filePath)) {
       return res.status(404).json({ success: false, error: "Fichier introuvable." });
     }
     return res.type(result.document.mimeType || "application/octet-stream").sendFile(filePath);

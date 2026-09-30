@@ -1,12 +1,8 @@
 import {
   loginService,
-  resetPasswordService,
   logoutService
 } from "./authService.js";
 
-import {
-  sendCustomPasswordResetEmail
-} from "./customEmailService.js";
 
 import {
   adminAuth,
@@ -15,6 +11,7 @@ import {
 
 import { logActivity } from "../../Services/activityLogService.js";
 import { setupTwoFactor } from "../../Services/twoFactorService.js";
+import { serializeUser } from "../../Shared/Serializers/userSerializer.js";
 
 export async function handleLogin(req, res) {
   try {
@@ -32,7 +29,8 @@ export async function handleLogin(req, res) {
 
       const userDoc = await adminDb.collection("users").doc(userRecord.uid).get();
       const userData = userDoc.exists ? userDoc.data() : {};
-      const role = userData.role || userRecord.customClaims?.role || 'employee';
+      const role = userData.role || userRecord.customClaims?.role;
+      if (!role) return res.status(403).json({ success: false, error: 'Aucun rôle valide n’est attribué à ce compte.' });
       const isStudent = role === 'student';
 
       if (!isStudent) {
@@ -84,6 +82,7 @@ export async function handleLogin(req, res) {
 }
 
 
+/* REMOVED_IN_AUDIT
 export async function handleResetPassword(req, res) {
   try {
     const { email, smtpConfig } = req.body;
@@ -115,6 +114,7 @@ export async function handleResetPassword(req, res) {
     });
   }
 }
+REMOVED_IN_AUDIT */
 
 export async function handleLogout(req, res) {
   const result = await logoutService();
@@ -192,8 +192,10 @@ export async function handleGetMe(req, res) {
     }
 
     const userDoc = await adminDb.collection("users").doc(user.uid).get();
-    const userData = userDoc.exists ? userDoc.data() : {};
-    const effectiveRole = user.role || userData.role || "employee";
+    if (!userDoc.exists) return res.status(403).json({ success: false, error: 'Profil utilisateur introuvable.' });
+    const userData = userDoc.data();
+    const effectiveRole = user.role || userData.role;
+    if (!effectiveRole) return res.status(403).json({ success: false, error: 'Aucun rôle valide n’est attribué à ce compte.' });
 
     let children = [];
     if (effectiveRole === "parent" && Array.isArray(userData.childrenUids) && userData.childrenUids.length > 0) {
@@ -224,18 +226,7 @@ export async function handleGetMe(req, res) {
 
     return res.status(200).json({
       success: true,
-      user: {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName || userData.displayName,
-        role: effectiveRole,
-        department: user.department || userData.department || "",
-        mustChangePassword: userData.mustChangePassword || false,
-        twoFactorEnabled: userData.twoFactorEnabled || false,
-        activeTemporaryClasses,
-        ...userData,
-        children
-      }
+      user: { ...serializeUser({ ...userData, uid: user.uid, email: user.email, displayName: user.displayName || userData.displayName, role: effectiveRole, department: user.department || userData.department || "" }, user.uid), activeTemporaryClasses, children }
     });
   } catch (error) {
     console.error("Erreur /me :", error);
@@ -249,7 +240,9 @@ export async function handleGetMe(req, res) {
 export async function handleAcceptConsent(req, res) {
   const version = String(req.body?.version || '').slice(0, 30);
   if (!version) return res.status(400).json({ success: false, error: 'Version de consentement requise.' });
-  await adminDb.collection('users').doc(req.user.uid).set({ consentVersion: version, consentAcceptedAt: new Date().toISOString() }, { merge: true });
+  const userRef = adminDb.collection('users').doc(req.user.uid);
+  if (!(await userRef.get()).exists) return res.status(403).json({ success: false, error: 'Profil utilisateur introuvable.' });
+  await userRef.update({ consentVersion: version, consentAcceptedAt: new Date().toISOString() });
   return res.json({ success: true });
 }
 

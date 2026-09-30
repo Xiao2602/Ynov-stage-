@@ -1,4 +1,4 @@
-import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { auth } from "../../Shared/Firebase config/firebase.js";
 
 /**
