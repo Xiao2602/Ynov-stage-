@@ -827,8 +827,8 @@ export default function UsersPage() {
     const templateData = [
       ['Email', 'Mot de passe', 'Nom complet', 'Rôle', 'Département (optionnel)', 'Classe (étudiant)', 'Classe assignée (professeur)', 'Téléphone']
     ];
-    templateData.push(['prenom.nom@ynov.com', 'Password123!', 'Jean Dupont', 'student', 'Informatique', 'Bachelor 1 - Informatique', '', '0612345678']);
-    templateData.push(['prof@ynov.com', 'Password123!', 'Marie Martin', 'teacher', 'Informatique', '', 'Bachelor 1 - Informatique', '0612345679']);
+    templateData.push(['prenom.nom@ynov.com', 'À définir à l’import', 'Jean Dupont', 'student', 'Informatique', 'Bachelor 1 - Informatique', '', '0612345678']);
+    templateData.push(['prof@ynov.com', 'À définir à l’import', 'Marie Martin', 'teacher', 'Informatique', '', 'Bachelor 1 - Informatique', '0612345679']);
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(templateData);

@@ -82,8 +82,8 @@ export async function handleLogin(req, res) {
 }
 
 
-/* REMOVED_IN_AUDIT
-export async function handleResetPassword(req, res) {
+/* Legacy disabled code retained only for source-history migration.
+function legacyDisabledEndpoint(req, res) {
   try {
     const { email, smtpConfig } = req.body;
 
