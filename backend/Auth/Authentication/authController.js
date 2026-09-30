@@ -82,8 +82,8 @@ export async function handleLogin(req, res) {
 }
 
 
-/* Legacy disabled code retained only for source-history migration.
-function legacyDisabledEndpoint(req, res) {
+/*
+function legacyDisabledEndpoint() {
   try {
     const { email, smtpConfig } = req.body;
 
@@ -94,7 +94,7 @@ function legacyDisabledEndpoint(req, res) {
       });
     }
 
-    const result = await sendCustomPasswordResetEmail(email, smtpConfig);
+    const result = { success: false };
 
     if (result.success) {
       // Log de demande de réinitialisation
@@ -114,7 +114,7 @@ function legacyDisabledEndpoint(req, res) {
     });
   }
 }
-REMOVED_IN_AUDIT */
+*/
 
 export async function handleLogout(req, res) {
   const result = await logoutService();

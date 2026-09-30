@@ -90,8 +90,10 @@ export const adminDb = admin.firestore();
  * @param {string} userData.role - Rôle ('admin', 'rh', 'manager', 'employee', 'student', 'teacher')
  * @param {string} [userData.department] - Département (optionnel)
  */
-export async function createUserByAdmin({ email, password, displayName, role = 'employee', department = '' }) {
+export async function createUserByAdmin({ email, password, displayName, role, department = '' }) {
   try {
+    const allowedRoles = new Set(['super_admin', 'admin', 'rh', 'employee', 'teacher', 'student', 'parent']);
+    if (!allowedRoles.has(role)) return { success: false, error: 'Rôle valide requis.' };
     // 1. Création du compte utilisateur dans Firebase Authentication
     const userRecord = await adminAuth.createUser({
       email,

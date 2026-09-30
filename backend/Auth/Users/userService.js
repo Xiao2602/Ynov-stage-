@@ -10,7 +10,7 @@ export async function createUserService({
   email,
   password,
   displayName,
-  role = "employee",
+  role,
   department = "",
   className = "",
   studentClasses = [],
@@ -21,7 +21,7 @@ export async function createUserService({
   try {
     const cleanEmail = email?.trim().toLowerCase();
     const cleanDisplayName = displayName?.trim();
-    const normalizedRole = typeof role === "string" ? role.trim().toLowerCase() : "employee";
+    const normalizedRole = typeof role === "string" ? role.trim().toLowerCase() : "";
 
     if (!cleanEmail) {
       return { success: false, error: "L'adresse email est obligatoire." };

@@ -138,7 +138,6 @@ app.post("/api/items", authenticateToken, authorizeRoles(ROLES.ADMIN, ROLES.RH),
 
 ### 1. Authentification (`/api/auth`)
 * `POST /api/auth/login` (Public) : Authentifie un utilisateur avec email et mot de passe. Renvoie le jeton ID Token et les informations de profil.
-* `POST /api/auth/reset-password` (Public) : Génère un lien sécurisé de réinitialisation de mot de passe et l'envoie par e-mail HTML via Nodemailer.
 * `POST /api/auth/logout` (Public) : Déconnecte l'utilisateur actuel.
 
 ### 2. Gestion des Utilisateurs et Rôles (`/api/users` & `/api/roles`)
