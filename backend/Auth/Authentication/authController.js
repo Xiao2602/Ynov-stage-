@@ -1,12 +1,8 @@
 import {
   loginService,
-  resetPasswordService,
   logoutService
 } from "./authService.js";
 
-import {
-  sendCustomPasswordResetEmail
-} from "./customEmailService.js";
 
 import {
   adminAuth,
@@ -84,6 +80,7 @@ export async function handleLogin(req, res) {
 }
 
 
+/* REMOVED_IN_AUDIT
 export async function handleResetPassword(req, res) {
   try {
     const { email, smtpConfig } = req.body;
@@ -115,6 +112,7 @@ export async function handleResetPassword(req, res) {
     });
   }
 }
+REMOVED_IN_AUDIT */
 
 export async function handleLogout(req, res) {
   const result = await logoutService();

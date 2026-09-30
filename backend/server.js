@@ -18,7 +18,6 @@ const __dirname = dirname(__filename);
 
 import {
   handleLogin,
-  handleResetPassword,
   handleLogout,
   handleChangePassword,
   handleGetMe,
@@ -152,7 +151,6 @@ app.use("/uploads", express.static(join(__dirname, "uploads")));
 // ============================================================
 
 app.post("/api/auth/login", handleLogin);
-app.post("/api/auth/reset-password", handleResetPassword);
 app.post("/api/auth/change-password", authenticateToken, handleChangePassword);
 app.post("/api/auth/logout", handleLogout);
 app.get("/api/auth/me", authenticateToken, handleGetMe);
