@@ -8,6 +8,14 @@ import { getActiveTemporaryClasses } from "../../Classes/classController.js";
 export async function handleCreateUser(req, res) {
   try {
     const { email, password, displayName, role, department, className, studentClasses, assignedClass, assignedClasses, phone } = req.body;
+    const requestedRole = typeof role === 'string' ? role.trim().toLowerCase() : '';
+    const creatableRoles = ['student', 'teacher', 'parent', 'employee', 'rh', 'admin'];
+    if (!creatableRoles.includes(requestedRole)) {
+      return res.status(400).json({ success: false, error: 'Rôle invalide pour la création de compte.' });
+    }
+    if (requestedRole === 'admin' && req.user.role !== 'super_admin') {
+      return res.status(403).json({ success: false, error: 'Seul le super-administrateur peut créer un administrateur.' });
+    }
     if (!email || !password || !displayName) {
       return res.status(400).json({ success: false, error: "Veuillez fournir un email, un mot de passe et un nom." });
     }
