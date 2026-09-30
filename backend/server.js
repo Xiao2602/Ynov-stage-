@@ -121,6 +121,7 @@ import {
 } from "./Shared/Authentication middleware/authMiddleware.js";
 
 import { ROLES } from "./Shared/Roles/roles.js";
+import { serializeTeacherIdentity } from "./Shared/Serializers/userSerializer.js";
 
 // ============================================================
 // CONFIGURATION MULTER
@@ -477,15 +478,13 @@ app.get("/api/plannings/catalog", authenticateToken, authorizeRoles(ROLES.ADMIN,
     const [usersSnapshot, planningsSnapshot] = await Promise.all([
       adminDb.collection("users").get(), adminDb.collection("plannings").get()
     ]);
-    const users = usersSnapshot.docs.map((doc) => ({ uid: doc.id, ...doc.data() }));
-    const teachers = users.filter((user) => user.role === "teacher").map((user) => ({
-      uid: user.uid, displayName: user.displayName || user.email || "Professeur"
-    }));
+    const teachers = usersSnapshot.docs.filter((doc) => doc.data().role === "teacher")
+      .map((doc) => serializeTeacherIdentity(doc.data(), doc.id));
     const allowedPlanningIds = req.user.role === ROLES.TEACHER ? new Set([req.user.uid]) : null;
     const courses = planningsSnapshot.docs.filter((doc) => !allowedPlanningIds || allowedPlanningIds.has(doc.id)).flatMap((doc) => (doc.data().courses || []).map((course) => ({
       ...course, teacherUid: doc.id, teacherName: teachers.find((teacher) => teacher.uid === doc.id)?.displayName || "Professeur"
     })));
-    return res.json({ success: true, users, teachers, courses });
+    return res.json({ success: true, teachers, courses });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }

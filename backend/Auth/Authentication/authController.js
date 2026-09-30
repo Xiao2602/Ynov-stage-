@@ -11,6 +11,7 @@ import {
 
 import { logActivity } from "../../Services/activityLogService.js";
 import { setupTwoFactor } from "../../Services/twoFactorService.js";
+import { serializeUser } from "../../Shared/Serializers/userSerializer.js";
 
 export async function handleLogin(req, res) {
   try {
@@ -222,18 +223,7 @@ export async function handleGetMe(req, res) {
 
     return res.status(200).json({
       success: true,
-      user: {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName || userData.displayName,
-        role: effectiveRole,
-        department: user.department || userData.department || "",
-        mustChangePassword: userData.mustChangePassword || false,
-        twoFactorEnabled: userData.twoFactorEnabled || false,
-        activeTemporaryClasses,
-        ...userData,
-        children
-      }
+      user: { ...serializeUser({ ...userData, uid: user.uid, email: user.email, displayName: user.displayName || userData.displayName, role: effectiveRole, department: user.department || userData.department || "" }, user.uid), activeTemporaryClasses, children }
     });
   } catch (error) {
     console.error("Erreur /me :", error);

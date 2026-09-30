@@ -1,4 +1,5 @@
 import admin from "firebase-admin";
+import { serializeUser } from "../../Shared/Serializers/userSerializer.js";
 import { adminAuth, adminDb } from "../../Shared/Firebase config/firebase.js";
 import { createUserService, getAllUsersService } from "./userService.js";
 import { logActivity } from "../../Services/activityLogService.js";
@@ -146,7 +147,7 @@ export async function handleGetLinkedChildren(req, res) {
     const children = [];
     for (const uid of childrenUids) {
       const childDoc = await adminDb.collection("users").doc(uid).get();
-      if (childDoc.exists) children.push({ uid: childDoc.id, ...childDoc.data() });
+      if (childDoc.exists) children.push(serializeUser(childDoc.data(), childDoc.id));
     }
     return res.status(200).json({ success: true, children });
   } catch (error) {
@@ -181,7 +182,7 @@ export async function handleGetMyStudents(req, res) {
       const studentData = doc.data();
       const studentClasses = Array.isArray(studentData.studentClasses) && studentData.studentClasses.length ? studentData.studentClasses : [studentData.className || studentData.department || ''];
       const match = assignedClasses.some(cls => studentClasses.some(studentClass => String(studentClass).toLowerCase() === String(cls).toLowerCase()));
-      if (match) students.push({ uid: doc.id, ...studentData });
+      if (match) students.push(serializeUser(studentData, doc.id));
     });
     return res.status(200).json({ success: true, students, classes: assignedClasses });
   } catch (error) {
@@ -339,7 +340,7 @@ export async function handleGetUser(req, res) {
     if (!uid) return res.status(400).json({ success: false, error: "UID manquant." });
     const doc = await adminDb.collection("users").doc(uid).get();
     if (!doc.exists) return res.status(404).json({ success: false, error: "Utilisateur introuvable." });
-    return res.status(200).json({ success: true, user: { uid: doc.id, ...doc.data() } });
+    return res.status(200).json({ success: true, user: serializeUser(doc.data(), doc.id) });
   } catch (error) {
     console.error("Erreur handleGetUser:", error);
     return res.status(500).json({ success: false, error: error.message });
