@@ -20,6 +20,14 @@ export async function handleAssignRole(req, res) {
       });
     }
 
+    const requestedRole = typeof role === "string" ? role.trim().toLowerCase() : "";
+    if (requestedRole === "admin" && req.user.role !== "super_admin") {
+      return res.status(403).json({
+        success: false,
+        error: "Seul le super-administrateur peut attribuer le rôle administrateur."
+      });
+    }
+
     // --------------------------------------------------
     // Appel du service
     // --------------------------------------------------

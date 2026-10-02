@@ -1,4 +1,3 @@
-import { adminAuth } from "../../Shared/Firebase config/firebase.js";
 import nodemailer from "nodemailer";
 
 /**
@@ -176,37 +175,6 @@ function getAbsenceDecisionEmailTemplate(displayName, status, reviewNotes) {
   </table>
 </body>
 </html>`;
-}
-
-/**
- * Service 1 : Envoi de l'email de réinitialisation du mot de passe
- */
-export async function sendCustomPasswordResetEmail(email, smtpConfig = null) {
-  try {
-    const userRecord = await adminAuth.getUserByEmail(email);
-    let link = "";
-    try {
-      link = await adminAuth.generatePasswordResetLink(email);
-    } catch (firebaseErr) {
-      const customToken = await adminAuth.createCustomToken(userRecord.uid);
-      link = `https://backend-91067.firebaseapp.com/__/auth/action?mode=resetPassword&email=${encodeURIComponent(email)}&token=${customToken}`;
-    }
-
-    const transporter = createTransporter();
-    if (transporter) {
-      await transporter.sendMail({
-        from: `"Maroc YNOV Campus" <${process.env.SMTP_USER}>`,
-        to: email,
-        subject: "[Maroc YNOV Campus] Réinitialisation de votre mot de passe",
-        html: getResetPasswordEmailTemplate(email, link)
-      });
-      return { success: true, message: "Email de réinitialisation envoyé avec succès.", resetLink: link };
-    }
-
-    return { success: true, message: "Lien de réinitialisation généré avec succès.", resetLink: link };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
 }
 
 /**

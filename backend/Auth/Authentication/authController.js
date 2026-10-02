@@ -10,7 +10,6 @@ import {
 } from "../../Shared/Firebase config/firebase.js";
 
 import { logActivity } from "../../Services/activityLogService.js";
-import { setupTwoFactor } from "../../Services/twoFactorService.js";
 import { serializeUser } from "../../Shared/Serializers/userSerializer.js";
 
 export async function handleLogin(req, res) {
@@ -43,8 +42,9 @@ export async function handleLogin(req, res) {
           // Stocker le secret temporairement
           await adminDb.collection("temp_2fa").doc(tempId).set({
             userId: userRecord.uid,
-            secret: userData.twoFactorSecret,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+            attempts: 0
           });
 
           // Supprimer après 5 minutes
@@ -81,40 +81,6 @@ export async function handleLogin(req, res) {
   }
 }
 
-
-/*
-function legacyDisabledEndpoint() {
-  try {
-    const { email, smtpConfig } = req.body;
-
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        error: "Veuillez fournir une adresse email."
-      });
-    }
-
-    const result = { success: false };
-
-    if (result.success) {
-      // Log de demande de réinitialisation
-      const userRecord = await adminAuth.getUserByEmail(email);
-      if (userRecord) {
-        await logActivity(userRecord.uid, 'reset_password', { email }, req);
-      }
-      return res.status(200).json(result);
-    }
-
-    return res.status(400).json(result);
-  } catch (error) {
-    console.error("Erreur reset password :", error);
-    return res.status(500).json({
-      success: false,
-      error: "Erreur lors de la réinitialisation."
-    });
-  }
-}
-*/
 
 export async function handleLogout(req, res) {
   const result = await logoutService();
@@ -244,77 +210,4 @@ export async function handleAcceptConsent(req, res) {
   if (!(await userRef.get()).exists) return res.status(403).json({ success: false, error: 'Profil utilisateur introuvable.' });
   await userRef.update({ consentVersion: version, consentAcceptedAt: new Date().toISOString() });
   return res.json({ success: true });
-}
-
-/**
- * POST /api/auth/verify-2fa
- * Étape 2 : vérifier le code 2FA et finaliser la connexion
- */
-export async function handleVerify2FA(req, res) {
-  try {
-    const { tempToken, token } = req.body;
-    if (!tempToken || !token) {
-      return res.status(400).json({ success: false, error: "Token temporaire et code requis." });
-    }
-
-    // Récupérer le token temporaire
-    const tempDoc = await adminDb.collection("temp_tokens").doc(tempToken).get();
-    if (!tempDoc.exists) {
-      return res.status(401).json({ success: false, error: "Token temporaire invalide ou expiré." });
-    }
-    const tempData = tempDoc.data();
-    const userId = tempData.userId;
-
-    // Vérifier l'expiration
-    if (new Date() > tempData.expiresAt.toDate()) {
-      await adminDb.collection("temp_tokens").doc(tempToken).delete();
-      return res.status(401).json({ success: false, error: "Token temporaire expiré." });
-    }
-
-    // Récupérer l'utilisateur
-    const userDoc = await adminDb.collection("users").doc(userId).get();
-    if (!userDoc.exists) {
-      return res.status(404).json({ success: false, error: "Utilisateur introuvable." });
-    }
-    const userData = userDoc.data();
-    const secret = userData.twoFactorSecret;
-    if (!secret) {
-      return res.status(400).json({ success: false, error: "La 2FA n'est pas activée pour cet utilisateur." });
-    }
-
-    // Vérifier le code
-    const verified = speakeasy.totp.verify({
-      secret: secret,
-      encoding: 'base32',
-      token: token,
-      window: 1
-    });
-
-    if (!verified) {
-      await logActivity(userId, 'login_2fa_failed', { token }, req);
-      return res.status(401).json({ success: false, error: "Code 2FA invalide." });
-    }
-
-    // Supprimer le token temporaire
-    await adminDb.collection("temp_tokens").doc(tempToken).delete();
-
-    // Générer un token Firebase (ou retourner le token existant)
-    // Reconnecter l'utilisateur avec le token Firebase
-    const customToken = await adminAuth.createCustomToken(userId);
-    await logActivity(userId, 'login', { email: userData.email }, req);
-
-    return res.status(200).json({
-      success: true,
-      token: customToken,
-      user: {
-        uid: userId,
-        email: userData.email,
-        displayName: userData.displayName,
-        role: userData.role
-      }
-    });
-  } catch (error) {
-    console.error("Erreur verification 2FA :", error);
-    return res.status(500).json({ success: false, error: error.message });
-  }
 }
