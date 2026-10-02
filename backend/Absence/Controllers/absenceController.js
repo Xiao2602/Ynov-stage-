@@ -219,12 +219,40 @@ export async function handleTeacherDeclareAbsence(req, res) {
   console.log("📦 Body:", req.body);
 
   try {
+    const className = String(req.body?.className || '').trim();
+    const courseName = String(req.body?.courseName || '').trim();
+    if (!className || !courseName) {
+      return res.status(400).json({ success: false, error: "La classe et le cours sont obligatoires pour déclarer un appel." });
+    }
+
     if (req.user.role !== 'teacher') {
       const allowedClasses = await getActiveTemporaryClasses(req.user.uid);
       if (!allowedClasses.includes(String(req.body?.className || '').trim())) {
         return res.status(403).json({ success: false, error: "Vous n'avez pas de délégation active pour cette classe." });
       }
     }
+
+    const [planningDoc, studentDoc] = await Promise.all([
+      adminDb.collection("plannings").doc(req.user.uid).get(),
+      adminDb.collection("users").doc(req.body.studentId || "").get()
+    ]);
+    if (!studentDoc.exists || studentDoc.data().role !== "student") {
+      return res.status(404).json({ success: false, error: "Étudiant introuvable." });
+    }
+    const normalize = (value) => String(value || "").trim().toLocaleLowerCase("fr-FR").replace(/\s+/g, " ");
+    const studentClasses = Array.isArray(studentDoc.data().studentClasses) && studentDoc.data().studentClasses.length
+      ? studentDoc.data().studentClasses
+      : [studentDoc.data().className || studentDoc.data().department];
+    if (!studentClasses.some((value) => normalize(value) === normalize(className))) {
+      return res.status(403).json({ success: false, error: "Cet étudiant n'appartient pas à la classe sélectionnée." });
+    }
+    const hasAssignedCourse = planningDoc.exists && (planningDoc.data().courses || []).some((course) =>
+      normalize(course.group) === normalize(className) && normalize(course.title) === normalize(courseName)
+    );
+    if (!hasAssignedCourse) {
+      return res.status(403).json({ success: false, error: "Ce cours n'est pas assigné à votre planning pour cette classe." });
+    }
+
     const validation = validateTeacherDeclareAbsence(req.body);
     if (!validation.valid) {
       return res.status(400).json({ success: false, error: validation.error });

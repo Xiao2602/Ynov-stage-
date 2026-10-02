@@ -7,15 +7,20 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "seed": "node seed.js"
+    "seed": "node seed.js",
+    "test": "node --test tests/security.test.js",
+    "lint": "node --check server.js && node --check Auth/Authentication/authController.js && node --check Auth/Authentication/twoFactorController.js && node --check \"Shared/Authentication middleware/authMiddleware.js\"",
+    "audit": "npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.7.0",
     "file-type": "^22.0.2",
     "firebase": "^10.12.0",
     "firebase-admin": "^12.1.0",
+    "helmet": "^8.3.0",
     "multer": "^2.2.0",
     "nodemailer": "^6.10.1",
     "pdfkit": "^0.19.1",

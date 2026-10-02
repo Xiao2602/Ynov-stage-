@@ -1,4 +1,4 @@
-import { getPlanningService, upsertPlanningService, deletePlanningService } from "../../Services/planningService.js";
+import { getPlanningService } from "../../Services/planningService.js";
 import { logActivity } from "../../Services/activityLogService.js";
 
 /**
@@ -13,7 +13,7 @@ export async function handleGetPlanning(req, res) {
     }
 
     // Vérification des droits : admin/personnel peuvent tout voir, prof ne voit que son planning
-    const isAdmin = ['admin', 'employee'].includes(req.user.role);
+    const isAdmin = ['super_admin', 'admin', 'employee'].includes(req.user.role);
     if (!isAdmin && req.user.uid !== teacherUid) {
       return res.status(403).json({ success: false, error: "Accès non autorisé." });
     }

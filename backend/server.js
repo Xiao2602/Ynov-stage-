@@ -2,15 +2,12 @@ import "dotenv/config";
 import { handleCreateClass, handleListClasses, handleUpdateStudentClasses, handleCreateTemporarySupervision, handleGetMyTemporarySupervisions, handleDeleteClass } from "./Classes/classController.js";
 import express from "express";
 import cors from "cors";
-import { dirname } from "path";
-import { fileURLToPath } from "url";
+import helmet from "helmet";
+import { rateLimit } from "express-rate-limit";
 
 import { adminDb } from "./firebaseAdmin.js";
 import admin from "firebase-admin";
 import { getActivityLogs, logActivity } from "./Services/activityLogService.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 // ============================================================
 // IMPORTS AUTHENTIFICATION
@@ -21,8 +18,7 @@ import {
   handleLogout,
   handleChangePassword,
   handleGetMe,
-  handleAcceptConsent,
-  handleVerify2FA
+  handleAcceptConsent
 } from "./Auth/Authentication/authController.js";
 
 import {
@@ -133,24 +129,41 @@ import { serializeTeacherIdentity } from "./Shared/Serializers/userSerializer.js
 // ============================================================
 
 const app = express();
+app.disable("x-powered-by");
+if (process.env.NODE_ENV === "production") app.set("trust proxy", 1);
 
-// CORS
-app.use(cors({
-  origin: 'http://localhost:5173',
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error("Origine non autorisée par CORS."));
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept"],
   credentials: true,
-  optionsSuccessStatus: 200
-}));
-app.options('*', cors());
+  optionsSuccessStatus: 204
+};
+const authenticationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { success: false, error: "Trop de tentatives. Réessayez dans quelques minutes." }
+});
 
-app.use(express.json());
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+app.use(express.json({ limit: "1mb" }));
 
 // ============================================================
 // AUTHENTIFICATION
 // ============================================================
 
-app.post("/api/auth/login", handleLogin);
+app.post("/api/auth/login", authenticationLimiter, handleLogin);
 app.post("/api/auth/change-password", authenticateToken, handleChangePassword);
 app.post("/api/auth/logout", handleLogout);
 app.get("/api/auth/me", authenticateToken, handleGetMe);
@@ -161,8 +174,7 @@ app.post("/api/auth/consent", authenticateToken, handleAcceptConsent);
 app.get("/api/auth/2fa/setup", authenticateToken, handleTwoFactorSetup);
 app.post("/api/auth/2fa/enable", authenticateToken, handleTwoFactorEnable);
 app.post("/api/auth/2fa/disable", authenticateToken, handleTwoFactorDisable);
-app.post("/api/auth/verify-2fa", handleVerify2FA);
-app.post("/api/auth/2fa/verify-login", handleTwoFactorVerifyLogin);
+app.post("/api/auth/2fa/verify-login", authenticationLimiter, handleTwoFactorVerifyLogin);
 
 // ============================================================
 // UTILISATEURS
@@ -296,7 +308,7 @@ app.get(
 app.get(
   "/api/absences",
   authenticateToken,
-  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.TEACHER),
+  authorizeRoles(ROLES.ADMIN, ROLES.EMPLOYEE),
   handleGetAllAbsences
 );
 app.patch(
@@ -410,6 +422,9 @@ app.post(
       if (!teacherDoc.exists) {
         return res.status(404).json({ success: false, error: "Professeur introuvable." });
       }
+      if (teacherDoc.data().role !== ROLES.TEACHER) {
+        return res.status(400).json({ success: false, error: "Le planning doit être attribué à un compte professeur." });
+      }
 
       const DAYS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
@@ -480,10 +495,13 @@ app.get("/api/plannings/catalog", authenticateToken, authorizeRoles(ROLES.ADMIN,
     const teachers = usersSnapshot.docs.filter((doc) => doc.data().role === "teacher")
       .map((doc) => serializeTeacherIdentity(doc.data(), doc.id));
     const allowedPlanningIds = req.user.role === ROLES.TEACHER ? new Set([req.user.uid]) : null;
+    const visibleTeachers = allowedPlanningIds
+      ? teachers.filter((teacher) => allowedPlanningIds.has(teacher.uid))
+      : teachers;
     const courses = planningsSnapshot.docs.filter((doc) => !allowedPlanningIds || allowedPlanningIds.has(doc.id)).flatMap((doc) => (doc.data().courses || []).map((course) => ({
-      ...course, teacherUid: doc.id, teacherName: teachers.find((teacher) => teacher.uid === doc.id)?.displayName || "Professeur"
+      ...course, teacherUid: doc.id, teacherName: visibleTeachers.find((teacher) => teacher.uid === doc.id)?.displayName || "Professeur"
     })));
-    return res.json({ success: true, teachers, courses });
+    return res.json({ success: true, teachers: visibleTeachers, courses });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -641,20 +659,7 @@ app.get(
 app.get(
   "/api/plannings/:teacherUid",
   authenticateToken,
-  async (req, res) => {
-    console.log("📥 [GET] /api/plannings/" + req.params.teacherUid);
-    try {
-      const { teacherUid } = req.params;
-      const doc = await adminDb.collection("plannings").doc(teacherUid).get();
-      if (!doc.exists) {
-        return res.status(200).json({ success: true, planning: null });
-      }
-      return res.status(200).json({ success: true, planning: { id: doc.id, ...doc.data() } });
-    } catch (error) {
-      console.error("❌ Erreur récupération planning:", error);
-      return res.status(500).json({ success: false, error: error.message });
-    }
-  }
+  handleGetPlanning
 );
 
 

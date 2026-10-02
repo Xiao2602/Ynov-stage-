@@ -62,10 +62,26 @@ export async function handleTwoFactorVerifyLogin(req, res) {
     }
     const tempData = tempDoc.data();
     const userId = tempData.userId;
-    const secret = tempData.secret;
+    const expiresAt = new Date(tempData.expiresAt || 0);
+    if (!userId || Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date()) {
+      await tempDoc.ref.delete();
+      return res.status(400).json({ success: false, error: "Session 2FA expirée ou invalide." });
+    }
+    if ((tempData.attempts || 0) >= 5) {
+      await tempDoc.ref.delete();
+      return res.status(429).json({ success: false, error: "Trop de codes invalides. Reconnectez-vous." });
+    }
+
+    const userDoc = await adminDb.collection("users").doc(userId).get();
+    if (!userDoc.exists || !userDoc.data().twoFactorEnabled || !userDoc.data().twoFactorSecret) {
+      await tempDoc.ref.delete();
+      return res.status(400).json({ success: false, error: "Configuration 2FA invalide." });
+    }
+    const secret = userDoc.data().twoFactorSecret;
 
     const verified = verifyTwoFactorCode(secret, token);
     if (!verified) {
+      await tempDoc.ref.update({ attempts: (tempData.attempts || 0) + 1 });
       return res.status(400).json({ success: false, error: "Code invalide." });
     }
 
@@ -76,12 +92,6 @@ export async function handleTwoFactorVerifyLogin(req, res) {
 
     // 🔥 LOG DE CONNEXION RÉUSSIE APRÈS 2FA
     await logActivity(userId, 'login', { method: '2fa' }, req);
-
-    const userDoc = await adminDb.collection("users").doc(userId).get();
-    if (!userDoc.exists) {
-      return res.status(404).json({ success: false, error: "Utilisateur introuvable." });
-    }
-    const userData = userDoc.data();
 
     return res.status(200).json({
       success: true,

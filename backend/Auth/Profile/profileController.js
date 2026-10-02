@@ -1,6 +1,14 @@
 import { adminAuth, adminDb } from "../../Shared/Firebase config/firebase.js";
 import { FieldValue } from "firebase-admin/firestore";
 
+const PROFILE_FIELDS = new Set(["displayName", "name", "phone", "department", "service", "photoURL", "avatarUrl", "bio"]);
+
+function sanitizeProfileChanges(data) {
+  return Object.fromEntries(
+    Object.entries(data || {}).filter(([key]) => PROFILE_FIELDS.has(key))
+  );
+}
+
 /**
  * POST /api/profile/request
  * Soumet une demande de modification de profil.
@@ -8,7 +16,7 @@ import { FieldValue } from "firebase-admin/firestore";
 export async function requestProfileUpdate(req, res) {
   try {
     const uid = req.user.uid;
-    const updateData = req.body;
+    const updateData = sanitizeProfileChanges(req.body);
 
     if (!updateData || Object.keys(updateData).length === 0) {
       return res.status(400).json({ success: false, error: "Aucune donnée de modification fournie." });
@@ -84,16 +92,20 @@ export async function approveRequest(req, res) {
     }
 
     const { uid, requestedChanges } = requestData;
+    const safeChanges = sanitizeProfileChanges(requestedChanges);
+    if (Object.keys(safeChanges).length === 0) {
+      return res.status(400).json({ success: false, error: "Aucun champ de profil autorisé dans cette demande." });
+    }
     
     // 1. Mettre à jour Firestore 'users'
     await adminDb.collection("users").doc(uid).update({
-      ...requestedChanges,
+      ...safeChanges,
       updatedAt: FieldValue.serverTimestamp()
     });
 
     // 2. Mettre à jour Firebase Auth (displayName) si le nom a changé
-    if (requestedChanges.name || requestedChanges.displayName) {
-      const newName = requestedChanges.name || requestedChanges.displayName;
+    if (safeChanges.name || safeChanges.displayName) {
+      const newName = safeChanges.name || safeChanges.displayName;
       try {
         await adminAuth.updateUser(uid, { displayName: newName });
       } catch (authErr) {
@@ -154,7 +166,7 @@ export async function rejectRequest(req, res) {
 export async function adminUpdateProfile(req, res) {
   try {
     const { uid } = req.params;
-    const updateData = req.body;
+    const updateData = sanitizeProfileChanges(req.body);
 
     if (!updateData || Object.keys(updateData).length === 0) {
       return res.status(400).json({ success: false, error: "Aucune donnée de modification fournie." });
