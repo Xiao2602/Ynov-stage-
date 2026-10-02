@@ -1,0 +1,14 @@
+@baseUrl = http://localhost:5000
+@email = example@ynov.com
+@password = CHANGE_ME
+@token = CHANGE_ME
+
+### Login (local/emulator only)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "{{email}}", "password": "{{password}}" }
+
+### Authenticated profile
+GET {{baseUrl}}/api/auth/me
+Authorization: Bearer {{token}}
