@@ -1,6 +1,7 @@
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 import { adminDb } from "../firebaseAdmin.js"; // ✅ AJOUT
+import { decryptTwoFactorSecret, encryptTwoFactorSecret } from "./twoFactorSecretService.js";
 
 export async function setupTwoFactor(userId) {
   console.log(`🔐 Setup 2FA pour ${userId}`);
@@ -9,7 +10,7 @@ export async function setupTwoFactor(userId) {
     issuer: 'Ynov Campus'
   });
   await adminDb.collection("users").doc(userId).set({
-    twoFactorTempSecret: secret.base32,
+    twoFactorTempSecret: encryptTwoFactorSecret(secret.base32),
     twoFactorEnabled: false
   }, { merge: true });
   const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url);
@@ -40,23 +41,23 @@ export async function enableTwoFactor(userId, token) {
     const newDoc = await adminDb.collection("users").doc(userId).get();
     if (!newDoc.exists) throw new Error("Impossible de créer le document.");
     const newData = newDoc.data();
-    const secret = newData.twoFactorTempSecret;
+    const secret = decryptTwoFactorSecret(newData.twoFactorTempSecret);
     if (!secret) throw new Error("Aucun secret temporaire.");
     const verified = verifyTwoFactorCode(secret, token);
     if (!verified) throw new Error("Code invalide.");
     await adminDb.collection("users").doc(userId).set({
-      twoFactorSecret: secret,
+      twoFactorSecret: encryptTwoFactorSecret(secret),
       twoFactorEnabled: true,
       twoFactorTempSecret: null
     }, { merge: true });
   } else {
     const userData = userDoc.data();
-    const secret = userData.twoFactorTempSecret;
+    const secret = decryptTwoFactorSecret(userData.twoFactorTempSecret);
     if (!secret) throw new Error("Aucun secret temporaire.");
     const verified = verifyTwoFactorCode(secret, token);
     if (!verified) throw new Error("Code invalide.");
     await adminDb.collection("users").doc(userId).update({
-      twoFactorSecret: secret,
+      twoFactorSecret: encryptTwoFactorSecret(secret),
       twoFactorEnabled: true,
       twoFactorTempSecret: null
     });
@@ -71,7 +72,7 @@ export async function disableTwoFactor(userId, token) {
   if (!userDoc.exists) throw new Error("Utilisateur introuvable.");
   const userData = userDoc.data();
   if (!userData.twoFactorEnabled) throw new Error("La 2FA n'est pas activée.");
-  const verified = verifyTwoFactorCode(userData.twoFactorSecret, token);
+  const verified = verifyTwoFactorCode(decryptTwoFactorSecret(userData.twoFactorSecret), token);
   if (!verified) throw new Error("Code invalide.");
   await adminDb.collection("users").doc(userId).update({
     twoFactorEnabled: false,

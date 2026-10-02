@@ -2,6 +2,7 @@ import { adminDb } from "../../firebaseAdmin.js"; // ✅ AJOUT
 import { setupTwoFactor, enableTwoFactor, disableTwoFactor, verifyTwoFactorCode } from "../../Services/twoFactorService.js";
 import { logActivity } from "../../Services/activityLogService.js";
 import admin from "firebase-admin";
+import { decryptTwoFactorSecret } from "../../Services/twoFactorSecretService.js";
 
 export async function handleTwoFactorSetup(req, res) {
   console.log("📥 [2FA] Setup appelé pour", req.user?.uid);
@@ -77,7 +78,7 @@ export async function handleTwoFactorVerifyLogin(req, res) {
       await tempDoc.ref.delete();
       return res.status(400).json({ success: false, error: "Configuration 2FA invalide." });
     }
-    const secret = userDoc.data().twoFactorSecret;
+    const secret = decryptTwoFactorSecret(userDoc.data().twoFactorSecret);
 
     const verified = verifyTwoFactorCode(secret, token);
     if (!verified) {

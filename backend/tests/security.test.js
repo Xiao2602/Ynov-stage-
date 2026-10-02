@@ -41,6 +41,18 @@ test("P0: l'attribution du rôle admin est réservée au super-administrateur", 
   assert.match(controller, /requestedRole === "admin" && req\.user\.role !== "super_admin"/);
 });
 
+test("P1: les nouveaux secrets 2FA sont chiffrés au repos", async () => {
+  const previousKey = process.env.TWO_FACTOR_ENCRYPTION_KEY;
+  process.env.TWO_FACTOR_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
+  const { encryptTwoFactorSecret, decryptTwoFactorSecret } = await import("../Services/twoFactorSecretService.js");
+  const encrypted = encryptTwoFactorSecret("totp-secret");
+  assert.match(encrypted, /^enc:v1:/);
+  assert.doesNotMatch(encrypted, /totp-secret/);
+  assert.equal(decryptTwoFactorSecret(encrypted), "totp-secret");
+  if (previousKey === undefined) delete process.env.TWO_FACTOR_ENCRYPTION_KEY;
+  else process.env.TWO_FACTOR_ENCRYPTION_KEY = previousKey;
+});
+
 test("P1: le serveur applique les en-têtes, CORS restreint et limite les tentatives", async () => {
   const server = await source("server.js");
   assert.match(server, /app\.use\(helmet/);
