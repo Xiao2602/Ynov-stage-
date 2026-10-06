@@ -1,0 +1,146 @@
+.consent-page {
+  width: 100%;
+}
+
+.consent-header {
+  margin-bottom: 1.5rem;
+}
+
+.consent-kicker {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(35, 178, 164, 0.1);
+  color: #0f766e;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.9rem;
+}
+
+.consent-summary {
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 1.2rem 1.1rem;
+  margin-bottom: 1.5rem;
+}
+
+.consent-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.8rem;
+}
+
+.consent-summary-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.consented-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 94px;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  background: #e0f2f1;
+  color: #0f766e;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.consent-list {
+  list-style: none;
+  display: grid;
+  gap: 0.8rem;
+  padding: 0;
+  margin: 0;
+}
+
+.consent-list li {
+  position: relative;
+  padding-left: 1.4rem;
+  color: #475569;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.consent-list li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #23b2a4;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.consent-form {
+  margin-top: 0.2rem;
+}
+
+.consent-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  padding: 1rem 1rem 0.85rem;
+  border: 1px solid #dbe7ee;
+  border-radius: 12px;
+  background: #f8fafc;
+  cursor: pointer;
+  margin-bottom: 1rem;
+}
+
+.consent-checkbox input {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.15rem;
+  accent-color: #23b2a4;
+  flex-shrink: 0;
+}
+
+.consent-checkbox span {
+  color: #334155;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.consent-actions {
+  display: flex;
+  gap: 0.85rem;
+  margin-top: 1.5rem;
+}
+
+.consent-actions .ynov-submit-btn,
+.consent-actions .ynov-secondary-btn {
+  flex: 1;
+  margin-top: 0;
+}
+
+.ynov-alert-error {
+  background-color: #fef2f2;
+  border-left: 4px solid #ef4444;
+  color: #b91c1c;
+  padding: 0.9rem 1rem;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .consent-summary-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .consent-actions {
+    flex-direction: column;
+  }
+}
